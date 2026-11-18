@@ -2,6 +2,8 @@
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { importPdf } from '../lib/pdfImport.js';
+import { codeLinesFromText, kizRows, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 
 const S = 4; // px на мм для предпросмотра
@@ -14,8 +16,15 @@ const templates = ref([]);
 const currentTemplateId = ref(null);
 const jobs = ref([]);
 const jobId = ref(null);
-const jobItems = ref([]);
+const dataRows = ref([]);
+const dataSource = ref('');
+const dataLabel = ref('');
 const row = ref(0);
+const kizBusy = ref(false);
+const kizStatus = ref('');
+const btBusy = ref(false);
+const btStatus = ref('');
+const btWarning = ref('');
 const error = ref('');
 const notice = ref('');
 const premium = computed(() => !!store.plan?.labelEditor);
@@ -29,10 +38,96 @@ const bridge = reactive({
 });
 const previewPng = ref('');
 
-const currentItem = computed(() => jobItems.value.find(i => i.row_index === Number(row.value)) || null);
+const currentItem = computed(() => dataRows.value[Number(row.value)] || null);
+const rowNumber = computed({
+  get: () => Number(row.value) + 1,
+  set: (v) => {
+    const n = Number(v);
+    row.value = Math.max(0, Math.min(dataRows.value.length - 1, (Number.isFinite(n) ? Math.round(n) : 1) - 1));
+  }
+});
+const fieldOptions = computed(() => {
+  const base = ['code', 'gtin', 'serial', 'row'];
+  const custom = [];
+  for (const r of dataRows.value.slice(0, 30)) {
+    for (const k of Object.keys(r)) if (!base.includes(k) && !custom.includes(k)) custom.push(k);
+  }
+  return [...base, ...custom].slice(0, 30);
+});
 function fieldSample(f) {
-  if (currentItem.value) return f === 'row' ? String(currentItem.value.row_index + 1) : (currentItem.value[f] || '');
+  if (currentItem.value) return f === 'row' ? String(Number(row.value) + 1) : (currentItem.value[f] ?? '');
   return { gtin: '04600000000015', serial: '5PojkV', row: '1', code: '(01)…(21)…' }[f] || '';
+}
+
+function setData(rows, source, label) {
+  dataRows.value = Array.isArray(rows) ? rows : [];
+  dataSource.value = source;
+  dataLabel.value = label || '';
+  jobId.value = null;
+  row.value = 0;
+  itemImg = null;
+  selectedId.value = null;
+  draw();
+}
+
+async function onKizFile(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  error.value = ''; notice.value = ''; kizStatus.value = '';
+  kizBusy.value = true;
+  try {
+    let codes = [];
+    const isPdf = /\.pdf$/i.test(file.name) || (await file.slice(0, 1024).text()).includes('%PDF-');
+    if (isPdf) {
+      const result = await importPdf(file);
+      codes = result.codes;
+    } else if (/\.(xlsx|xls)$/i.test(file.name)) {
+      const table = await readSpreadsheet(file);
+      codes = table.flat().map((c) => String(c ?? '').trim()).filter(Boolean);
+    } else {
+      codes = codeLinesFromText(await file.text());
+    }
+    const rows = kizRows(codes);
+    if (!rows.length) throw new Error('В файле не найдены коды маркировки');
+    setData(rows, 'kiz', file.name);
+    kizStatus.value = `Загружено ${rows.length} кодов из ${file.name}`;
+    notice.value = 'Коды КИЗ загружены — проверьте предпросмотр';
+  } catch (e) {
+    error.value = 'КИЗ: ' + e.message;
+  } finally {
+    kizBusy.value = false;
+    ev.target.value = '';
+  }
+}
+
+async function onBtFiles(ev) {
+  const files = Array.from(ev.target.files || []);
+  if (!files.length) return;
+  error.value = ''; notice.value = ''; btStatus.value = ''; btWarning.value = '';
+  btBusy.value = true;
+  try {
+    const all = [];
+    const warnings = [];
+    for (const file of files) {
+      try {
+        const part = await readDataFile(file);
+        if (part.warning) warnings.push(part.warning);
+        all.push(...part.rows);
+      } catch (e) {
+        warnings.push(`${file.name}: ${e.message}`);
+      }
+    }
+    if (!all.length) throw new Error('Не удалось извлечь строки. Загрузите CSV/XLSX/BTXML с данными.');
+    setData(all, 'bartender', files.map((f) => f.name).join(', ').slice(0, 120));
+    btStatus.value = `Файлов: ${files.length} · строк: ${all.length}`;
+    btWarning.value = warnings.join(' ');
+    notice.value = 'Данные из BarTender загружены';
+  } catch (e) {
+    error.value = 'BarTender: ' + e.message;
+  } finally {
+    btBusy.value = false;
+    ev.target.value = '';
+  }
 }
 
 function draw() {
@@ -123,20 +218,30 @@ function onUp() { drag = null; }
 async function loadTemplates() { try { templates.value = (await api.templates()).templates; } catch {} }
 async function loadJobs() { try { jobs.value = (await api.jobs()).jobs.filter(j => j.status === 'done'); } catch {} }
 async function onJobChange() {
-  jobItems.value = []; itemImg = null; row.value = 0;
+  itemImg = null; row.value = 0;
   if (jobId.value == null) return;
   try {
     const d = await api.job(jobId.value);
-    jobItems.value = d.items.filter(i => i.status === 'generated');
+    const items = d.items.filter(i => i.status === 'generated');
+    dataRows.value = items.map(i => ({
+      code: i.normalized || i.raw,
+      gtin: i.gtin,
+      serial: i.serial,
+      row: String(i.row_index + 1),
+      row_index: i.row_index
+    }));
+    dataSource.value = 'job';
+    dataLabel.value = d.job.name || '';
     loadImage();
   } catch (e) { error.value = e.message; }
 }
 function loadImage() {
   itemImg = null;
-  if (jobId.value == null || !currentItem.value) { draw(); return; }
+  const it = currentItem.value;
+  if (jobId.value == null || !it || it.row_index == null) { draw(); return; }
   const img = new Image();
   img.onload = () => { itemImg = img; draw(); };
-  img.src = `/api/jobs/${jobId.value}/item/${currentItem.value.row_index}.png`;
+  img.src = `/api/jobs/${jobId.value}/item/${it.row_index}.png`;
 }
 watch(row, loadImage);
 
@@ -179,9 +284,16 @@ async function downloadBlob(url, body, filename) {
 }
 async function exportPdf() {
   error.value = '';
-  if (jobId.value == null) { error.value = 'Выберите пакет с кодами'; return; }
+  if (!dataRows.value.length) { error.value = 'Загрузите коды КИЗ или данные BarTender'; return; }
+  if (jobId.value == null && dataRows.value.length > 10000) {
+    error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
+    return;
+  }
   try {
-    await downloadBlob('/api/labels/pdf', { template: tpl, jobId: jobId.value }, `labels-${jobId.value}.pdf`);
+    const body = jobId.value != null
+      ? { template: tpl, jobId: jobId.value }
+      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r) };
+    await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`);
   } catch (e) { error.value = e.message; }
 }
 
@@ -204,7 +316,8 @@ async function bridgePrint(savePng) {
   error.value = ''; notice.value = ''; bridge.busy = true; previewPng.value = '';
   try {
     if (!premium.value) throw new Error('Печать этикеток доступна на тарифе PREMIUM');
-    const prepared = await api.prepareLabel({ template: tpl, jobId: jobId.value, row: Number(row.value) });
+    if (!currentItem.value) throw new Error('Нет строки данных для печати');
+    const prepared = await api.prepareLabel({ template: tpl, data: currentItem.value, row: Number(row.value) });
     const res = await fetch(bridge.url + '/print', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Bridge-Token': bridge.token },
@@ -230,6 +343,36 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
         ✏️ Проектируйте шаблоны бесплатно. Рендер, PDF-листы и печать через Bridge — на тарифе <b class="grad-text">PREMIUM</b> (подключение на этапе 4).
       </div>
 
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="glass rounded-2xl p-5">
+          <h2 class="font-display font-semibold mb-1">1. КИЗ «Честного знака»</h2>
+          <p class="text-xs text-slate-500 mb-3">PDF или CSV/TXT с кодами маркировки. Коды нужны для DataMatrix и полей этикетки.</p>
+          <label class="btn-primary !py-2 !px-4 text-sm cursor-pointer">
+            {{ kizBusy ? 'Читаем…' : 'Выбрать файл' }}
+            <input type="file" class="hidden" accept=".pdf,.csv,.txt,.xlsx,.xls" :disabled="kizBusy" @change="onKizFile">
+          </label>
+          <p v-if="kizStatus" class="text-xs text-emerald-500 mt-2">{{ kizStatus }}</p>
+        </div>
+
+        <div class="glass rounded-2xl p-5">
+          <h2 class="font-display font-semibold mb-1">2. Данные из BarTender</h2>
+          <p class="text-xs text-slate-500 mb-3">CSV, TXT, XLSX, XLS, XML/BTXML, JSON, DAT — таблицы и данные полей. <b>.btw</b> — бинарный шаблон, из него переносятся только данные через CSV/BTXML.</p>
+          <div class="flex flex-wrap gap-2">
+            <label class="btn-ghost !py-2 !px-3 text-sm cursor-pointer">
+              Выбрать файлы
+              <input type="file" class="hidden" multiple accept=".btw,.btxml,.csv,.txt,.tsv,.xlsx,.xls,.xml,.json,.dat" :disabled="btBusy" @change="onBtFiles">
+            </label>
+            <label class="btn-ghost !py-2 !px-3 text-sm cursor-pointer">
+              Выбрать папку
+              <input type="file" class="hidden" multiple webkitdirectory directory accept=".btw,.btxml,.csv,.txt,.tsv,.xlsx,.xls,.xml,.json,.dat" :disabled="btBusy" @change="onBtFiles">
+            </label>
+          </div>
+          <p v-if="btBusy" class="text-xs text-slate-500 mt-2">Читаем файлы…</p>
+          <p v-if="btStatus" class="text-xs text-emerald-500 mt-2">{{ btStatus }}</p>
+          <p v-if="btWarning" class="text-xs text-amber-500 mt-2">{{ btWarning }}</p>
+        </div>
+      </div>
+
       <div class="grid xl:grid-cols-[1fr_320px] gap-6">
         <!-- холст -->
         <div class="glass rounded-2xl p-6">
@@ -239,6 +382,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('text')">Т Текст</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'gtin')">Поле GTIN</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'serial')">Поле Serial</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'code')">Поле КИЗ</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'row')">Поле №</button>
             <button v-if="selected" class="btn-ghost !py-1.5 !px-3 text-xs text-red-500 ml-auto" @click="removeSelected">✕ Удалить</button>
           </div>
@@ -283,7 +427,9 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             </template>
             <template v-if="selected.type === 'field'">
               <label class="label !text-xs">Поле данных</label>
-              <select v-model="selected.field" class="input !py-2 text-sm"><option value="gtin">GTIN</option><option value="serial">Серийник</option><option value="row">№ строки</option></select>
+              <select v-model="selected.field" class="input !py-2 text-sm">
+                <option v-for="f in fieldOptions" :key="f" :value="f">{{ f }}</option>
+              </select>
             </template>
             <template v-if="selected.type === 'text' || selected.type === 'field'">
               <div class="grid grid-cols-2 gap-2">
@@ -296,13 +442,24 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
           <div class="glass rounded-2xl p-5 space-y-3">
             <h2 class="font-display font-semibold text-sm">Данные для предпросмотра</h2>
             <select v-model="jobId" class="input !py-2 text-sm" @change="onJobChange">
-              <option :value="null">Без пакета (пример)</option>
+              <option :value="null">Пакет не выбран</option>
               <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.name }} ({{ j.done }} кодов)</option>
             </select>
-            <select v-if="jobItems.length" v-model="row" class="input !py-2 text-sm">
-              <option v-for="i in jobItems" :key="i.row_index" :value="i.row_index">Строка {{ i.row_index + 1 }} · {{ i.serial || i.gtin }}</option>
-            </select>
-            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || jobId == null" @click="exportPdf">⬇ PDF-лист А4 (весь пакет)</button>
+            <div v-if="dataRows.length" class="text-xs text-slate-500">
+              Источник: <b class="text-slate-700 dark:text-slate-200">{{ dataSource === 'kiz' ? 'КИЗ' : dataSource === 'bartender' ? 'BarTender' : 'пакет' }}</b>
+              · {{ dataRows.length }} строк
+              <span v-if="dataLabel"> · {{ dataLabel }}</span>
+            </div>
+            <div v-if="dataRows.length" class="flex items-center gap-2">
+              <label class="label !text-xs !mb-0">Строка</label>
+              <input v-model.number="rowNumber" type="number" min="1" :max="dataRows.length" class="input !py-1.5 text-sm w-24">
+              <span class="text-xs text-slate-500">из {{ dataRows.length }}</span>
+            </div>
+            <div v-if="currentItem" class="text-xs text-slate-500 space-y-0.5">
+              <div>GTIN: <span class="font-mono">{{ currentItem.gtin || '—' }}</span></div>
+              <div>Серийник: <span class="font-mono">{{ currentItem.serial || '—' }}</span></div>
+            </div>
+            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf">⬇ PDF-лист А4 ({{ dataRows.length || 0 }})</button>
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">
@@ -320,8 +477,8 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
                 <label class="label !text-xs !mb-0">Копий</label>
                 <input v-model.number="bridge.copies" type="number" min="1" max="999" class="input !py-1.5 text-sm w-20">
               </div>
-              <button class="btn-primary w-full !py-2 text-sm" :disabled="bridge.busy" @click="bridgePrint(false)">🖨️ Печатать этикетку</button>
-              <button class="btn-ghost w-full !py-2 text-sm" :disabled="bridge.busy" @click="bridgePrint(true)">👁 Предпросмотр рендера</button>
+              <button class="btn-primary w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(false)">🖨️ Печатать этикетку</button>
+              <button class="btn-ghost w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(true)">👁 Предпросмотр рендера</button>
             </template>
             <img v-if="previewPng" :src="previewPng" class="w-full rounded-lg border border-slate-200 dark:border-white/10" alt="Рендер этикетки">
           </div>

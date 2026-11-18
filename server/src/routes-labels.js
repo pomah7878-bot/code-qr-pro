@@ -25,6 +25,22 @@ function validateTemplate(t) {
 
 const rowToTemplate = (r) => ({ id: r.id, name: r.name, widthMm: r.width_mm, heightMm: r.height_mm, dpi: r.dpi, elements: JSON.parse(r.elements), updatedAt: r.updated_at });
 
+function cleanDataRows(rows) {
+  if (!Array.isArray(rows) || !rows.length || rows.length > 10000) return null;
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    const row = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (!/^[^\x00-\x1f]{1,40}$/.test(k)) continue;
+      row[k] = String(v ?? '').slice(0, 1000);
+      if (Object.keys(row).length >= 30) break;
+    }
+    if (Object.keys(row).length) out.push(row);
+  }
+  return out.length ? out : null;
+}
+
 export async function registerLabelRoutes(app) {
   app.get('/api/templates', { preHandler: requireAuth }, async (req) => ({
     templates: db.prepare('SELECT * FROM label_templates WHERE user_id=? ORDER BY id DESC').all(req.user.id).map(rowToTemplate)
@@ -86,18 +102,26 @@ export async function registerLabelRoutes(app) {
   app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
     if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
-    const { template, jobId } = req.body || {};
+    const { template, jobId, rows } = req.body || {};
     const err = validateTemplate(template);
     if (err) return reply.code(400).send({ error: err });
-    const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
-    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
-    if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
-    const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
+    let dataRows;
+    if (Array.isArray(rows)) {
+      dataRows = cleanDataRows(rows);
+      if (!dataRows) return reply.code(400).send({ error: 'Нужны строки данных (до 10 000)' });
+    } else {
+      if (jobId == null) return reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
+      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
+      if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
+      if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
+      const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
+      dataRows = items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
+    }
     reply.hijack();
-    reply.raw.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="labels-job-${job.id}.pdf"` });
+    reply.raw.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="labels.pdf"` });
     const doc = new PDFDocument({ size: 'A4', margin: 0 });
     doc.pipe(reply.raw);
-    await renderLabelsPdf(doc, template, items);
+    await renderLabelsPdf(doc, template, dataRows);
     doc.end();
     return reply;
   });

@@ -1,14 +1,25 @@
 import bwipjs from 'bwip-js';
 
+// «Сырой» код с GS → скобочная запись для bwip-js gs1datamatrix.
+// Серийник может содержать скобки — они остаются частью значения.
+function toGs1Paren(raw) {
+  const s = String(raw || '');
+  if (/^\(\d{2,4}\)/.test(s)) return s;
+  const m = s.match(/^01(\d{14})21([^\x1d]*)(?:\x1d91([^\x1d]*))?(?:\x1d92([\s\S]*))?$/);
+  if (!m) return s;
+  return `(01)${m[1]}(21)${m[2]}${m[3] ? `(91)${m[3]}` : ''}${m[4] ? `(92)${m[4]}` : ''}`;
+}
+
 // Разрешает элементы шаблона в конкретные данные строки (тексты + PNG штрихкодов)
 export async function resolveElements(template, data) {
   const out = [];
   for (const el of template.elements || []) {
     const base = { id: el.id, type: el.type, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.fontSize || 10, align: el.align || 'left' };
     if (el.type === 'datamatrix' || el.type === 'code128') {
-      const content = el.type === 'datamatrix'
+      const source = el.type === 'datamatrix'
         ? (data.code || el.text || '')
         : (el.field ? String(data[el.field] ?? '') : (el.text || ''));
+      const content = el.type === 'datamatrix' ? toGs1Paren(source) : source;
       if (!content) { out.push({ ...base, text: '' }); continue; }
       const bcid = el.type === 'code128' ? 'code128' : (/^\(\d{2,4}\)/.test(content) ? 'gs1datamatrix' : 'datamatrix');
       const opts = { bcid, text: content, scale: 6, includetext: false };
@@ -27,14 +38,13 @@ export async function resolveElements(template, data) {
 const K = 72 / 25.4; // мм → пункты PDF
 
 // Рисует лист А4 с сеткой этикеток в pdfkit-документ
-export async function renderLabelsPdf(doc, template, items) {
+export async function renderLabelsPdf(doc, template, dataRows) {
   const pageW = 595.28, pageH = 841.89, margin = 10 * K;
   const lw = template.widthMm * K, lh = template.heightMm * K;
   const cols = Math.max(1, Math.floor((pageW - 2 * margin) / lw));
   const rows = Math.max(1, Math.floor((pageH - 2 * margin) / lh));
   let i = 0;
-  for (const item of items) {
-    const data = { code: item.normalized, gtin: item.gtin, serial: item.serial, row: item.row_index + 1 };
+  for (const data of dataRows) {
     const els = await resolveElements(template, data);
     const pos = i % (cols * rows);
     if (pos === 0 && i > 0) doc.addPage();
@@ -48,5 +58,6 @@ export async function renderLabelsPdf(doc, template, items) {
     }
     i++;
   }
-  if (i === 0) doc.fontSize(12).fillColor('#333333').text('Нет сгенерированных кодов', margin, margin);
+  if (i === 0) doc.fontSize(12).fillColor('#333333').text('Нет сформированных строк', margin, margin);
 }
+

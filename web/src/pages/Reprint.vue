@@ -40,11 +40,19 @@ const notice = ref('');
 const result = ref(null);
 const cameraOpen = ref(false);
 const cameraError = ref('');
-const cameraSupported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+const cameraDevices = ref([]);
+const cameraId = ref('');
 const videoEl = ref(null);
-let cameraStream = null;
-let cameraTimer = null;
-let detector = null;
+let zxingReader = null;
+let scannerControls = null;
+
+const settingsOpen = ref(false);
+const serialSupported = typeof navigator !== 'undefined' && 'serial' in navigator;
+const serialConnected = ref(false);
+const serialError = ref('');
+const serialBaud = ref(9600);
+let serialPort = null;
+let serialReader = null;
 
 function addCode(raw) {
   const code = String(raw || '').trim();
@@ -56,46 +64,89 @@ function addCode(raw) {
   notice.value = `Добавлен код, всего строк: ${lines.length}`;
 }
 
+async function loadCameras() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    cameraDevices.value = devices.filter((d) => d.kind === 'videoinput');
+    if (!cameraId.value && cameraDevices.value[0]) cameraId.value = cameraDevices.value[0].deviceId;
+  } catch { /* нет доступа к устройствам */ }
+}
+
+function openSettings() {
+  settingsOpen.value = true;
+  loadCameras();
+}
+
 async function openCamera() {
   cameraError.value = '';
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const { BrowserMultiFormatReader } = await import('@zxing/browser');
+    zxingReader = new BrowserMultiFormatReader();
     cameraOpen.value = true;
     await nextTick();
-    videoEl.value.srcObject = cameraStream;
-    await videoEl.value.play();
-    let supported = [];
-    try { supported = await window.BarcodeDetector.getSupportedFormats?.() || []; } catch { supported = []; }
-    const formats = ['data_matrix', 'qr_code', 'ean_13', 'code_128'].filter((f) => supported.includes(f));
-    detector = new window.BarcodeDetector(formats.length ? { formats } : undefined);
-    scanFrame();
+    scannerControls = await zxingReader.decodeFromVideoDevice(cameraId.value || undefined, videoEl.value, (result) => {
+      if (result) {
+        addCode(result.getText());
+        closeCamera();
+      }
+    });
   } catch (e) {
-    cameraError.value = e.message;
-    cameraOpen.value = false;
-    if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
-    cameraStream = null;
+    cameraError.value = e.message || 'Не удалось открыть камеру';
+    closeCamera();
   }
 }
 
-async function scanFrame() {
-  if (!cameraOpen.value || !detector) return;
-  try {
-    const found = await detector.detect(videoEl.value);
-    if (found.length) {
-      addCode(found[0].rawValue);
-      closeCamera();
-      return;
-    }
-  } catch { /* кадр не распознан */ }
-  cameraTimer = setTimeout(scanFrame, 350);
+function closeCamera() {
+  try { scannerControls?.stop(); } catch { /* уже остановлен */ }
+  scannerControls = null;
+  cameraOpen.value = false;
 }
 
-function closeCamera() {
-  cameraOpen.value = false;
-  clearTimeout(cameraTimer);
-  if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
-  cameraStream = null;
-  detector = null;
+async function connectSerial() {
+  serialError.value = '';
+  if (!serialSupported) { serialError.value = 'Web Serial не поддерживается этим браузером'; return; }
+  try {
+    serialPort = await navigator.serial.requestPort();
+    await serialPort.open({ baudRate: Number(serialBaud.value) || 9600 });
+    serialConnected.value = true;
+    readSerial();
+  } catch (e) {
+    serialPort = null;
+    serialError.value = e.name === 'NotFoundError' || /No port selected|cancel/i.test(e.message || '') ? 'Выбор порта отменён' : (e.message || 'Не удалось открыть порт');
+  }
+}
+
+async function readSerial() {
+  try {
+    const decoder = new TextDecoderStream();
+    serialPort.readable.pipeTo(decoder.writable).catch(() => {});
+    const reader = decoder.readable.getReader();
+    serialReader = reader;
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let idx;
+      while ((idx = buffer.search(/[\r\n]/)) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line) addCode(line);
+      }
+    }
+  } catch (e) {
+    if (serialConnected.value) serialError.value = e.message || 'Ошибка чтения COM-порта';
+  } finally {
+    serialConnected.value = false;
+  }
+}
+
+async function disconnectSerial() {
+  try { await serialReader?.cancel(); } catch { /* уже закрыт */ }
+  try { await serialPort?.close(); } catch { /* уже закрыт */ }
+  serialReader = null;
+  serialPort = null;
+  serialConnected.value = false;
 }
 
 watch(category, (id) => {
@@ -257,10 +308,12 @@ async function downloadPdf() {
           <textarea v-model="codesText" rows="6" class="input font-mono text-xs" placeholder="Вставьте полные коды — по одному на строку"></textarea>
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>
           <div class="flex flex-wrap items-center gap-2">
-            <button v-if="cameraSupported" class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera">📷 Камера</button>
-            <span class="text-xs text-slate-500">USB-сканер печатает прямо в поле кодов</span>
+            <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera">📷 Камера</button>
+            <button class="btn-ghost !py-2 !px-3 text-sm" @click="connectSerial">{{ serialConnected ? 'COM подключён' : 'COM-сканер' }}</button>
+            <button class="btn-ghost !py-2 !px-2.5 text-sm" title="Настройки сканера" aria-label="Настройки сканера" @click="openSettings">⚙️</button>
           </div>
           <p v-if="cameraError" class="text-xs text-red-500">{{ cameraError }}</p>
+          <p v-if="serialError" class="text-xs text-amber-500">{{ serialError }}</p>
           <button class="btn-primary !py-2 text-sm" :disabled="busy" @click="checkCodes">{{ busy ? 'Проверяем…' : 'Проверить коды' }}</button>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 
@@ -291,6 +344,43 @@ async function downloadPdf() {
         <video ref="videoEl" class="w-full" playsinline muted></video>
         <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
         <p class="text-center text-xs text-white/70 py-2">Наведите камеру на DataMatrix</p>
+      </div>
+    </div>
+
+    <div v-if="settingsOpen" class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div class="glass rounded-2xl p-5 w-full max-w-md space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="font-display font-semibold">Настройки сканера</h3>
+          <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white" aria-label="Закрыть настройки" @click="settingsOpen = false">✕</button>
+        </div>
+
+        <div>
+          <label class="label !text-xs" for="scanner-camera">Камера</label>
+          <select id="scanner-camera" v-model="cameraId" class="input !py-2 text-sm">
+            <option value="">Камера по умолчанию</option>
+            <option v-for="d in cameraDevices" :key="d.deviceId" :value="d.deviceId">{{ d.label || 'Камера' }}</option>
+          </select>
+          <button class="btn-ghost w-full !py-2 text-sm mt-2" @click="settingsOpen = false; openCamera()">Проверить камеру</button>
+          <p v-if="cameraError" class="text-xs text-red-500 mt-1">{{ cameraError }}</p>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 dark:border-white/10">
+          <label class="label !text-xs" for="scanner-baud">COM-порт</label>
+          <select id="scanner-baud" v-model.number="serialBaud" class="input !py-2 text-sm">
+            <option :value="9600">9600 бод</option>
+            <option :value="19200">19200 бод</option>
+            <option :value="115200">115200 бод</option>
+          </select>
+          <div class="mt-2">
+            <button v-if="!serialConnected" class="btn-ghost w-full !py-2 text-sm" @click="connectSerial">Выбрать порт</button>
+            <button v-else class="btn-ghost w-full !py-2 text-sm" @click="disconnectSerial">Отключить порт</button>
+          </div>
+          <p v-if="serialConnected" class="text-xs text-emerald-500 mt-1">COM-сканер подключён</p>
+          <p v-if="serialError" class="text-xs text-amber-500 mt-1">{{ serialError }}</p>
+          <p v-if="!serialSupported" class="text-xs text-slate-500 mt-1">Web Serial не поддерживается — используйте USB-сканер или камеру.</p>
+        </div>
+
+        <p class="text-xs text-slate-500">USB-сканер работает как клавиатура: просто сканируйте в поле кодов.</p>
       </div>
     </div>
   </div>

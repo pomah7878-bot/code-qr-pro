@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
+import { buildCznCsv, downloadCznCsv } from '../lib/cznCsv.js';
 import SideNav from '../components/SideNav.vue';
 
 const mode = ref('cz');
@@ -18,10 +19,12 @@ const fileName = ref('');
 const pasteText = ref('');
 const inputTab = ref('file');
 const error = ref('');
+const notice = ref('');
 const busy = ref(false);
 const reading = ref(false);
 const pdfProgress = ref(null);
 const pdfWarning = ref('');
+const exportCodes = ref([]);
 const preview = ref(null);
 const jobName = ref('');
 const format = ref('png');
@@ -109,12 +112,25 @@ function usePaste() {
 }
 
 async function doValidate() {
-  error.value = ''; busy.value = true;
+  error.value = ''; notice.value = ''; busy.value = true;
   try {
     preview.value = await api.validate({ mode: mode.value, rows: rows.value });
+    exportCodes.value = preview.value.items.filter(i => i.ok).map(i => rows.value[i.row]);
     step.value = 'preview';
   } catch (e) { error.value = e.message; }
   busy.value = false;
+}
+
+function downloadForCz() {
+  error.value = '';
+  notice.value = '';
+  const codes = exportCodes.value.length
+    ? exportCodes.value
+    : items.value.filter(i => i.status !== 'invalid').map(i => i.normalized || i.raw);
+  const result = buildCznCsv(codes);
+  if (result.error) { error.value = result.error; return; }
+  const name = downloadCznCsv(result.csv, result.count);
+  notice.value = `CSV для отчёта о нанесении готов: ${result.count} кодов · ${name}`;
 }
 
 async function doGenerate() {
@@ -160,7 +176,7 @@ async function loadHistory() { try { history.value = (await api.jobs()).jobs; } 
 function reset() {
   if (poll) { clearInterval(poll); poll = null; }
   step.value = 'input'; rows.value = []; preview.value = null; job.value = null; items.value = [];
-  fileName.value = ''; pasteText.value = ''; error.value = '';
+  fileName.value = ''; pasteText.value = ''; error.value = ''; notice.value = ''; exportCodes.value = [];
 }
 onUnmounted(() => { if (poll) clearInterval(poll); });
 loadHistory();
@@ -177,6 +193,8 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
         <h1 class="font-display font-bold text-3xl">Генерация DataMatrix</h1>
         <button v-if="step !== 'input'" class="btn-ghost" @click="reset">← Новый пакет</button>
       </div>
+
+      <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 
       <!-- шаг 1: ввод -->
       <div v-if="step === 'input'" class="space-y-6">
@@ -257,10 +275,12 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
           <div><label class="label">Формат</label>
             <select v-model="format" class="input"><option value="png">PNG</option><option value="svg">SVG</option></select>
           </div>
+          <button class="btn-ghost" :disabled="!validCount" title="Один CSV-файл для отчёта о нанесении: полные коды с GS, поля экранированы" @click="downloadForCz">⬇ CSV для отчёта ЧЗ</button>
           <button class="btn-primary" :disabled="!validCount || busy" @click="doGenerate">
             {{ busy ? 'Создаём…' : `Сгенерировать ${validCount} кодов` }}
           </button>
         </div>
+        <p class="text-xs text-slate-500">CSV для «Честного знака»: полные коды с GS-разделителями и кавычками по RFC 4180 — один файл для отчёта о нанесении.</p>
         <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
       </div>
 
@@ -282,6 +302,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
               <div class="text-sm text-slate-500">{{ statusLabel[job.status] }} · сгенерировано {{ job.done }} из {{ job.valid }} <span v-if="job.error" class="text-red-500">· {{ job.error }}</span></div>
             </div>
             <div class="flex gap-2 flex-wrap">
+              <button class="btn-ghost !py-2.5" @click="downloadForCz">⬇ CSV для отчёта ЧЗ</button>
               <a v-if="canExport('zip')" :href="`/api/jobs/${job.id}/export?format=zip`" class="btn-primary !py-2.5">⬇ ZIP</a>
               <a v-if="canExport('pdf')" :href="`/api/jobs/${job.id}/export?format=pdf`" class="btn-primary !py-2.5">⬇ PDF А4</a>
               <span v-if="!canExport('zip')" class="chip-soon self-center">ZIP/PDF — PREMIUM</span>

@@ -16,13 +16,17 @@ const cleanText = (text) => String(text || '')
 const SERIAL_RE = /^[\x21-\x7E]{1,20}$/;
 const CRYPTO_RE = /^[A-Za-z0-9+/=]{1,90}$/;
 
-// Собирает нормализованный код и отсекает мусор
+// Собирает код в «сыром» виде с GS-разделителями: серийник может содержать скобки,
+// поэтому скобочная запись для таких кодов неоднозначна.
 function makeCode(gtin, serial, key, crypto) {
   if (!/^\d{14}$/.test(gtin)) return null;
   if (!SERIAL_RE.test(serial)) return null;
   if (key && !/^[\x21-\x7E]{1,8}$/.test(key)) return null;
   if (crypto && !CRYPTO_RE.test(crypto)) return null;
-  return `(01)${gtin}(21)${serial}${key ? `(91)${key}` : ''}${crypto ? `(92)${crypto}` : ''}`;
+  let out = `01${gtin}21${serial}`;
+  if (key) out += `\x1d91${key}`;
+  if (crypto) out += `\x1d92${crypto}`;
+  return out + '\x1d';
 }
 
 export function extractKizCodes(text) {
@@ -42,7 +46,7 @@ export function extractKizCodes(text) {
   for (const m of compact.matchAll(paren)) push(makeCode(m[1], m[2], m[3], m[4]));
 
   // 3. Слитная запись: 01046...215PojkV91EE1092dGVzdA==
-  const plain = compact.replace(/[()]/g, '');
+  const plain = compact;
   const head = /01(\d{14})21/g;
   let m;
   while ((m = head.exec(plain))) {

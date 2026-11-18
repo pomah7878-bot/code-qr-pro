@@ -153,7 +153,8 @@ function buildAutoTemplate() {
   const fields = ['gtin', 'serial', 'sku', 'price', 'batch'].filter(has);
   const small = W < 30 || H < 26;
   const sampleBarcode = String(first.barcode || '').replace(/\s+/g, '');
-  const bcType = /^\d{12,13}$/.test(sampleBarcode) ? 'ean13' : 'code128';
+  const barcodeDigits = sampleBarcode.replace(/\D/g, '');
+  const bcType = /^\d{7,14}$/.test(barcodeDigits) ? 'ean13' : 'code128';
   const e = [];
   let n = 0;
   const id = () => `auto${n++}_${Date.now()}`;

@@ -32,7 +32,7 @@ const fieldList = [
   { key: 'date', label: 'Дата' },
   { key: 'composition', label: 'Состав' },
   { key: 'manufacturer', label: 'Производитель' },
-  { key: 'ean13', label: 'Штрихкод EAN-13' }
+  { key: 'ean13', label: 'Штрихкод (EAN-13 / цифры)' }
 ];
 
 const category = ref('lp');
@@ -562,8 +562,8 @@ async function downloadPdf() {
   if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
   if (!result.value?.valid.length) { error.value = 'Сначала проверьте коды'; return; }
   const barcode = String(product.barcode || '').trim();
-  if (!qrOnly.value && fields.ean13 && barcode && !/^\d{12,13}$/.test(barcode)) {
-    error.value = 'EAN-13 должен содержать 12 или 13 цифр';
+  if (!qrOnly.value && fields.ean13 && barcode && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
+    error.value = 'Штрихкод должен содержать цифры';
     return;
   }
   const template = buildTemplate();
@@ -679,7 +679,7 @@ async function downloadPdf() {
             <p class="text-xs text-slate-500 mb-2">Применяются ко всем кодам в этой печати.</p>
             <div class="grid grid-cols-2 gap-2">
               <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
-              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод EAN-13">
+              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (EAN-13 или цифры)">
             </div>
           </div>
 

@@ -1,6 +1,16 @@
 import bwipjs from 'bwip-js';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
 
+function eanCheckDigit(base) {
+  let sum = 0;
+  let weight = 3;
+  for (let i = base.length - 1; i >= 0; i--) {
+    sum += Number(base[i]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  return String((10 - (sum % 10)) % 10);
+}
+
 // Разрешает элементы шаблона в конкретные данные строки (тексты + PNG штрихкодов)
 export async function resolveElements(template, data) {
   const out = [];
@@ -20,10 +30,36 @@ export async function resolveElements(template, data) {
     if (['code128', 'ean13', 'qrcode'].includes(el.type)) {
       const content = el.field ? String(data[el.field] ?? '') : (el.text || '');
       if (!content) { out.push({ ...base, text: '' }); continue; }
-      const opts = { bcid: el.type, text: content, scale: 6, includetext: false };
-      if (el.type === 'code128') opts.height = 12;
-      else if (el.type === 'ean13') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
-      else if (el.type === 'qrcode') opts.scale = 4;
+      let bcid = el.type;
+      let text = content;
+      if (el.type === 'ean13') {
+        const compact = content.trim().replace(/\s+/g, '');
+        if (/^\d+$/.test(compact)) {
+          if (compact.length === 12 || compact.length === 13) {
+            const b = compact.slice(0, 12);
+            text = b + eanCheckDigit(b);
+            bcid = 'ean13';
+          } else if (compact.length === 14 && compact.startsWith('0')) {
+            const b = compact.slice(1, 13);
+            text = b + eanCheckDigit(b);
+            bcid = 'ean13';
+          } else if (compact.length === 7 || compact.length === 8) {
+            const b = compact.slice(0, 7);
+            text = b + eanCheckDigit(b);
+            bcid = 'ean8';
+          } else {
+            bcid = 'code128';
+            text = compact;
+          }
+        } else {
+          bcid = 'code128';
+          text = content;
+        }
+      }
+      const opts = { bcid, text, scale: 6, includetext: false };
+      if (bcid === 'code128') opts.height = 12;
+      else if (bcid === 'ean13' || bcid === 'ean8') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
+      else if (bcid === 'qrcode') opts.scale = 4;
       const png = await bwipjs.toBuffer(opts);
       out.push({ ...base, pngBase64: png.toString('base64') });
       continue;

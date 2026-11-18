@@ -504,6 +504,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <input type="file" class="hidden" accept=".pdf,.csv,.txt,.xlsx,.xls" :disabled="kizBusy" @change="onKizFile">
           </label>
           <p v-if="kizStatus" class="text-xs text-emerald-500 mt-2">{{ kizStatus }}</p>
+          <a href="https://gsdmx.ru/" target="_blank" rel="noopener" class="text-xs text-brand-400 hover:underline inline-block mt-3">Повторная печать этикеток на gsdmx.ru ↗</a>
         </div>
 
         <div class="glass rounded-2xl p-5">

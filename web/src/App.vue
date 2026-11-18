@@ -11,6 +11,7 @@ const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 
 async function logout() { await store.logout(); menuOpen.value = false; router.push('/'); }
 function go(path) { menuOpen.value = false; router.push(path); }
+function openExternal(url) { menuOpen.value = false; window.open(url, '_blank', 'noopener'); }
 
 async function changePassword() {
   pwd.error = '';
@@ -77,6 +78,7 @@ async function changePassword() {
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')">📊 Кабинет</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/generate')">▦ Генерация</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')">🏷️ Этикетки</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="openExternal('https://gsdmx.ru/')">🖨️ Повторная печать ↗</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')">💳 Подписка</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
           </template>

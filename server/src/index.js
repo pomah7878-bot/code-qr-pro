@@ -11,10 +11,15 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerAdminRoutes } from './routes-admin.js';
 import { registerApiRoutes } from './routes-api.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
-import './db.js';
+import { rateLimitHook, securityHeaders } from './security.js';
+import { db } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const app = Fastify({ logger: true, trustProxy: true });
+const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 8 * 1024 * 1024 });
+
+app.addHook('onRequest', securityHeaders);
+app.addHook('onRequest', rateLimitHook());
+setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
 
 await app.register(cookie);
 await registerRoutes(app);

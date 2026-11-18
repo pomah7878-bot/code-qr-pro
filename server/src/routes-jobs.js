@@ -7,6 +7,7 @@ import archiver from 'archiver';
 import PDFDocument from 'pdfkit';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isRowIndex } from './security.js';
 
 const MODES = ['cz', 'gs1', 'text'];
 
@@ -84,6 +85,7 @@ export async function registerJobRoutes(app) {
   });
 
   app.get('/api/jobs/:id/item/:row.png', { preHandler: requireAuth }, async (req, reply) => {
+    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'Некорректный номер строки' });
     const job = ownJob(req, reply);
     if (!job) return;
     const p = join(JOBS_DIR, String(job.id), req.params.row + '.png');
@@ -92,6 +94,7 @@ export async function registerJobRoutes(app) {
   });
 
   app.get('/api/jobs/:id/item/:row.svg', { preHandler: requireAuth }, async (req, reply) => {
+    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'Некорректный номер строки' });
     const job = ownJob(req, reply);
     if (!job) return;
     const item = db.prepare('SELECT * FROM job_items WHERE job_id=? AND row_index=?').get(job.id, req.params.row);

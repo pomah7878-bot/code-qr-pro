@@ -24,6 +24,8 @@ const productData = ref([]);
 const kizLabel = ref('');
 const btLabel = ref('');
 const duplicateCount = ref(0);
+const autoLayout = ref(true);
+const autoSignature = ref('');
 const row = ref(0);
 const kizBusy = ref(false);
 const kizStatus = ref('');
@@ -110,7 +112,89 @@ function rebuildData() {
   row.value = 0;
   itemImg = null;
   selectedId.value = null;
+  maybeAutoTemplate();
   draw();
+}
+
+function buildAutoTemplate() {
+  const W = Number(tpl.widthMm) || 58;
+  const H = Number(tpl.heightMm) || 40;
+  const m = Math.max(0.8, Math.min(3, Math.min(W, H) * 0.05));
+  const cols = new Set();
+  for (const r of dataRows.value.slice(0, 30)) for (const k of Object.keys(r)) cols.add(k);
+  const first = dataRows.value[0] || {};
+  const has = (k) => cols.has(k) && String(first[k] ?? '').trim() !== '';
+  const code = has('code');
+  const barcode = has('barcode');
+  const name = has('name');
+  const fields = ['gtin', 'serial', 'sku', 'price', 'batch'].filter(has);
+  const small = W < 30 || H < 26;
+  const sampleBarcode = String(first.barcode || '').replace(/\s+/g, '');
+  const bcType = /^\d{12,13}$/.test(sampleBarcode) ? 'ean13' : 'code128';
+  const e = [];
+  let n = 0;
+  const id = () => `auto${n++}_${Date.now()}`;
+  let dmW = 0;
+  let topH = 0;
+  if (code) {
+    const size = Math.min(W * (small ? 0.62 : 0.38), H * (small ? 0.62 : 0.55), 45);
+    e.push({ id: id(), type: 'datamatrix', x: m, y: m, w: size, h: size, fontSize: 8, align: 'left' });
+    dmW = size;
+    topH = Math.max(topH, size);
+  }
+  const used = new Set();
+  if (barcode && !small) {
+    const bx = code ? m + dmW + m : m;
+    const bw = W - bx - m;
+    if (bw >= 18) {
+      const bh = Math.min(14, Math.max(7, H * 0.24));
+      e.push({ id: id(), type: bcType, field: 'barcode', x: bx, y: m, w: bw, h: bh, fontSize: 8, align: 'left' });
+      topH = Math.max(topH, bh);
+      let y = m + bh + 0.7;
+      for (const f of fields) {
+        if (y + 3.4 > m + topH) break;
+        e.push({ id: id(), type: 'field', field: f, x: bx, y, w: bw, h: 3.2, fontSize: 6.5, align: 'left' });
+        used.add(f);
+        y += 3.7;
+      }
+      if (name && y + 3.4 <= m + topH) {
+        e.push({ id: id(), type: 'field', field: 'name', x: bx, y, w: bw, h: 3.2, fontSize: 6.5, align: 'left' });
+        used.add('name');
+      }
+    }
+  }
+  let y = topH ? m + topH + 1 : m;
+  const lineH = Math.max(2.6, Math.min(4.2, H * 0.08));
+  for (const f of fields) {
+    if (used.has(f)) continue;
+    if (y + lineH > H - m - (!used.has('name') && name ? 4.4 : 0)) break;
+    e.push({ id: id(), type: 'field', field: f, x: m, y, w: W - 2 * m, h: lineH, fontSize: 7, align: 'left' });
+    used.add(f);
+    y += lineH + 0.5;
+  }
+  if (name && !used.has('name') && y + 4 <= H - m) {
+    e.push({ id: id(), type: 'field', field: 'name', x: m, y, w: W - 2 * m, h: Math.min(4.4, H - m - y), fontSize: 7.5, align: 'left' });
+    used.add('name');
+    y += 4.4;
+  }
+  if (!used.has('row') && y + 3 <= H - m) {
+    e.push({ id: id(), type: 'field', field: 'row', x: m, y, w: Math.min(25, W - 2 * m), h: 3, fontSize: 6.5, align: 'left' });
+  }
+  if (!e.length) e.push({ id: id(), type: 'text', x: m, y: m, w: W - 2 * m, h: 5, fontSize: 8, align: 'left', text: 'Текст' });
+  tpl.elements = e;
+  autoSignature.value = JSON.stringify({ w: W, h: H, e });
+  notice.value = `Шаблон собран автоматически: ${e.length} элементов. Двигайте мышью и правьте справа.`;
+}
+
+function maybeAutoTemplate() {
+  if (!autoLayout.value || !dataRows.value.length) return;
+  const sig = JSON.stringify({ w: Number(tpl.widthMm), h: Number(tpl.heightMm), e: tpl.elements });
+  if (tpl.elements.length && sig !== autoSignature.value) return;
+  buildAutoTemplate();
+}
+
+function onAutoToggle() {
+  if (autoLayout.value) { maybeAutoTemplate(); draw(); }
 }
 
 async function onKizFile(ev) {
@@ -134,9 +218,9 @@ async function onKizFile(ev) {
     if (!rows.length) throw new Error('В файле не найдены коды маркировки');
     kizData.value = rows;
     kizLabel.value = file.name;
-    rebuildData();
     kizStatus.value = `Загружено ${rows.length} кодов из ${file.name}`;
     notice.value = 'Коды КИЗ загружены — проверьте предпросмотр';
+    rebuildData();
   } catch (e) {
     error.value = 'КИЗ: ' + e.message;
   } finally {
@@ -165,10 +249,10 @@ async function onBtFiles(ev) {
     if (!all.length) throw new Error('Не удалось извлечь строки. Загрузите CSV/XLSX/BTXML с данными.');
     productData.value = all;
     btLabel.value = files.map((f) => f.name).join(', ').slice(0, 120);
-    rebuildData();
     btStatus.value = `Файлов: ${files.length} · строк: ${all.length}`;
     btWarning.value = warnings.join(' ');
     notice.value = 'Данные из BarTender загружены';
+    rebuildData();
   } catch (e) {
     error.value = 'BarTender: ' + e.message;
   } finally {
@@ -252,6 +336,7 @@ function layout2in1() {
     { id: 'rw' + t, type: 'field', field: 'row', x: 2, y: 33, w: 20, h: 4, fontSize: 7, align: 'left' }
   ];
   selectedId.value = null;
+  autoSignature.value = '';
   notice.value = 'Собран макет 2 в 1: DataMatrix + EAN-13. Проверьте, что в данных есть колонка barcode.';
   draw();
 }
@@ -298,6 +383,7 @@ async function onJobChange() {
     }));
     dataSource.value = 'job';
     dataLabel.value = d.job.name || '';
+    maybeAutoTemplate();
     loadImage();
   } catch (e) { error.value = e.message; }
 }
@@ -469,6 +555,9 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <button v-for="p in presets" :key="p.join()" class="btn-ghost !py-1 !px-2.5 text-xs" @click="tpl.widthMm = p[0]; tpl.heightMm = p[1]">{{ p[0] }}×{{ p[1] }}</button>
             </div>
             <button class="btn-ghost w-full !py-2 text-sm" @click="layout2in1">Собрать «2 в 1»: DataMatrix + EAN-13</button>
+            <label class="flex items-center gap-2 text-xs text-slate-500">
+              <input v-model="autoLayout" type="checkbox" @change="onAutoToggle"> Автосборка шаблона при загрузке
+            </label>
             <div class="grid grid-cols-3 gap-2">
               <div><label class="label !text-xs">Ш, мм</label><input v-model.number="tpl.widthMm" type="number" min="10" max="210" class="input !py-1.5 text-sm"></div>
               <div><label class="label !text-xs">В, мм</label><input v-model.number="tpl.heightMm" type="number" min="10" max="297" class="input !py-1.5 text-sm"></div>

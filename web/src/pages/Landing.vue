@@ -14,6 +14,15 @@ const minPerMonth = () => {
   const o = premium()?.offers || [];
   return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 1990;
 };
+// лучшее предложение = минимальная цена за месяц
+const bestOffer = () => {
+  const o = premium()?.offers || [];
+  if (!o.length) return null;
+  return o.reduce((a, b) => ((b.perMonth ?? b.finalPrice / b.days * 30) < (a.perMonth ?? a.finalPrice / a.days * 30) ? b : a));
+};
+const maxDiscount = () => Math.max(0, ...(premium()?.offers || []).map(o => o.discount || 0));
+const saving = (o) => Math.round(o.price - (o.finalPrice ?? o.price));
+const periodLabel = (d) => d >= 365 ? 'год' : d >= 180 ? 'полгода' : d >= 90 ? 'квартал' : d + ' дн.';
 
 // scroll-reveal через IntersectionObserver
 let io = null;
@@ -152,54 +161,78 @@ const openFaq = ref(null);
     </section>
 
     <!-- PRICING -->
-    <section id="pricing" class="max-w-5xl mx-auto px-4 py-16">
-      <div class="reveal text-center mb-12">
-        <h2 class="font-display font-bold text-3xl md:text-4xl mb-3">Тарифы</h2>
-        <p class="text-slate-500">Начните бесплатно. PREMIUM — от {{ minPerMonth().toLocaleString('ru') }} ₽/мес при годовой оплате</p>
+    <section id="pricing" class="relative max-w-5xl mx-auto px-4 py-20">
+      <div class="orb anim-glow w-[400px] h-[400px] bg-violet-600/15 top-20 left-1/2 -translate-x-1/2"></div>
+      <div class="reveal relative text-center mb-14">
+        <div class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-4 py-1.5 mb-5">
+          <span v-if="maxDiscount() > 0">🔥 Скидки до {{ maxDiscount() }}% на длинные периоды</span>
+          <span v-else>Выгоднее при оплате за год</span>
+        </div>
+        <h2 class="font-display font-bold text-3xl md:text-5xl mb-4">Выберите свой тариф</h2>
+        <p class="text-slate-500 text-lg">Начните бесплатно. PREMIUM окупается с первой партии маркировки.</p>
       </div>
-      <div class="grid md:grid-cols-2 gap-6 items-start">
+      <div class="relative grid md:grid-cols-2 gap-8 items-stretch">
         <!-- FREE -->
-        <div v-if="free()" class="reveal glass rounded-3xl p-8">
-          <h3 class="font-display font-extrabold text-2xl mb-1">FREE</h3>
-          <div class="text-4xl font-extrabold mb-6">0 ₽<span class="text-base font-medium text-slate-500">/навсегда</span></div>
-          <ul class="space-y-2.5 text-sm mb-8">
-            <li>✓ {{ free().codesPerDay }} кодов в день</li>
-            <li>✓ Пакет до {{ free().batchMax }} строк</li>
-            <li>✓ Форматы PNG, SVG</li>
-            <li class="opacity-40">✗ Редактор этикеток</li>
-            <li class="opacity-40">✗ Печать на термопринтер</li>
-            <li class="opacity-40">✗ API</li>
+        <div v-if="free()" class="reveal glass rounded-3xl p-8 flex flex-col hover:-translate-y-1 transition-transform duration-300">
+          <div class="flex items-center gap-3 mb-2">
+            <div class="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center text-xl">🌱</div>
+            <h3 class="font-display font-extrabold text-2xl">FREE</h3>
+          </div>
+          <p class="text-sm text-slate-500 mb-5">Попробовать без риска</p>
+          <div class="text-5xl font-extrabold mb-1">0 ₽</div>
+          <div class="text-sm text-slate-500 mb-7">навсегда, без карты</div>
+          <ul class="space-y-3 text-sm mb-8 flex-1">
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> {{ free().codesPerDay }} кодов в день</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> Пакет до {{ free().batchMax }} строк</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> Форматы PNG, SVG</li>
+            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> Редактор этикеток</li>
+            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> Печать на термопринтер</li>
+            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> API для 1С</li>
           </ul>
-          <router-link to="/register" class="btn-ghost w-full">Начать бесплатно</router-link>
+          <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
         </div>
         <!-- PREMIUM -->
-        <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-8 relative">
-          <div class="absolute -top-3 left-8 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-4 py-1 shadow-lg">Популярный</div>
-          <h3 class="font-display font-extrabold text-2xl mb-1 grad-text">PREMIUM</h3>
-          <div class="text-4xl font-extrabold mb-1">{{ minPerMonth().toLocaleString('ru') }} ₽<span class="text-base font-medium text-slate-500">/мес</span></div>
-          <div class="text-xs text-slate-500 mb-6">при оплате за год · помесячно дороже</div>
+        <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
+          <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap">⭐ Выбор бизнеса</div>
+          <div class="flex items-center gap-3 mb-2 mt-2">
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center text-xl shadow-lg shadow-violet-600/40">👑</div>
+            <h3 class="font-display font-extrabold text-2xl grad-text">PREMIUM</h3>
+          </div>
+          <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
+          <div class="flex items-end gap-2 mb-1">
+            <span class="text-5xl font-extrabold grad-text">{{ minPerMonth().toLocaleString('ru') }} ₽</span>
+            <span class="text-base font-medium text-slate-500 mb-1.5">/мес</span>
+          </div>
+          <div class="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">при оплате за {{ periodLabel(bestOffer()?.days || 365) }} · экономия до {{ saving(bestOffer() || {price:0}).toLocaleString('ru') }} ₽</div>
           <!-- периоды -->
-          <div class="space-y-2 mb-6">
-            <div v-for="o in premium().offers" :key="o.days" class="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-4 py-2.5 text-sm bg-white/50 dark:bg-white/5">
-              <span class="font-medium">{{ o.days }} дней</span>
+          <div class="space-y-2.5 mb-7">
+            <div v-for="o in premium().offers" :key="o.days"
+              class="relative flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition-all"
+              :class="bestOffer() && o.days === bestOffer().days ? 'border-violet-500/60 bg-violet-500/10 ring-1 ring-violet-500/30' : 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5'">
+              <span class="flex items-center gap-2 font-medium">
+                {{ periodLabel(o.days) }}
+                <span v-if="bestOffer() && o.days === bestOffer().days" class="text-[9px] font-bold uppercase bg-violet-600 text-white rounded px-1.5 py-0.5">выгодно</span>
+              </span>
               <span class="flex items-center gap-2">
-                <span v-if="o.discount > 0" class="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5">−{{ o.discount }}%</span>
+                <span v-if="o.discount > 0" class="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5 shadow">−{{ o.discount }}%</span>
                 <span v-if="o.discount > 0" class="text-xs text-slate-400 line-through">{{ o.price.toLocaleString('ru') }}</span>
-                <b>{{ (o.finalPrice ?? o.price).toLocaleString('ru') }} ₽</b>
+                <b class="text-base">{{ (o.finalPrice ?? o.price).toLocaleString('ru') }} ₽</b>
               </span>
             </div>
           </div>
-          <ul class="space-y-2.5 text-sm mb-8">
-            <li>✓ {{ premium().codesPerDay.toLocaleString('ru') }} кодов в день</li>
-            <li>✓ Пакеты до {{ premium().batchMax.toLocaleString('ru') }} строк</li>
-            <li>✓ Экспорт ZIP и PDF</li>
-            <li>✓ Редактор этикеток + Print Bridge</li>
-            <li>✓ API для 1С и складов</li>
-            <li>✓ История 365 дней</li>
+          <ul class="space-y-3 text-sm mb-8 flex-1">
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> <b>{{ premium().codesPerDay.toLocaleString('ru') }}</b> кодов в день</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Пакеты до <b>{{ premium().batchMax.toLocaleString('ru') }}</b> строк</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Экспорт ZIP и PDF</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Редактор этикеток + Print Bridge</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> API для 1С и складов</li>
+            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> История 365 дней</li>
           </ul>
-          <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full">Оформить PREMIUM</router-link>
+          <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PREMIUM →</router-link>
+          <p class="text-center text-xs text-slate-500 mt-3">🔒 Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
         </div>
       </div>
+      <p class="reveal text-center text-sm text-slate-500 mt-8">💡 Не уверены? Начните с FREE — 50 кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
     </section>
 
     <!-- REVIEWS -->

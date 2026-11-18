@@ -21,7 +21,7 @@ export async function securityHeaders(req, reply) {
   reply.header('X-Content-Type-Options', 'nosniff');
   reply.header('X-Frame-Options', 'DENY');
   reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  reply.header('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
   // настройки из админки должны быть видны сразу, без кеша браузера
   if (String(req.url || '').startsWith('/api/')) reply.header('Cache-Control', 'no-store');
   if (process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https') {

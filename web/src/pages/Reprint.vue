@@ -39,6 +39,7 @@ const error = ref('');
 const notice = ref('');
 const result = ref(null);
 const cameraOpen = ref(false);
+const cameraLoading = ref(false);
 const cameraError = ref('');
 const cameraDevices = ref([]);
 const cameraId = ref('');
@@ -115,7 +116,6 @@ async function loadCameras() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     cameraDevices.value = devices.filter((d) => d.kind === 'videoinput');
-    if (!cameraId.value && cameraDevices.value[0]) cameraId.value = cameraDevices.value[0].deviceId;
   } catch { /* нет доступа к устройствам */ }
 }
 
@@ -140,38 +140,67 @@ function ensureDecoder() {
   };
 }
 
+function cameraErrorMessage(e) {
+  if (!window.isSecureContext) return 'Камера работает только по HTTPS. Откройте сайт через https:// и повторите.';
+  if (!navigator.mediaDevices?.getUserMedia) return 'Браузер не поддерживает доступ к камере.';
+  if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'Доступ к камере запрещён. Нажмите на замочек в адресной строке → «Камера» → «Разрешить» и повторите.';
+  if (e?.name === 'NotFoundError' || e?.name === 'DevicesNotFoundError') return 'Камера не найдена. Проверьте, что она подключена и не отключена в системе.';
+  if (e?.name === 'NotReadableError') return 'Камера занята другим приложением. Закройте Zoom/Teams/камеру и повторите.';
+  if (e?.name === 'OverconstrainedError') return 'Выбранная камера недоступна. Выберите другую в настройках ⚙️.';
+  return e?.message || 'Не удалось открыть камеру';
+}
+
 async function openCamera() {
+  if (cameraStream) closeCamera();
   cameraError.value = '';
   cameraCount.value = 0;
   torchOn.value = false;
   torchAvailable.value = false;
+  cameraOpen.value = true;
+  cameraLoading.value = true;
   ensureAudio();
   const session = ++cameraSession;
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  const attempts = cameraId.value
+    ? [{ deviceId: { exact: cameraId.value }, ...base }, { facingMode: { ideal: 'environment' }, ...base }, base]
+    : [{ facingMode: { ideal: 'environment' }, ...base }, base];
   try {
-    const video = cameraId.value
-      ? { deviceId: { exact: cameraId.value }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
-    cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Браузер не поддерживает доступ к камере');
+    let lastError = null;
+    for (const video of attempts) {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+        if (cameraStream) break;
+      } catch (e) {
+        lastError = e;
+        if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') break;
+      }
+    }
+    if (!cameraStream) throw lastError || new Error('Камера не найдена');
     if (session !== cameraSession) {
       cameraStream.getTracks().forEach((t) => t.stop());
       cameraStream = null;
       return;
     }
-    cameraOpen.value = true;
     await nextTick();
     videoEl.value.srcObject = cameraStream;
-    await videoEl.value.play();
+    await videoEl.value.play().catch(() => {});
     const track = cameraStream.getVideoTracks()[0];
     const caps = track.getCapabilities?.() || {};
     if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
       track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
     }
     torchAvailable.value = !!caps.torch;
+    cameraLoading.value = false;
     ensureDecoder();
     scanLoop(session);
   } catch (e) {
-    cameraError.value = e.message || 'Не удалось открыть камеру';
-    closeCamera();
+    cameraLoading.value = false;
+    cameraError.value = cameraErrorMessage(e);
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      cameraStream = null;
+    }
   }
 }
 
@@ -214,6 +243,8 @@ function closeCamera() {
   if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
   cameraStream = null;
   cameraOpen.value = false;
+  cameraLoading.value = false;
+  cameraError.value = '';
   torchOn.value = false;
   if (videoEl.value) videoEl.value.srcObject = null;
 }
@@ -477,6 +508,14 @@ async function downloadPdf() {
     <div v-if="cameraOpen" class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
       <div class="relative rounded-2xl overflow-hidden w-full max-w-lg bg-black">
         <video ref="videoEl" class="w-full" playsinline muted></video>
+        <div v-if="cameraLoading" class="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-sm">Запрос доступа к камере…</div>
+        <div v-else-if="cameraError" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 text-white text-center p-6">
+          <p class="text-sm leading-relaxed">{{ cameraError }}</p>
+          <div class="flex gap-2">
+            <button class="rounded-full bg-white text-slate-900 px-4 py-2 text-sm font-semibold" @click="openCamera">Повторить</button>
+            <button class="rounded-full border border-white/40 px-4 py-2 text-sm" @click="closeCamera">Закрыть</button>
+          </div>
+        </div>
         <button class="absolute top-2 left-2 rounded-full bg-black/60 text-white w-9 h-9" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</button>
         <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
         <div class="absolute inset-x-0 bottom-0 p-3 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent">

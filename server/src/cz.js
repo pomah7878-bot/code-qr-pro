@@ -9,8 +9,8 @@ export function czStatus() {
 }
 
 // Локальная валидация GS1 всегда; онлайн-проверка ГИС МТ активируется после настройки УКЭП/токенов
-export async function verifyCodes(codes) {
-  const results = codes.map(c => ({ code: String(c).slice(0, 300), ...validateRow(c, 'cz') }));
+export async function verifyCodes(codes, mode = 'cz') {
+  const results = codes.map(c => ({ code: String(c).slice(0, 300), ...validateRow(c, mode) }));
   const st = czStatus();
   if (!st.enabled || !st.configured) {
     return { configured: false, online: false, message: 'Онлайн-проверка в ГИС МТ не подключена — выполнена локальная валидация GS1. Ключи API: честныйзнак.рф, раздел для участников оборота.', results };

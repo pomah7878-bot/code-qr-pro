@@ -4,9 +4,16 @@ import * as XLSX from 'xlsx';
 export function toParen(raw) {
   const s = String(raw || '').trim();
   if (/^\(\d{2,4}\)/.test(s)) return s;
-  const m = s.match(/^01(\d{14})21([^\x1d]*)(?:\x1d91([^\x1d]*))?(?:\x1d92([\s\S]*))?$/);
+  const parts = s.split('\x1d');
+  const head = parts.shift() || '';
+  const m = head.match(/^01(\d{14})21([\s\S]*)$/);
   if (!m) return s;
-  return `(01)${m[1]}(21)${m[2]}${m[3] ? `(91)${m[3]}` : ''}${m[4] ? `(92)${m[4]}` : ''}`;
+  let out = `(01)${m[1]}(21)${m[2]}`;
+  for (const part of parts) {
+    const a = part.match(/^(\d{2,4})([\s\S]*)$/);
+    if (a) out += `(${a[1]})${a[2]}`;
+  }
+  return out;
 }
 
 export function normalizeScanInput(input) {

@@ -38,6 +38,7 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const result = ref(null);
+const shortWarning = ref('');
 const cameraOpen = ref(false);
 const cameraLoading = ref(false);
 const cameraError = ref('');
@@ -361,32 +362,44 @@ const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.tr
 async function checkCodes() {
   error.value = '';
   notice.value = '';
+  shortWarning.value = '';
   result.value = null;
   const lines = codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   if (!lines.length) { error.value = 'Вставьте коды — по одному на строку'; return; }
   if (lines.length > MAX) { error.value = `За раз можно до ${MAX} кодов, сейчас ${lines.length}`; return; }
   const parsed = lines.map(parseKiz).filter(Boolean);
-  if (!parsed.length) { error.value = 'Коды не распознаны. Нужны полные коды с криптохвостом'; return; }
+  if (!parsed.length) { error.value = 'Коды не распознаны. Проверьте, что скопирован весь DataMatrix.'; return; }
   const full = parsed.filter((p) => !p.short);
-  const shortCount = parsed.length - full.length;
-  if (!full.length) {
-    error.value = 'В коде нет криптохвоста (91/92). Сканер передал только GTIN и серийник — включите передачу GS и полного DataMatrix.';
-    return;
-  }
-  const seen = new Set();
-  const unique = [];
+  const short = parsed.filter((p) => p.short);
+  const seenFull = new Set();
+  const seenShort = new Set();
+  const uniqueFull = [];
+  const uniqueShort = [];
   let duplicates = 0;
   for (const p of full) {
-    if (seen.has(p.code)) { duplicates += 1; continue; }
-    seen.add(p.code);
-    unique.push(p);
+    if (seenFull.has(p.code)) { duplicates += 1; continue; }
+    seenFull.add(p.code);
+    uniqueFull.push(p);
+  }
+  for (const p of short) {
+    if (seenShort.has(p.code)) { duplicates += 1; continue; }
+    seenShort.add(p.code);
+    uniqueShort.push(p);
   }
   busy.value = true;
   try {
-    const res = await api.czVerify({ codes: unique.map((p) => p.code) });
-    const valid = unique.filter((_, i) => res.results?.[i]?.ok);
-    result.value = { valid, total: unique.length };
-    notice.value = `Проверено ${unique.length}: ${valid.length} валидных, ${unique.length - valid.length} с ошибками${duplicates ? `, убрано дублей: ${duplicates}` : ''}${shortCount ? `, без криптохвоста пропущено: ${shortCount}` : ''}`;
+    const fullRes = uniqueFull.length ? await api.czVerify({ codes: uniqueFull.map((p) => p.code) }) : { results: [] };
+    const shortRes = uniqueShort.length ? await api.czVerify({ codes: uniqueShort.map((p) => p.code), mode: 'gs1' }) : { results: [] };
+    const validFull = uniqueFull.filter((_, i) => fullRes.results?.[i]?.ok);
+    const validShort = uniqueShort.filter((_, i) => shortRes.results?.[i]?.ok);
+    result.value = { valid: [...validFull, ...validShort], total: uniqueFull.length + uniqueShort.length };
+    const parts = [];
+    if (uniqueFull.length) parts.push(`полных ${validFull.length}/${uniqueFull.length}`);
+    if (uniqueShort.length) parts.push(`без 91/92 ${validShort.length}/${uniqueShort.length}`);
+    notice.value = `Проверено ${result.value.total}: ${result.value.valid.length} валидных${parts.length ? ` (${parts.join(', ')})` : ''}${duplicates ? `, убрано дублей: ${duplicates}` : ''}`;
+    shortWarning.value = uniqueShort.length
+      ? 'Коды без криптохвоста (91/92) будут напечатаны как есть — для «Честного ЗНАКа» это неполный код.'
+      : '';
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
 }
@@ -522,6 +535,7 @@ async function downloadPdf() {
           <p v-if="serialError" class="text-xs text-amber-500">{{ serialError }}</p>
           <button class="btn-primary !py-2 text-sm" :disabled="busy" @click="checkCodes">{{ busy ? 'Проверяем…' : 'Проверить коды' }}</button>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
+          <p v-if="shortWarning" class="text-xs text-amber-500">{{ shortWarning }}</p>
 
           <div class="pt-3 border-t border-slate-200 dark:border-white/10">
             <h3 class="font-semibold text-sm mb-2">Данные товара</h3>

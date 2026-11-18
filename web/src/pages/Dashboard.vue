@@ -57,14 +57,14 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             <div class="font-semibold mb-1">▦ Генерация →</div>
             <p class="text-slate-500">Импорт CSV/XLSX, валидация GS1, пакетная генерация и экспорт.</p>
           </router-link>
-          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-4">
-            <div class="font-semibold mb-1">🏷️ Этикетки <span class="chip-soon">этап 3</span></div>
+          <router-link to="/app/labels" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
+            <div class="font-semibold mb-1">🏷️ Этикетки →</div>
             <p class="text-slate-500">Редактор шаблонов и печать на термопринтеры через Print Bridge.</p>
-          </div>
-          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-4">
-            <div class="font-semibold mb-1">💳 PREMIUM <span class="chip-soon">этап 4</span></div>
+          </router-link>
+          <router-link to="/app/billing" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
+            <div class="font-semibold mb-1">💳 PREMIUM →</div>
             <p class="text-slate-500">Оплата подписки, расширенные лимиты и API.</p>
-          </div>
+          </router-link>
         </div>
       </div>
     </section>

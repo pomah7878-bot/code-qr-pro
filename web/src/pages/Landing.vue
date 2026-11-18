@@ -6,11 +6,11 @@ const plans = ref([]);
 onMounted(async () => { try { plans.value = (await api.plans()).plans; } catch {} });
 const features = [
   { icon: '▦', title: 'GS1 DataMatrix engine', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.', soon: false },
-  { icon: '📥', title: 'Импорт CSV / XLSX', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически.', soon: true },
-  { icon: '🛡️', title: 'Валидация данных', text: 'Проверка длины GTIN, контрольных цифр и структуры кода до генерации.', soon: true },
-  { icon: '🏷️', title: 'Редактор этикеток', text: 'Шаблоны, размеры, штрихкоды и текст. Экспорт PDF под лист или рулон.', soon: true },
-  { icon: '🖨️', title: 'Термопринтеры', text: 'Windows Print Bridge: печать напрямую на TSC, Zebra, Xprinter и другие.', soon: true },
-  { icon: '🔌', title: 'API для 1С и складов', text: 'Генерация кодов из ваших учётных систем по REST API.', soon: true }
+  { icon: '📥', title: 'Импорт CSV / XLSX', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически.', soon: false },
+  { icon: '🛡️', title: 'Валидация данных', text: 'Проверка длины GTIN, контрольных цифр и структуры кода до генерации.', soon: false },
+  { icon: '🏷️', title: 'Редактор этикеток', text: 'Шаблоны, размеры, штрихкоды и текст. Экспорт PDF под лист или рулон.', soon: false },
+  { icon: '🖨️', title: 'Термопринтеры', text: 'Windows Print Bridge: печать напрямую на TSC, Zebra, Xprinter и другие.', soon: false },
+  { icon: '🔌', title: 'API для 1С и складов', text: 'Генерация кодов из ваших учётных систем по REST API.', soon: false }
 ];
 const steps = [
   { n: '01', t: 'Загрузите данные', d: 'CSV, XLSX или вставка списка кодов маркировки.' },
@@ -51,7 +51,7 @@ const steps = [
         <div v-for="f in features" :key="f.title" class="glass rounded-2xl p-6">
           <div class="flex items-center justify-between mb-3">
             <span class="text-3xl">{{ f.icon }}</span>
-            <span v-if="f.soon" class="chip-soon">скоро</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">работает</span>
           </div>
           <h3 class="font-display font-semibold text-lg mb-2">{{ f.title }}</h3>
           <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{{ f.text }}</p>

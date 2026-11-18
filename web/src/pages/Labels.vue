@@ -341,6 +341,27 @@ function layout2in1() {
   draw();
 }
 
+function layoutQrOnly() {
+  const W = Number(tpl.widthMm) || 58;
+  const H = Number(tpl.heightMm) || 40;
+  const m = Math.max(1, Math.min(3, Math.min(W, H) * 0.05));
+  const size = Math.min(W - 2 * m, H - 2 * m);
+  tpl.elements = [{
+    id: 'qr' + Date.now(),
+    type: 'datamatrix',
+    x: (W - size) / 2,
+    y: (H - size) / 2,
+    w: size,
+    h: size,
+    fontSize: 8,
+    align: 'left'
+  }];
+  selectedId.value = null;
+  autoSignature.value = '';
+  notice.value = 'Оставлен только DataMatrix — QR на всю этикетку с небольшим отступом.';
+  draw();
+}
+
 let drag = null;
 function hit(ev) {
   const r = canvas.value.getBoundingClientRect();
@@ -570,6 +591,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <button v-for="p in presets" :key="p.join()" class="btn-ghost !py-1 !px-2.5 text-xs" @click="tpl.widthMm = p[0]; tpl.heightMm = p[1]">{{ p[0] }}×{{ p[1] }}</button>
             </div>
             <button class="btn-ghost w-full !py-2 text-sm" @click="layout2in1">Собрать «2 в 1»: DataMatrix + EAN-13</button>
+            <button class="btn-ghost w-full !py-2 text-sm" @click="layoutQrOnly">Только QR: DataMatrix на всю этикетку</button>
             <label class="flex items-center gap-2 text-xs text-slate-500">
               <input v-model="autoLayout" type="checkbox" @change="onAutoToggle"> Автосборка шаблона при загрузке
             </label>

@@ -46,6 +46,7 @@ const error = ref('');
 const notice = ref('');
 const result = ref(null);
 const shortWarning = ref('');
+const qrOnly = ref(true);
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
@@ -513,6 +514,17 @@ async function loadProductInfo() {
 function buildTemplate() {
   const f = currentFormat.value;
   const W = f.w, H = f.h;
+  if (qrOnly.value) {
+    const margin = Math.max(1, Math.min(3, Math.min(W, H) * 0.05));
+    const size = Math.min(W - 2 * margin, H - 2 * margin);
+    return {
+      name: `QR · ${f.label}`,
+      widthMm: W,
+      heightMm: H,
+      dpi: 203,
+      elements: [{ id: 'dm', type: 'datamatrix', x: (W - size) / 2, y: (H - size) / 2, w: size, h: size, fontSize: 8, align: 'left' }]
+    };
+  }
   const tiny = W <= 22 && H <= 22;
   const m = tiny ? Math.min(W, H) * 0.1 : Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
   const elements = [];
@@ -549,7 +561,7 @@ async function downloadPdf() {
   if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
   if (!result.value?.valid.length) { error.value = 'Сначала проверьте коды'; return; }
   const barcode = String(product.barcode || '').trim();
-  if (fields.ean13 && barcode && !/^\d{12,13}$/.test(barcode)) {
+  if (!qrOnly.value && fields.ean13 && barcode && !/^\d{12,13}$/.test(barcode)) {
     error.value = 'EAN-13 должен содержать 12 или 13 цифр';
     return;
   }
@@ -625,7 +637,11 @@ async function downloadPdf() {
             </select>
             <p class="text-xs text-slate-500 mt-1">PDF-страница: {{ currentFormat.w }}×{{ currentFormat.h }} мм ({{ (currentFormat.w / 10).toFixed(1) }}×{{ (currentFormat.h / 10).toFixed(1) }} см)</p>
           </div>
-          <div>
+          <label class="flex items-start gap-2 text-sm mt-1">
+            <input v-model="qrOnly" type="checkbox" class="mt-0.5">
+            <span><b>Только DataMatrix — QR на всю этикетку</b><br><span class="text-xs text-slate-500">Квадратный код вписывается по меньшей стороне, по краям остаётся небольшой отступ для печати.</span></span>
+          </label>
+          <div v-if="!qrOnly">
             <div class="text-xs text-slate-500 mb-2">Выводить на этикетке</div>
             <label class="flex items-center gap-2 text-sm mb-1.5"><input type="checkbox" checked disabled> GS1 DataMatrix (всегда)</label>
             <label v-for="f in fieldList" :key="f.key" class="flex items-center gap-2 text-sm mb-1.5">

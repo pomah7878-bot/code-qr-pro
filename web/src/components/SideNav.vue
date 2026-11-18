@@ -5,7 +5,7 @@ const items = [
   { icon: '📊', t: 'Обзор', to: '/app' },
   { icon: '▦', t: 'Генерация', to: '/app/generate' },
   { icon: '🏷️', t: 'Этикетки', to: '/app/labels' },
-  { icon: '🖨️', t: 'Повторная печать', href: 'https://gsdmx.ru/', external: true },
+  { icon: '🖨️', t: 'Повторная печать', to: '/app/reprint' },
   { icon: '💳', t: 'Подписка', to: '/app/billing' },
   { icon: '🔌', t: 'API', to: '/app/apikeys' },
   { icon: '🛡️', t: 'Честный ЗНАК', to: '/app/cz' },

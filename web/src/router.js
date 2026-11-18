@@ -6,6 +6,7 @@ import Register from './pages/Register.vue';
 import Dashboard from './pages/Dashboard.vue';
 import Generator from './pages/Generator.vue';
 import Labels from './pages/Labels.vue';
+import Reprint from './pages/Reprint.vue';
 import Billing from './pages/Billing.vue';
 import ApiKeys from './pages/ApiKeys.vue';
 import Cz from './pages/Cz.vue';
@@ -29,6 +30,7 @@ const router = createRouter({
     { path: '/app', component: Dashboard, meta: { auth: true } },
     { path: '/app/generate', component: Generator, meta: { auth: true } },
     { path: '/app/labels', component: Labels, meta: { auth: true } },
+    { path: '/app/reprint', component: Reprint, meta: { auth: true } },
     { path: '/app/billing', component: Billing, meta: { auth: true } },
     { path: '/app/apikeys', component: ApiKeys, meta: { auth: true } },
     { path: '/app/cz', component: Cz, meta: { auth: true } },

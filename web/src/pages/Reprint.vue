@@ -14,11 +14,11 @@ const categories = [
   { id: 'pharmacy', title: 'Аптека / медикаменты', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
 ];
 const formats = [
-  { id: '58x40v', label: '58×40 вертикальный', w: 40, h: 58 },
-  { id: '58x40h', label: '58×40 горизонтальный', w: 58, h: 40 },
-  { id: '43x25', label: '43×25', w: 43, h: 25 },
-  { id: '30x20', label: '30×20', w: 30, h: 20 },
-  { id: '20x20', label: '20×20', w: 20, h: 20 }
+  { id: '58x40h', label: '58×40 мм — горизонтальный (5.8×4 см)', w: 58, h: 40 },
+  { id: '58x40v', label: '58×40 мм — вертикальный (4×5.8 см)', w: 40, h: 58 },
+  { id: '43x25', label: '43×25 мм', w: 43, h: 25 },
+  { id: '30x20', label: '30×20 мм', w: 30, h: 20 },
+  { id: '20x20', label: '20×20 мм', w: 20, h: 20 }
 ];
 const fieldList = [
   { key: 'name', label: 'Название' },
@@ -36,7 +36,7 @@ const fieldList = [
 ];
 
 const category = ref('lp');
-const format = ref('58x40v');
+const format = ref('58x40h');
 const fields = reactive(Object.fromEntries(fieldList.map((f) => [f.key, false])));
 Object.assign(fields, categories[0].defaults);
 const product = reactive({ name: '', article: '', size: '', color: '', date: '', composition: '', barcode: '', dosage: '', form: '', series: '', expiry: '', manufacturer: '' });
@@ -623,6 +623,7 @@ async function downloadPdf() {
             <select id="reprint-format" v-model="format" class="input !py-2 text-sm">
               <option v-for="f in formats" :key="f.id" :value="f.id">{{ f.label }}</option>
             </select>
+            <p class="text-xs text-slate-500 mt-1">PDF-страница: {{ currentFormat.w }}×{{ currentFormat.h }} мм ({{ (currentFormat.w / 10).toFixed(1) }}×{{ (currentFormat.h / 10).toFixed(1) }} см)</p>
           </div>
           <div>
             <div class="text-xs text-slate-500 mb-2">Выводить на этикетке</div>

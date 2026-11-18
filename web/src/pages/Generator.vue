@@ -172,6 +172,15 @@ async function removeJob(id) {
   try { await api.deleteJob(id); if (job.value?.id === id) reset(); loadHistory(); } catch (e) { error.value = e.message; }
 }
 
+async function retryJob(id) {
+  error.value = ''; notice.value = '';
+  try {
+    await api.retryJob(id);
+    await openJob(id);
+    loadHistory();
+  } catch (e) { error.value = e.message; }
+}
+
 async function loadHistory() { try { history.value = (await api.jobs()).jobs; } catch {} }
 function reset() {
   if (poll) { clearInterval(poll); poll = null; }
@@ -306,6 +315,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
               <a v-if="canExport('zip')" :href="`/api/jobs/${job.id}/export?format=zip`" class="btn-primary !py-2.5">⬇ ZIP</a>
               <a v-if="canExport('pdf')" :href="`/api/jobs/${job.id}/export?format=pdf`" class="btn-primary !py-2.5">⬇ PDF А4</a>
               <span v-if="!canExport('zip')" class="chip-soon self-center">ZIP/PDF — PREMIUM</span>
+              <button v-if="job.status === 'error'" class="btn-ghost !py-2.5" @click="retryJob(job.id)">↻ Повторить</button>
               <button class="btn-ghost !py-2.5 text-red-500" @click="removeJob(job.id)">Удалить</button>
             </div>
           </div>

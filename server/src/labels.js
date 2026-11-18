@@ -1,49 +1,35 @@
 import bwipjs from 'bwip-js';
-
-// «Сырой» код с GS → скобочная запись для bwip-js gs1datamatrix.
-// Серийник может содержать скобки — они остаются частью значения.
-function toGs1Paren(raw) {
-  const s = String(raw || '');
-  if (/^\(\d{2,4}\)/.test(s)) return s;
-  const parts = s.split('\x1d');
-  const head = parts.shift() || '';
-  const m = head.match(/^01(\d{14})21([\s\S]*)$/);
-  if (!m) return s;
-  let out = `(01)${m[1]}(21)${m[2]}`;
-  for (const part of parts) {
-    const a = part.match(/^(\d{2,4})([\s\S]*)$/);
-    if (a) out += `(${a[1]})${a[2]}`;
-  }
-  return out;
-}
+import { toRawGs1, gs1BarcodeText } from './gs1.js';
 
 // Разрешает элементы шаблона в конкретные данные строки (тексты + PNG штрихкодов)
 export async function resolveElements(template, data) {
   const out = [];
   for (const el of template.elements || []) {
     const base = { id: el.id, type: el.type, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.fontSize || 10, align: el.align || 'left' };
-    if (['datamatrix', 'code128', 'ean13', 'qrcode'].includes(el.type)) {
-      const source = el.type === 'datamatrix'
-        ? (data.code || el.text || '')
-        : (el.field ? String(data[el.field] ?? '') : (el.text || ''));
-      const content = el.type === 'datamatrix' ? toGs1Paren(source) : source;
-      if (!content) { out.push({ ...base, text: '' }); continue; }
-      let bcid = 'datamatrix';
-      if (el.type === 'code128') bcid = 'code128';
-      else if (el.type === 'ean13') bcid = 'ean13';
-      else if (el.type === 'qrcode') bcid = 'qrcode';
-      else bcid = /^\(\d{2,4}\)/.test(content) ? 'gs1datamatrix' : 'datamatrix';
-      const opts = { bcid, text: content, scale: 6, includetext: false };
-      if (bcid === 'code128') opts.height = 12;
-      else if (bcid === 'ean13') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
-      else if (bcid === 'qrcode') opts.scale = 4;
-      else { opts.paddingwidth = 0; opts.paddingheight = 0; }
+    if (el.type === 'datamatrix') {
+      const source = String(data.code || el.text || '');
+      if (!source) { out.push({ ...base, text: '' }); continue; }
+      const isGs1 = /^\(\d{2,4}\)/.test(source) || /^01\d{14}/.test(source);
+      const opts = isGs1
+        ? { bcid: 'datamatrix', text: gs1BarcodeText(toRawGs1(source)), parsefnc: true, scale: 6, paddingwidth: 0, paddingheight: 0 }
+        : { bcid: 'datamatrix', text: source, scale: 6, paddingwidth: 0, paddingheight: 0 };
       const png = await bwipjs.toBuffer(opts);
       out.push({ ...base, pngBase64: png.toString('base64') });
-    } else {
-      const text = el.type === 'field' ? String(data[el.field] ?? '') : String(el.text ?? '');
-      out.push({ ...base, text });
+      continue;
     }
+    if (['code128', 'ean13', 'qrcode'].includes(el.type)) {
+      const content = el.field ? String(data[el.field] ?? '') : (el.text || '');
+      if (!content) { out.push({ ...base, text: '' }); continue; }
+      const opts = { bcid: el.type, text: content, scale: 6, includetext: false };
+      if (el.type === 'code128') opts.height = 12;
+      else if (el.type === 'ean13') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
+      else if (el.type === 'qrcode') opts.scale = 4;
+      const png = await bwipjs.toBuffer(opts);
+      out.push({ ...base, pngBase64: png.toString('base64') });
+      continue;
+    }
+    const text = el.type === 'field' ? String(data[el.field] ?? '') : String(el.text ?? '');
+    out.push({ ...base, text });
   }
   return out;
 }

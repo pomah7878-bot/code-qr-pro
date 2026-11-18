@@ -36,6 +36,7 @@ export const api = {
   createJob: (b) => req('POST', '/api/jobs', b),
   jobs: () => req('GET', '/api/jobs'),
   job: (id) => req('GET', '/api/jobs/' + id),
+  retryJob: (id) => req('POST', `/api/jobs/${id}/retry`),
   deleteJob: (id) => req('DELETE', '/api/jobs/' + id),
   templates: () => req('GET', '/api/templates'),
   createTemplate: (b) => req('POST', '/api/templates', b),

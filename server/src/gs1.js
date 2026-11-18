@@ -50,8 +50,33 @@ export function parseAIs(raw) {
   throw new Error('Нет GS-разделителей и скобок AI — код не распознан');
 }
 
-export function validateRow(rawInput, mode) {
-  let raw = String(rawInput ?? '').trim().replace(/<GS>/g, '\x1d').replace(/\\x1d/g, '\x1d');
+// Скобочная запись → «сырой» GS1 с FNC1-разделителями (GS).
+// Значения могут содержать скобки, поэтому режем только по началам AI.
+export function toRawGs1(code) {
+  const s = String(code || '').trim().replace(/<GS>/g, '\x1d').replace(/\\x1d/g, '\x1d');
+  if (!/^\(\d{2,4}\)/.test(s)) return s;
+  const starts = [...s.matchAll(/\((\d{2,4})\)/g)];
+  let out = '';
+  let prevVariable = false;
+  for (let i = 0; i < starts.length; i++) {
+    const ai = starts[i][1];
+    const start = starts[i].index + starts[i][0].length;
+    const end = i + 1 < starts.length ? starts[i + 1].index : s.length;
+    const value = s.slice(start, end);
+    if (i > 0 && prevVariable) out += '\x1d';
+    out += ai + value;
+    prevVariable = VARIABLE.has(ai);
+  }
+  return out;
+}
+
+// Текст для bwip-js datamatrix: ведущий FNC1 + FNC1 вместо GS.
+// Символ ^ в данных экранируется как ^^.
+export function gs1BarcodeText(raw) {
+  return '^FNC1' + String(raw || '').replace(/\^/g, '^^').replace(/\x1d/g, '^FNC1');
+}
+
+export function validateRow(rawInput, mode) {  let raw = String(rawInput ?? '').trim().replace(/<GS>/g, '\x1d').replace(/\\x1d/g, '\x1d');
   if (!raw) return { ok: false, error: 'Пустая строка' };
   if (mode === 'text') {
     if (raw.length > 1000) return { ok: false, error: 'Текст длиннее 1000 символов' };

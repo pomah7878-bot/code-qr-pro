@@ -84,6 +84,19 @@ export async function registerJobRoutes(app) {
     return { job, items };
   });
 
+  app.post('/api/jobs/:id/retry', { preHandler: requireAuth }, async (req, reply) => {
+    const job = ownJob(req, reply);
+    if (!job) return;
+    if (!['done', 'error'].includes(job.status)) return reply.code(400).send({ error: 'Перезапустить можно только завершённое или упавшее задание' });
+    try { removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
+    db.transaction(() => {
+      db.prepare("UPDATE job_items SET status='ok', error=NULL WHERE job_id=? AND status='generated'").run(job.id);
+      db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL WHERE id=?").run(job.id);
+    })();
+    enqueue(job.id);
+    return { job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id) };
+  });
+
   app.get('/api/jobs/:id/item/:row.png', { preHandler: requireAuth }, async (req, reply) => {
     if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'Некорректный номер строки' });
     const job = ownJob(req, reply);

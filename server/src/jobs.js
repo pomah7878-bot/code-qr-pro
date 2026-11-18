@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
+import { toRawGs1, gs1BarcodeText } from './gs1.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const JOBS_DIR = process.env.JOBS_DIR || join(__dirname, '..', 'data', 'jobs');
@@ -32,9 +33,11 @@ async function run() {
 }
 
 function bwipOpts(item, mode) {
+  const raw = toRawGs1(item.raw || item.normalized || '');
   return {
-    bcid: mode === 'text' ? 'datamatrix' : 'gs1datamatrix',
-    text: item.normalized,
+    bcid: 'datamatrix',
+    text: mode === 'text' ? String(item.raw || item.normalized || '') : gs1BarcodeText(raw),
+    parsefnc: mode !== 'text',
     scale: 6,
     paddingwidth: 12,
     paddingheight: 12,

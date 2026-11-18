@@ -15,16 +15,22 @@ export async function resolveElements(template, data) {
   const out = [];
   for (const el of template.elements || []) {
     const base = { id: el.id, type: el.type, x: el.x, y: el.y, w: el.w, h: el.h, fontSize: el.fontSize || 10, align: el.align || 'left' };
-    if (el.type === 'datamatrix' || el.type === 'code128') {
+    if (['datamatrix', 'code128', 'ean13', 'qrcode'].includes(el.type)) {
       const source = el.type === 'datamatrix'
         ? (data.code || el.text || '')
         : (el.field ? String(data[el.field] ?? '') : (el.text || ''));
       const content = el.type === 'datamatrix' ? toGs1Paren(source) : source;
       if (!content) { out.push({ ...base, text: '' }); continue; }
-      const bcid = el.type === 'code128' ? 'code128' : (/^\(\d{2,4}\)/.test(content) ? 'gs1datamatrix' : 'datamatrix');
+      let bcid = 'datamatrix';
+      if (el.type === 'code128') bcid = 'code128';
+      else if (el.type === 'ean13') bcid = 'ean13';
+      else if (el.type === 'qrcode') bcid = 'qrcode';
+      else bcid = /^\(\d{2,4}\)/.test(content) ? 'gs1datamatrix' : 'datamatrix';
       const opts = { bcid, text: content, scale: 6, includetext: false };
       if (bcid === 'code128') opts.height = 12;
-      else { opts.paddingwidth = 4; opts.paddingheight = 4; }
+      else if (bcid === 'ean13') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
+      else if (bcid === 'qrcode') opts.scale = 4;
+      else { opts.paddingwidth = 10; opts.paddingheight = 10; }
       const png = await bwipjs.toBuffer(opts);
       out.push({ ...base, pngBase64: png.toString('base64') });
     } else {

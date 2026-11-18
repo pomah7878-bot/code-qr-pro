@@ -74,6 +74,23 @@ export function parseDelimited(text, delimiter) {
   return rows.map((r) => r.map((c) => c.trim()));
 }
 
+const COLUMN_ALIASES = [
+  [/^(баркод|штрихкод|штрих-код|barcode|ean-?13|ean13)$/i, 'barcode'],
+  [/^(артикул|sku|offer[ _-]?id|seller[ _-]?sku)$/i, 'sku'],
+  [/^(наименование|название|товар|name|product)$/i, 'name'],
+  [/^(киз|код маркировки|код|code|cis|sntins)$/i, 'code'],
+  [/^(gtin|гтин)$/i, 'gtin'],
+  [/^(серийник|серийный номер|serial)$/i, 'serial'],
+  [/^(партия|batch)$/i, 'batch'],
+  [/^(цена|price)$/i, 'price']
+];
+
+function canonicalKey(value) {
+  const s = String(value || '').trim();
+  for (const [re, key] of COLUMN_ALIASES) if (re.test(s)) return key;
+  return s;
+}
+
 export function tableToRows(table) {
   if (!table.length) return { rows: [], columns: [] };
   if (table.length === 1 && table[0].length === 1) {
@@ -81,12 +98,13 @@ export function tableToRows(table) {
     return k ? { rows: [{ ...k, row: '1' }], columns: Object.keys(k) } : { rows: [], columns: [] };
   }
   const first = table[0];
-  const looksHeader = first.some((c) => /^(code|код|киз|gtin|serial|серий|наимен|name|крипто|crypto|дата|date|цена|price)$/i.test(String(c).trim()));
+  const looksHeader = first.some((c) => /^(code|код|киз|gtin|serial|серий|наимен|name|крипто|crypto|дата|date|цена|price|баркод|штрихкод|barcode|sku|артикул)$/i.test(String(c).trim()));
   const header = looksHeader ? first : first.map((_, i) => `col${i + 1}`);
   const body = looksHeader ? table.slice(1) : table;
   const columns = [];
   header.forEach((h, i) => {
-    let key = String(h || `col${i + 1}`).trim().slice(0, 40) || `col${i + 1}`;
+    let key = canonicalKey(h) || `col${i + 1}`;
+    key = key.slice(0, 40);
     while (columns.includes(key)) key = `${key}_${i + 1}`;
     columns.push(key);
   });

@@ -9,7 +9,7 @@ import SideNav from '../components/SideNav.vue';
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
 const tpl = reactive({ name: 'Новая этикетка', widthMm: 58, heightMm: 40, dpi: 203, elements: [] });
-const presets = [[58, 40], [43, 25], [30, 20], [75, 50], [100, 50]];
+const presets = [[58, 40], [58, 60], [43, 25], [30, 20], [20, 20], [20, 30], [20, 40], [75, 50], [100, 50], [100, 150], [120, 75]];
 const selectedId = ref(null);
 const selected = computed(() => tpl.elements.find(e => e.id === selectedId.value) || null);
 const templates = ref([]);
@@ -19,6 +19,11 @@ const jobId = ref(null);
 const dataRows = ref([]);
 const dataSource = ref('');
 const dataLabel = ref('');
+const kizData = ref([]);
+const productData = ref([]);
+const kizLabel = ref('');
+const btLabel = ref('');
+const duplicateCount = ref(0);
 const row = ref(0);
 const kizBusy = ref(false);
 const kizStatus = ref('');
@@ -47,22 +52,60 @@ const rowNumber = computed({
   }
 });
 const fieldOptions = computed(() => {
-  const base = ['code', 'gtin', 'serial', 'row'];
+  const base = ['code', 'gtin', 'serial', 'barcode', 'name', 'sku', 'row'];
   const custom = [];
   for (const r of dataRows.value.slice(0, 30)) {
     for (const k of Object.keys(r)) if (!base.includes(k) && !custom.includes(k)) custom.push(k);
   }
   return [...base, ...custom].slice(0, 30);
 });
+const mergeNote = computed(() => {
+  if (!kizData.value.length || !productData.value.length) return '';
+  if (kizData.value.length === productData.value.length) return '';
+  return `КИЗ: ${kizData.value.length}, товары: ${productData.value.length} — строки без пары останутся без штрихкода/названия.`;
+});
 function fieldSample(f) {
   if (currentItem.value) return f === 'row' ? String(Number(row.value) + 1) : (currentItem.value[f] ?? '');
-  return { gtin: '04600000000015', serial: '5PojkV', row: '1', code: '(01)…(21)…' }[f] || '';
+  return { gtin: '04600000000015', serial: '5PojkV', row: '1', code: '(01)…(21)…', barcode: '4600000000000', name: 'Товар', sku: 'SKU-1' }[f] || '';
 }
 
-function setData(rows, source, label) {
-  dataRows.value = Array.isArray(rows) ? rows : [];
-  dataSource.value = source;
-  dataLabel.value = label || '';
+function rebuildData() {
+  const kiz = kizData.value;
+  const prod = productData.value;
+  const gtinKey = (v) => {
+    const s = String(v || '').trim();
+    return /^\d{1,14}$/.test(s) ? s.padStart(14, '0') : s;
+  };
+  let rows = [];
+  if (kiz.length && prod.length) {
+    const byGtin = new Map();
+    for (const p of prod) {
+      const g = gtinKey(p.gtin || p['ГТИН']);
+      if (!g) continue;
+      if (!byGtin.has(g)) byGtin.set(g, []);
+      byGtin.get(g).push(p);
+    }
+    rows = kiz.map((k, i) => {
+      let pair = null;
+      const g = gtinKey(k.gtin);
+      if (g && byGtin.get(g)?.length) pair = byGtin.get(g).shift();
+      if (!pair) pair = prod[i] || {};
+      return { ...pair, ...k };
+    });
+  } else {
+    rows = kiz.length ? kiz : prod;
+  }
+  dataRows.value = rows;
+  dataSource.value = kiz.length && prod.length ? 'kiz+bartender' : kiz.length ? 'kiz' : prod.length ? 'bartender' : '';
+  dataLabel.value = [kizLabel.value, btLabel.value].filter(Boolean).join(' + ').slice(0, 160);
+  const seen = new Set();
+  const dup = new Set();
+  for (const r of rows) {
+    const c = String(r.code || '').trim();
+    if (!c) continue;
+    if (seen.has(c)) dup.add(c); else seen.add(c);
+  }
+  duplicateCount.value = dup.size;
   jobId.value = null;
   row.value = 0;
   itemImg = null;
@@ -89,7 +132,9 @@ async function onKizFile(ev) {
     }
     const rows = kizRows(codes);
     if (!rows.length) throw new Error('В файле не найдены коды маркировки');
-    setData(rows, 'kiz', file.name);
+    kizData.value = rows;
+    kizLabel.value = file.name;
+    rebuildData();
     kizStatus.value = `Загружено ${rows.length} кодов из ${file.name}`;
     notice.value = 'Коды КИЗ загружены — проверьте предпросмотр';
   } catch (e) {
@@ -118,7 +163,9 @@ async function onBtFiles(ev) {
       }
     }
     if (!all.length) throw new Error('Не удалось извлечь строки. Загрузите CSV/XLSX/BTXML с данными.');
-    setData(all, 'bartender', files.map((f) => f.name).join(', ').slice(0, 120));
+    productData.value = all;
+    btLabel.value = files.map((f) => f.name).join(', ').slice(0, 120);
+    rebuildData();
     btStatus.value = `Файлов: ${files.length} · строк: ${all.length}`;
     btWarning.value = warnings.join(' ');
     notice.value = 'Данные из BarTender загружены';
@@ -142,7 +189,7 @@ function draw() {
   ctx.strokeRect(0.5, 0.5, c.width - 1, c.height - 1);
   for (const el of tpl.elements) {
     const x = el.x * S + 1, y = el.y * S + 1, w = el.w * S, h = el.h * S;
-    if (el.type === 'datamatrix' || el.type === 'code128') {
+    if (['datamatrix', 'code128', 'ean13', 'qrcode'].includes(el.type)) {
       if (el.type === 'datamatrix' && itemImg) {
         ctx.drawImage(itemImg, x, y, w, h);
       } else {
@@ -150,7 +197,7 @@ function draw() {
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = '#475569';
         ctx.font = '10px Inter, sans-serif';
-        ctx.fillText(el.type === 'datamatrix' ? '▦ DataMatrix' : '||| Code128', x + 3, y + 12);
+        ctx.fillText({ datamatrix: '▦ DataMatrix', code128: '||| Code128', ean13: '||| EAN-13', qrcode: 'QR' }[el.type], x + 3, y + 12);
       }
     } else {
       const text = el.type === 'field' ? fieldSample(el.field) : (el.text || '');
@@ -183,12 +230,30 @@ function addElement(type, field) {
   if (type === 'text') Object.assign(base, { text: 'Текст', w: 30, h: 6, x: 24 });
   if (type === 'field') Object.assign(base, { field: field || 'gtin', w: 32, h: 6, x: 24, y: field === 'serial' ? 10 : 2 });
   if (type === 'code128') Object.assign(base, { w: 40, h: 10, y: 26 });
+  if (type === 'ean13') Object.assign(base, { field: field || 'barcode', w: 40, h: 14, x: 26, y: 24 });
+  if (type === 'qrcode') Object.assign(base, { field: field || 'code', w: 20, h: 20, x: 34, y: 2 });
   tpl.elements.push(base);
   selectedId.value = id;
 }
 function removeSelected() {
   tpl.elements = tpl.elements.filter(e => e.id !== selectedId.value);
   selectedId.value = null;
+}
+
+function layout2in1() {
+  tpl.widthMm = 58; tpl.heightMm = 40; tpl.dpi = 203;
+  const t = Date.now();
+  tpl.elements = [
+    { id: 'dm' + t, type: 'datamatrix', x: 2, y: 2, w: 22, h: 22, fontSize: 8, align: 'left' },
+    { id: 'ean' + t, type: 'ean13', field: 'barcode', x: 26, y: 2, w: 30, h: 14, fontSize: 8, align: 'left' },
+    { id: 'gt' + t, type: 'field', field: 'gtin', x: 26, y: 16, w: 30, h: 4, fontSize: 7, align: 'left' },
+    { id: 'sn' + t, type: 'field', field: 'serial', x: 26, y: 21, w: 30, h: 4, fontSize: 7, align: 'left' },
+    { id: 'nm' + t, type: 'field', field: 'name', x: 2, y: 26, w: 54, h: 5, fontSize: 8, align: 'left' },
+    { id: 'rw' + t, type: 'field', field: 'row', x: 2, y: 33, w: 20, h: 4, fontSize: 7, align: 'left' }
+  ];
+  selectedId.value = null;
+  notice.value = 'Собран макет 2 в 1: DataMatrix + EAN-13. Проверьте, что в данных есть колонка barcode.';
+  draw();
 }
 
 let drag = null;
@@ -219,7 +284,8 @@ async function loadTemplates() { try { templates.value = (await api.templates())
 async function loadJobs() { try { jobs.value = (await api.jobs()).jobs.filter(j => j.status === 'done'); } catch {} }
 async function onJobChange() {
   itemImg = null; row.value = 0;
-  if (jobId.value == null) return;
+  kizData.value = []; productData.value = []; kizLabel.value = ''; btLabel.value = ''; duplicateCount.value = 0;
+  if (jobId.value == null) { dataRows.value = []; dataSource.value = ''; dataLabel.value = ''; draw(); return; }
   try {
     const d = await api.job(jobId.value);
     const items = d.items.filter(i => i.status === 'generated');
@@ -379,6 +445,8 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
           <div class="flex flex-wrap gap-2 mb-4">
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('datamatrix')">▦ DataMatrix</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('code128')">||| Code128</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('ean13')">||| EAN-13</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('qrcode')">▣ QR</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('text')">Т Текст</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'gtin')">Поле GTIN</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'serial')">Поле Serial</button>
@@ -400,6 +468,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <div class="flex flex-wrap gap-1.5">
               <button v-for="p in presets" :key="p.join()" class="btn-ghost !py-1 !px-2.5 text-xs" @click="tpl.widthMm = p[0]; tpl.heightMm = p[1]">{{ p[0] }}×{{ p[1] }}</button>
             </div>
+            <button class="btn-ghost w-full !py-2 text-sm" @click="layout2in1">Собрать «2 в 1»: DataMatrix + EAN-13</button>
             <div class="grid grid-cols-3 gap-2">
               <div><label class="label !text-xs">Ш, мм</label><input v-model.number="tpl.widthMm" type="number" min="10" max="210" class="input !py-1.5 text-sm"></div>
               <div><label class="label !text-xs">В, мм</label><input v-model.number="tpl.heightMm" type="number" min="10" max="297" class="input !py-1.5 text-sm"></div>
@@ -431,6 +500,14 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
                 <option v-for="f in fieldOptions" :key="f" :value="f">{{ f }}</option>
               </select>
             </template>
+            <template v-if="['code128', 'ean13', 'qrcode'].includes(selected.type)">
+              <label class="label !text-xs">Данные для штрихкода</label>
+              <select v-model="selected.field" class="input !py-2 text-sm">
+                <option value="">— фиксированный текст —</option>
+                <option v-for="f in fieldOptions" :key="f" :value="f">{{ f }}</option>
+              </select>
+              <input v-if="!selected.field" v-model="selected.text" class="input !py-2 text-sm" placeholder="Текст или число">
+            </template>
             <template v-if="selected.type === 'text' || selected.type === 'field'">
               <div class="grid grid-cols-2 gap-2">
                 <div><label class="label !text-xs">Кегль, pt</label><input v-model.number="selected.fontSize" type="number" min="4" max="72" class="input !py-1.5 text-sm"></div>
@@ -446,10 +523,12 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.name }} ({{ j.done }} кодов)</option>
             </select>
             <div v-if="dataRows.length" class="text-xs text-slate-500">
-              Источник: <b class="text-slate-700 dark:text-slate-200">{{ dataSource === 'kiz' ? 'КИЗ' : dataSource === 'bartender' ? 'BarTender' : 'пакет' }}</b>
+              Источник: <b class="text-slate-700 dark:text-slate-200">{{ dataSource === 'kiz+bartender' ? 'КИЗ + BarTender' : dataSource === 'kiz' ? 'КИЗ' : dataSource === 'bartender' ? 'BarTender' : 'пакет' }}</b>
               · {{ dataRows.length }} строк
               <span v-if="dataLabel"> · {{ dataLabel }}</span>
             </div>
+            <p v-if="mergeNote" class="text-xs text-amber-500">{{ mergeNote }}</p>
+            <p v-if="duplicateCount" class="text-xs text-amber-500">Повторных КИЗ: {{ duplicateCount }} — проверьте перед печатью.</p>
             <div v-if="dataRows.length" class="flex items-center gap-2">
               <label class="label !text-xs !mb-0">Строка</label>
               <input v-model.number="rowNumber" type="number" min="1" :max="dataRows.length" class="input !py-1.5 text-sm w-24">

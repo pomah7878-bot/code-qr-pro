@@ -3,7 +3,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { extractKizCodes } from '../lib/pdfCodes.js';
+import { importPdf } from '../lib/pdfImport.js';
 import SideNav from '../components/SideNav.vue';
 
 const mode = ref('cz');
@@ -20,6 +20,8 @@ const inputTab = ref('file');
 const error = ref('');
 const busy = ref(false);
 const reading = ref(false);
+const pdfProgress = ref(null);
+const pdfWarning = ref('');
 const preview = ref(null);
 const jobName = ref('');
 const format = ref('png');
@@ -55,48 +57,27 @@ function extractRows(sheetRows) {
   return body.map(r => String(r[idx] ?? '').trim()).filter(Boolean);
 }
 
-async function readPdfText(file) {
-  // pdfjs грузится только при выборе PDF, основной бандл не растёт
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
-  const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  const pdf = await pdfjs.getDocument({
-    data: new Uint8Array(await file.arrayBuffer()),
-    isEvalSupported: false
-  }).promise;
-  let text = '';
-  try {
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      for (const item of content.items) {
-        if (typeof item.str !== 'string') continue;
-        text += item.str + (item.hasEOL ? '\n' : ' ');
-      }
-      page.cleanup();
-    }
-  } finally {
-    await pdf.destroy();
-  }
-  return text;
-}
-
 async function onFile(ev) {
   const file = ev.target.files?.[0];
   if (!file) return;
   error.value = '';
   fileName.value = file.name;
   rows.value = [];
+  pdfProgress.value = null;
+  pdfWarning.value = '';
   try {
     const head = await file.slice(0, 1024).text();
     const isPdf = head.includes('%PDF-') || /\.pdf$/i.test(file.name);
     if (isPdf) {
       reading.value = true;
-      const text = await readPdfText(file);
-      rows.value = extractKizCodes(text);
+      const result = await importPdf(file, (p) => { pdfProgress.value = p; });
+      rows.value = result.codes;
+      if (result.failed) {
+        pdfWarning.value = `Не удалось распознать ${result.failed} из ${result.pages} страниц — в них нет читаемого DataMatrix.`;
+      }
       if (!rows.value.length) {
         fileName.value = '';
-        error.value = 'В PDF не найдены коды маркировки. Нужен PDF с текстовым слоем (не скан).';
+        error.value = 'В PDF не найдены коды. Нет текстового слоя и не читается DataMatrix на страницах — проверьте, что в файле есть штрихкод.';
       }
       return;
     }
@@ -217,7 +198,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-10 cursor-pointer hover:border-brand-500/60 transition">
               <span class="text-4xl mb-2">📥</span>
               <span class="font-semibold">{{ fileName || 'Перетащите или выберите файл' }}</span>
-              <span class="text-xs text-slate-500 mt-1">PDF с текстовым слоем, CSV, XLSX, TXT · коды GTIN/Serial/Crypto или один столбец</span>
+              <span class="text-xs text-slate-500 mt-1">PDF (текст или DataMatrix), CSV, XLSX, TXT · коды GTIN/Serial/Crypto или один столбец</span>
               <span class="text-[11px] text-slate-400 mt-1">В PDF считаются только сами коды маркировки, а не строки файла</span>
               <input type="file" accept=".pdf,.csv,.xlsx,.xls,.txt" class="hidden" @change="onFile">
             </label>
@@ -226,7 +207,14 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <textarea v-model="pasteText" rows="8" class="input font-mono text-sm" placeholder="По одному коду на строку:&#10;(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA==&#10;или raw с GS-разделителями"></textarea>
             <button class="btn-ghost mt-3" @click="usePaste">Использовать текст</button>
           </div>
-          <p v-if="reading" class="mt-4 text-sm text-slate-500">Читаем PDF и ищем коды маркировки…</p>
+          <p v-if="reading" class="mt-4 text-sm text-slate-500">
+            <template v-if="pdfProgress">
+              {{ pdfProgress.phase === 'text' ? 'Читаем текст PDF' : 'Распознаём DataMatrix' }}: {{ pdfProgress.page }} / {{ pdfProgress.total }}<span v-if="pdfProgress.phase === 'barcode'"> · найдено {{ pdfProgress.found }}</span>
+              <span v-if="pdfProgress.total > 100" class="text-xs">— не закрывайте вкладку</span>
+            </template>
+            <template v-else>Читаем PDF и ищем коды маркировки…</template>
+          </p>
+          <p v-if="pdfWarning" class="mt-2 text-sm text-amber-500">{{ pdfWarning }}</p>
           <p v-if="rows.length" class="mt-4 text-sm text-slate-500">Извлечено кодов: <b class="text-slate-700 dark:text-slate-200">{{ rows.length }}</b> <span v-if="fileName">· {{ fileName }}</span> <span class="text-xs">— один код = одна строка</span></p>
           <p v-if="error" class="mt-3 text-sm text-red-500">{{ error }}</p>
           <button class="btn-primary mt-5" :disabled="!rows.length || busy || reading" @click="doValidate">

@@ -43,8 +43,18 @@ const cameraError = ref('');
 const cameraDevices = ref([]);
 const cameraId = ref('');
 const videoEl = ref(null);
-let zxingReader = null;
-let scannerControls = null;
+const cameraCount = ref(0);
+const torchAvailable = ref(false);
+const torchOn = ref(false);
+let cameraStream = null;
+let cameraSession = 0;
+let scanTimer = 0;
+let decodePending = false;
+let decoderWorker = null;
+let frameId = 0;
+let scanCanvas = null;
+let scanCtx = null;
+let lastVideoTime = -1;
 
 const settingsOpen = ref(false);
 const serialSupported = typeof navigator !== 'undefined' && 'serial' in navigator;
@@ -56,12 +66,15 @@ let serialReader = null;
 
 function addCode(raw) {
   const code = String(raw || '').trim();
-  if (!code) return;
+  if (!code) return false;
   const lines = codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  if (!lines.includes(code)) lines.push(code);
+  if (lines.includes(code)) return false;
+  lines.push(code);
   codesText.value = lines.join('\n');
   result.value = null;
   notice.value = `Добавлен код, всего строк: ${lines.length}`;
+  try { navigator.vibrate?.(40); } catch { /* без вибрации */ }
+  return true;
 }
 
 async function loadCameras() {
@@ -77,29 +90,108 @@ function openSettings() {
   loadCameras();
 }
 
+function ensureDecoder() {
+  if (decoderWorker) return;
+  decoderWorker = new Worker(new URL('../lib/zxing-worker.js', import.meta.url), { type: 'module' });
+  decoderWorker.onmessage = ({ data }) => {
+    decodePending = false;
+    if (data?.error) cameraError.value = `Декодер: ${data.error}`;
+    for (const result of data?.results || []) {
+      if (addCode(result.text)) cameraCount.value += 1;
+    }
+  };
+  decoderWorker.onerror = (e) => {
+    decodePending = false;
+    cameraError.value = e.message || 'Ошибка декодера';
+  };
+}
+
 async function openCamera() {
   cameraError.value = '';
+  cameraCount.value = 0;
+  torchOn.value = false;
+  torchAvailable.value = false;
+  const session = ++cameraSession;
   try {
-    const { BrowserMultiFormatReader } = await import('@zxing/browser');
-    zxingReader = new BrowserMultiFormatReader();
+    const video = cameraId.value
+      ? { deviceId: { exact: cameraId.value }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+    cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    if (session !== cameraSession) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      cameraStream = null;
+      return;
+    }
     cameraOpen.value = true;
     await nextTick();
-    scannerControls = await zxingReader.decodeFromVideoDevice(cameraId.value || undefined, videoEl.value, (result) => {
-      if (result) {
-        addCode(result.getText());
-        closeCamera();
-      }
-    });
+    videoEl.value.srcObject = cameraStream;
+    await videoEl.value.play();
+    const track = cameraStream.getVideoTracks()[0];
+    const caps = track.getCapabilities?.() || {};
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+    }
+    torchAvailable.value = !!caps.torch;
+    ensureDecoder();
+    scanLoop(session);
   } catch (e) {
     cameraError.value = e.message || 'Не удалось открыть камеру';
     closeCamera();
   }
 }
 
+async function scanLoop(session) {
+  if (!cameraOpen.value || session !== cameraSession) return;
+  const video = videoEl.value;
+  if (video && !decodePending && video.readyState >= 2 && video.videoWidth && video.videoHeight && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!scanCanvas) {
+      scanCanvas = document.createElement('canvas');
+      scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (scanCanvas.width !== width || scanCanvas.height !== height) {
+      scanCanvas.width = width;
+      scanCanvas.height = height;
+    }
+    scanCtx.drawImage(video, 0, 0, width, height);
+    const image = scanCtx.getImageData(0, 0, width, height);
+    ensureDecoder();
+    decodePending = true;
+    try {
+      decoderWorker.postMessage(
+        { type: 'decode', id: ++frameId, width, height, buffer: image.data.buffer },
+        [image.data.buffer]
+      );
+    } catch {
+      decodePending = false;
+    }
+  }
+  scanTimer = setTimeout(() => scanLoop(session), 60);
+}
+
 function closeCamera() {
-  try { scannerControls?.stop(); } catch { /* уже остановлен */ }
-  scannerControls = null;
+  cameraSession += 1;
+  clearTimeout(scanTimer);
+  if (decoderWorker) { decoderWorker.terminate(); decoderWorker = null; }
+  decodePending = false;
+  if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
+  cameraStream = null;
   cameraOpen.value = false;
+  torchOn.value = false;
+  if (videoEl.value) videoEl.value.srcObject = null;
+}
+
+async function toggleTorch() {
+  if (!torchAvailable.value || !cameraStream) return;
+  const track = cameraStream.getVideoTracks()[0];
+  try {
+    await track.applyConstraints({ advanced: [{ torch: !torchOn.value }] });
+    torchOn.value = !torchOn.value;
+  } catch {
+    cameraError.value = 'Фонарик недоступен на этой камере';
+  }
 }
 
 async function connectSerial() {
@@ -343,7 +435,14 @@ async function downloadPdf() {
       <div class="relative rounded-2xl overflow-hidden w-full max-w-lg bg-black">
         <video ref="videoEl" class="w-full" playsinline muted></video>
         <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
-        <p class="text-center text-xs text-white/70 py-2">Наведите камеру на DataMatrix</p>
+        <div class="absolute inset-x-0 bottom-0 p-3 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent">
+          <span class="text-xs text-white/80">Собрано: {{ cameraCount }}</span>
+          <div class="flex gap-2">
+            <button v-if="torchAvailable" class="rounded-full bg-white/15 text-white px-3 py-1.5 text-xs" @click="toggleTorch">{{ torchOn ? '🔆 Выкл' : '🔆 Фонарик' }}</button>
+            <button class="rounded-full bg-white text-slate-900 px-3 py-1.5 text-xs font-semibold" @click="closeCamera">Готово ({{ cameraCount }})</button>
+          </div>
+        </div>
+        <p class="absolute top-3 left-3 rounded-full bg-black/50 text-white/80 text-xs px-2 py-1">Наведите на DataMatrix</p>
       </div>
     </div>
 

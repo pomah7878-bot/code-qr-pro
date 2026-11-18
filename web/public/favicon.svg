@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14305c"/>
+      <stop offset="0.55" stop-color="#0b1d3a"/>
+      <stop offset="1" stop-color="#060f1f"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe082"/>
+      <stop offset="0.5" stop-color="#f2c14e"/>
+      <stop offset="1" stop-color="#d99a2b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+  <g fill="url(#gold)">
+    <rect x="14" y="30" width="7" height="7" rx="1"/>
+    <rect x="22" y="38" width="7" height="7" rx="1"/>
+    <rect x="30" y="46" width="7" height="7" rx="1"/>
+    <rect x="38" y="38" width="7" height="7" rx="1"/>
+    <rect x="46" y="30" width="7" height="7" rx="1"/>
+    <rect x="54" y="22" width="7" height="7" rx="1"/>
+  </g>
+  <rect x="14" y="14" width="7" height="7" rx="1" fill="#f2c14e" opacity="0.28"/>
+  <rect x="22" y="14" width="7" height="7" rx="1" fill="#f2c14e" opacity="0.14"/>
+</svg>

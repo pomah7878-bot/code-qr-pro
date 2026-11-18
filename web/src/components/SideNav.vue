@@ -6,8 +6,10 @@ const items = [
   { icon: '▦', t: 'Генерация', to: '/app/generate' },
   { icon: '🏷️', t: 'Этикетки', to: '/app/labels' },
   { icon: '🖨️', t: 'Печать', to: '/app/labels' },
-  { icon: '💳', t: 'Подписка', soon: 'этап 4' },
-  { icon: '🔌', t: 'API', soon: 'этап 4' }
+  { icon: '💳', t: 'Подписка', to: '/app/billing' },
+  { icon: '🔌', t: 'API', to: '/app/apikeys' },
+  { icon: '🛡️', t: 'Честный ЗНАК', to: '/app/cz' },
+  ...(store.user?.role === 'admin' ? [{ icon: '⚙️', t: 'Админка', to: '/app/admin' }] : [])
 ];
 </script>
 

@@ -44,6 +44,7 @@ assert(r.status === 403, 'FREE: prepare 403');
 
 const db = new Database('server/data/app.db');
 db.prepare("UPDATE users SET plan='premium' WHERE email=?").run(email);
+db.prepare("INSERT INTO subscriptions (user_id, plan, status, provider, started_at, expires_at) SELECT id,'premium','active','test',datetime('now'),datetime('now','+1 day') FROM users WHERE email=?").run(email);
 db.close();
 
 const GOOD = '(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA==';

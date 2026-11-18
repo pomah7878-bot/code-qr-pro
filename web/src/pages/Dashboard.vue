@@ -31,9 +31,10 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             <li>Пакет до: <b>{{ store.plan?.batchMax.toLocaleString('ru') }}</b> строк</li>
             <li>Форматы: <b>{{ store.plan?.formats.join(', ').toUpperCase() }}</b></li>
           </ul>
-          <button v-if="store.plan?.id !== 'premium'" class="btn-primary w-full mt-5 opacity-60 cursor-not-allowed" disabled>
-            PREMIUM — подключение на этапе 4
-          </button>
+          <router-link v-if="store.plan?.id !== 'premium'" to="/app/billing" class="btn-primary w-full mt-5">
+            Оформить PREMIUM — 1 990 ₽/мес
+          </router-link>
+          <router-link v-else to="/app/billing" class="btn-ghost w-full mt-5">Продлить подписку</router-link>
         </div>
 
         <div class="glass rounded-2xl p-6">

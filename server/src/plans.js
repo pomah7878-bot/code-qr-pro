@@ -14,7 +14,7 @@ export const PLANS = {
   premium: {
     id: 'premium',
     title: 'PREMIUM',
-    priceMonthly: null, // цена будет утверждена на этапе 4 (Billing)
+    priceMonthly: 1990,
     codesPerDay: 10000,
     batchMax: 5000,
     formats: ['png', 'svg', 'pdf', 'zip'],

@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/code-qr/server
 Environment=NODE_ENV=production
+EnvironmentFile=-/opt/code-qr/server/.env
 Environment=HOST=127.0.0.1
 Environment=PORT=3100
 ExecStart=/usr/bin/node /opt/code-qr/server/src/index.js

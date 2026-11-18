@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';
 import { registerJobRoutes } from './routes-jobs.js';
 import { registerLabelRoutes } from './routes-labels.js';
+import { registerBillingRoutes } from './routes-billing.js';
+import { registerAdminRoutes } from './routes-admin.js';
+import { registerApiRoutes } from './routes-api.js';
+import { startBillingSweeper, providerConfigured } from './billing.js';
 import './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -16,6 +20,11 @@ await app.register(cookie);
 await registerRoutes(app);
 await registerJobRoutes(app);
 await registerLabelRoutes(app);
+await registerBillingRoutes(app);
+await registerAdminRoutes(app);
+await registerApiRoutes(app);
+startBillingSweeper();
+app.log.info({ yookassaConfigured: providerConfigured() }, 'billing ready');
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');
 if (existsSync(dist)) {

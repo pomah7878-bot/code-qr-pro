@@ -57,6 +57,7 @@ assert(r.status === 403, 'FREE: zip запрещён (403)');
 // повышаем тариф локально для проверки premium-экспорта
 const db = new Database('server/data/app.db');
 db.prepare("UPDATE users SET plan='premium' WHERE email=?").run(email);
+db.prepare("INSERT INTO subscriptions (user_id, plan, status, provider, started_at, expires_at) SELECT id,'premium','active','test',datetime('now'),datetime('now','+1 day') FROM users WHERE email=?").run(email);
 db.close();
 
 r = await req('GET', `/api/jobs/${jobId}/export?format=zip`);

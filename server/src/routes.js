@@ -37,6 +37,9 @@ export async function registerRoutes(app) {
     if (exists) return reply.code(409).send({ error: 'Email уже зарегистрирован' });
     const info = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
       .run(email.toLowerCase(), hashPassword(password), (name || '').slice(0, 100));
+    if (db.prepare('SELECT COUNT(*) c FROM users').get().c === 1) {
+      db.prepare("UPDATE users SET role='admin' WHERE id=?").run(info.lastInsertRowid);
+    }
     const { token, expires } = createSession(info.lastInsertRowid);
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
@@ -72,5 +75,5 @@ export async function registerRoutes(app) {
 
   app.get('/api/plans', async () => ({ plans: Object.values(PLANS) }));
 
-  app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 3 }));
+  app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 4 }));
 }

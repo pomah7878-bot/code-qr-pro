@@ -20,6 +20,36 @@ function validateBatch(rows, mode, plan) {
   return { items };
 }
 
+export function createJobForUser(user, body) {
+  const { name, mode = 'cz', format = 'png', rows = [] } = body || {};
+  if (!MODES.includes(mode)) return { status: 400, error: 'Неизвестный режим' };
+  if (!['png', 'svg'].includes(format)) return { status: 400, error: 'Формат генерации: png или svg' };
+  const plan = planOf(user);
+  const { error, items } = validateBatch(rows, mode, plan);
+  if (error) return { status: 400, error };
+  const valid = items.filter(x => x.ok).length;
+  if (valid === 0) return { status: 400, error: 'Нет валидных кодов — исправьте данные' };
+  const used = usageToday(user.id);
+  if (used + valid > plan.codesPerDay) {
+    return { status: 403, error: `Дневной лимит: осталось ${Math.max(0, plan.codesPerDay - used)} кодов, нужно ${valid}` };
+  }
+  const jobId = db.transaction(() => {
+    const info = db.prepare('INSERT INTO generation_jobs (user_id, name, mode, format, status, total, valid) VALUES (?,?,?,?,?,?,?)')
+      .run(user.id, String(name || 'Без названия').slice(0, 120), mode, format, 'queued', items.length, valid);
+    const id = info.lastInsertRowid;
+    const ins = db.prepare('INSERT INTO job_items (job_id, row_index, raw, normalized, gtin, serial, status, error) VALUES (?,?,?,?,?,?,?,?)');
+    for (const it of items) {
+      ins.run(id, it.row, it.raw, it.normalized || null, it.gtin || null, it.serial || null, it.ok ? 'ok' : 'invalid', it.error || null);
+    }
+    db.prepare(`INSERT INTO usage_daily (user_id, day, codes_generated) VALUES (?,?,?)
+      ON CONFLICT(user_id, day) DO UPDATE SET codes_generated = codes_generated + excluded.codes_generated`)
+      .run(user.id, today(), valid);
+    return id;
+  })();
+  enqueue(jobId);
+  return { status: 200, job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(jobId) };
+}
+
 export async function registerJobRoutes(app) {
   app.post('/api/jobs/validate', { preHandler: requireAuth }, async (req, reply) => {
     const { mode = 'cz', rows = [] } = req.body || {};
@@ -31,33 +61,9 @@ export async function registerJobRoutes(app) {
   });
 
   app.post('/api/jobs', { preHandler: requireAuth }, async (req, reply) => {
-    const { name, mode = 'cz', format = 'png', rows = [] } = req.body || {};
-    if (!MODES.includes(mode)) return reply.code(400).send({ error: 'Неизвестный режим' });
-    if (!['png', 'svg'].includes(format)) return reply.code(400).send({ error: 'Формат генерации: png или svg' });
-    const plan = planOf(req.user);
-    const { error, items } = validateBatch(rows, mode, plan);
-    if (error) return reply.code(400).send({ error });
-    const valid = items.filter(x => x.ok).length;
-    if (valid === 0) return reply.code(400).send({ error: 'Нет валидных кодов — исправьте данные' });
-    const used = usageToday(req.user.id);
-    if (used + valid > plan.codesPerDay) {
-      return reply.code(403).send({ error: `Дневной лимит: осталось ${Math.max(0, plan.codesPerDay - used)} кодов, нужно ${valid}` });
-    }
-    const jobId = db.transaction(() => {
-      const info = db.prepare('INSERT INTO generation_jobs (user_id, name, mode, format, status, total, valid) VALUES (?,?,?,?,?,?,?)')
-        .run(req.user.id, String(name || 'Без названия').slice(0, 120), mode, format, 'queued', items.length, valid);
-      const id = info.lastInsertRowid;
-      const ins = db.prepare('INSERT INTO job_items (job_id, row_index, raw, normalized, gtin, serial, status, error) VALUES (?,?,?,?,?,?,?,?)');
-      for (const it of items) {
-        ins.run(id, it.row, it.raw, it.normalized || null, it.gtin || null, it.serial || null, it.ok ? 'ok' : 'invalid', it.error || null);
-      }
-      db.prepare(`INSERT INTO usage_daily (user_id, day, codes_generated) VALUES (?,?,?)
-        ON CONFLICT(user_id, day) DO UPDATE SET codes_generated = codes_generated + excluded.codes_generated`)
-        .run(req.user.id, today(), valid);
-      return id;
-    })();
-    enqueue(jobId);
-    return { job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(jobId) };
+    const r = createJobForUser(req.user, req.body);
+    if (r.error) return reply.code(r.status).send({ error: r.error });
+    return { job: r.job };
   });
 
   app.get('/api/jobs', { preHandler: requireAuth }, async (req) => ({

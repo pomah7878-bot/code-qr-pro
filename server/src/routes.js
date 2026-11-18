@@ -13,19 +13,20 @@ function rateLimit(ip, max = 10, windowMs = 60_000) {
   return a.n <= max;
 }
 
+const COOKIE = 'cq_session';
+
+export const requireAuth = async (req, reply) => {
+  const user = sessionUser(req.cookies[COOKIE]);
+  if (!user) return reply.code(401).send({ error: 'Не авторизован' });
+  req.user = user;
+};
+
 export async function registerRoutes(app) {
-  const COOKIE = 'cq_session';
   const cookieOpts = (expires) => ({
     path: '/', httpOnly: true, sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     expires
   });
-
-  const requireAuth = async (req, reply) => {
-    const user = sessionUser(req.cookies[COOKIE]);
-    if (!user) return reply.code(401).send({ error: 'Не авторизован' });
-    req.user = user;
-  };
 
   app.post('/api/auth/register', async (req, reply) => {
     if (!rateLimit(req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });

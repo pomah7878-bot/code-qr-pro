@@ -1,37 +1,17 @@
 <script setup>
 import { computed } from 'vue';
 import { store } from '../store.js';
+import SideNav from '../components/SideNav.vue';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
 });
-const nav = [
-  { icon: '📊', t: 'Обзор', active: true },
-  { icon: '▦', t: 'Генерация', soon: 'этап 2' },
-  { icon: '🏷️', t: 'Этикетки', soon: 'этап 3' },
-  { icon: '🖨️', t: 'Печать', soon: 'этап 3' },
-  { icon: '💳', t: 'Подписка', soon: 'этап 4' },
-  { icon: '🔌', t: 'API', soon: 'этап 4' }
-];
 const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateString('ru') : '';
 </script>
 
 <template>
   <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
-    <aside class="glass rounded-2xl p-4 h-fit">
-      <div class="px-3 py-2 mb-2">
-        <div class="font-semibold truncate">{{ store.user?.name || store.user?.email }}</div>
-        <div class="text-xs text-slate-500 truncate">{{ store.user?.email }}</div>
-      </div>
-      <nav class="space-y-1">
-        <div v-for="n in nav" :key="n.t"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm"
-             :class="n.active ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 font-semibold border border-brand-500/30' : 'text-slate-500'">
-          <span>{{ n.icon }}</span><span>{{ n.t }}</span>
-          <span v-if="n.soon" class="chip-soon ml-auto">{{ n.soon }}</span>
-        </div>
-      </nav>
-    </aside>
+    <SideNav active="/app" />
 
     <section class="space-y-6">
       <div>
@@ -72,10 +52,10 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
       <div class="glass rounded-2xl p-6">
         <h2 class="font-display font-semibold mb-4">Что дальше</h2>
         <div class="grid md:grid-cols-3 gap-4 text-sm">
-          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-4">
-            <div class="font-semibold mb-1">▦ Генерация <span class="chip-soon">этап 2</span></div>
+          <router-link to="/app/generate" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
+            <div class="font-semibold mb-1">▦ Генерация →</div>
             <p class="text-slate-500">Импорт CSV/XLSX, валидация GS1, пакетная генерация и экспорт.</p>
-          </div>
+          </router-link>
           <div class="rounded-xl border border-slate-200 dark:border-white/10 p-4">
             <div class="font-semibold mb-1">🏷️ Этикетки <span class="chip-soon">этап 3</span></div>
             <p class="text-slate-500">Редактор шаблонов и печать на термопринтеры через Print Bridge.</p>

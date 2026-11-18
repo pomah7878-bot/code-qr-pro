@@ -4,6 +4,7 @@ import Landing from './pages/Landing.vue';
 import Login from './pages/Login.vue';
 import Register from './pages/Register.vue';
 import Dashboard from './pages/Dashboard.vue';
+import Generator from './pages/Generator.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,6 +13,7 @@ const router = createRouter({
     { path: '/login', component: Login },
     { path: '/register', component: Register },
     { path: '/app', component: Dashboard, meta: { auth: true } },
+    { path: '/app/generate', component: Generator, meta: { auth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
   scrollBehavior: () => ({ top: 0 })

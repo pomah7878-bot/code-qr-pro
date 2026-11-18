@@ -14,5 +14,10 @@ export const api = {
   login: (b) => req('POST', '/api/auth/login', b),
   logout: () => req('POST', '/api/auth/logout'),
   me: () => req('GET', '/api/me'),
-  plans: () => req('GET', '/api/plans')
+  plans: () => req('GET', '/api/plans'),
+  validate: (b) => req('POST', '/api/jobs/validate', b),
+  createJob: (b) => req('POST', '/api/jobs', b),
+  jobs: () => req('GET', '/api/jobs'),
+  job: (id) => req('GET', '/api/jobs/' + id),
+  deleteJob: (id) => req('DELETE', '/api/jobs/' + id)
 };

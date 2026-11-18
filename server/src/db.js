@@ -45,7 +45,35 @@ const MIGRATIONS = [
     started_at TEXT,
     expires_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );`
+  );`,
+  // v2 — DataMatrix Engine
+  `CREATE TABLE generation_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'cz',
+    format TEXT NOT NULL DEFAULT 'png',
+    status TEXT NOT NULL DEFAULT 'queued',
+    total INTEGER NOT NULL DEFAULT 0,
+    valid INTEGER NOT NULL DEFAULT 0,
+    done INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  );
+  CREATE INDEX idx_jobs_user ON generation_jobs(user_id);
+  CREATE TABLE job_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES generation_jobs(id) ON DELETE CASCADE,
+    row_index INTEGER NOT NULL,
+    raw TEXT NOT NULL,
+    normalized TEXT,
+    gtin TEXT,
+    serial TEXT,
+    status TEXT NOT NULL DEFAULT 'ok',
+    error TEXT
+  );
+  CREATE INDEX idx_job_items_job ON job_items(job_id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

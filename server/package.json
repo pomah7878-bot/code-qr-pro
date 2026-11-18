@@ -10,8 +10,10 @@
   "dependencies": {
     "@fastify/cookie": "^9.4.0",
     "@fastify/static": "^7.0.4",
-    "better-sqlite3": "^11.10.0",
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^12.4.1",
     "bwip-js": "^4.5.1",
-    "fastify": "^4.28.1"
+    "fastify": "^4.28.1",
+    "pdfkit": "^0.15.2"
   }
 }

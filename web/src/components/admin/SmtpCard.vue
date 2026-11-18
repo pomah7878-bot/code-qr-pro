@@ -9,10 +9,50 @@ const form = reactive({
 });
 const state = reactive({ configured: false, hasPassword: false });
 const testTo = ref(store.user?.email || '');
+const provider = ref('');
+const providers = [
+  { id: 'yandex', label: 'Яндекс 360', host: 'smtp.yandex.ru', port: 465, secure: true },
+  { id: 'mailru', label: 'Mail.ru', host: 'smtp.mail.ru', port: 465, secure: true },
+  { id: 'gmail', label: 'Gmail', host: 'smtp.gmail.com', port: 465, secure: true },
+  { id: 'vk', label: 'VK WorkMail', host: 'smtp.vk.com', port: 465, secure: true },
+  { id: 'custom', label: 'Другой / свой сервер', host: '', port: 465, secure: true }
+];
 const error = ref('');
 const notice = ref('');
 const busy = ref(false);
 const testing = ref(false);
+
+function applyProvider() {
+  const p = providers.find((x) => x.id === provider.value);
+  if (!p || p.id === 'custom') return;
+  form.host = p.host;
+  form.port = p.port;
+  form.secure = p.secure;
+}
+
+function guessProvider() {
+  const domain = String(form.fromEmail || '').split('@')[1]?.toLowerCase() || '';
+  if (/(^|\.)yandex\./.test(domain)) provider.value = 'yandex';
+  else if (/(^|\.)(mail\.ru|bk\.ru|inbox\.ru|list\.ru)$/.test(domain)) provider.value = 'mailru';
+  else if (domain === 'gmail.com' || domain === 'googlemail.com') provider.value = 'gmail';
+  else if (/(^|\.)vk\.com$/.test(domain)) provider.value = 'vk';
+  else provider.value = 'custom';
+  applyProvider();
+}
+
+function friendlyError(e) {
+  const message = String(e?.message || e || '');
+  if (/EAUTH|Invalid login|authentication|535|Логин или пароль/i.test(message)) {
+    return 'Неверный логин или пароль. Для Яндекс/Mail.ru/Gmail нужен пароль приложения, а не обычный пароль от почты.';
+  }
+  if (/ETIMEDOUT|ECONNECTION|ESOCKET|ECONNREFUSED|ENOTFOUND/i.test(message)) {
+    return 'Нет соединения с SMTP. Проверьте хост, порт и SSL (465 — SSL, 587 — STARTTLS).';
+  }
+  if (/EENVELOPE|from|sender/i.test(message)) {
+    return 'Проверьте email отправителя: он должен совпадать с ящиком, от имени которого отправляете.';
+  }
+  return message;
+}
 
 async function load() {
   try {
@@ -36,7 +76,7 @@ async function save() {
     state.configured = d.configured;
     notice.value = 'SMTP-настройки сохранены';
     await load();
-  } catch (e) { error.value = e.message; }
+  } catch (e) { error.value = friendlyError(e); }
   finally { busy.value = false; }
 }
 
@@ -47,7 +87,7 @@ async function test() {
   try {
     await api.adminTestSmtp(testTo.value.trim());
     notice.value = 'Тестовое письмо отправлено на ' + testTo.value;
-  } catch (e) { error.value = e.message; }
+  } catch (e) { error.value = friendlyError(e); }
   finally { testing.value = false; }
 }
 
@@ -67,7 +107,20 @@ onMounted(load);
     <p v-if="error" class="text-sm text-red-500 mt-3">{{ error }}</p>
     <p v-if="notice" class="text-sm text-emerald-500 mt-3">{{ notice }}</p>
 
-    <div class="grid md:grid-cols-2 gap-3 mt-4">
+    <div class="flex flex-wrap items-end gap-2 mt-4">
+      <div class="flex-1 min-w-[220px]">
+        <label class="label !text-xs" for="smtp-provider">Провайдер</label>
+        <select id="smtp-provider" v-model="provider" class="input !py-2 text-sm" @change="applyProvider">
+          <option value="">Выберите или заполните вручную</option>
+          <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
+        </select>
+      </div>
+      <button class="btn-ghost !py-2 !px-3 text-sm" @click="guessProvider">Подставить по email</button>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-2">Для Яндекс/Mail.ru/Gmail нужен <b>пароль приложения</b>, а не обычный пароль от почты.</p>
+
+    <div class="grid md:grid-cols-2 gap-3 mt-3">
       <div>
         <label class="label !text-xs" for="smtp-host">Хост</label>
         <input id="smtp-host" v-model="form.host" class="input !py-2 text-sm" placeholder="smtp.yandex.ru">
@@ -95,7 +148,7 @@ onMounted(load);
       </div>
       <div>
         <label class="label !text-xs" for="smtp-from-email">Email отправителя</label>
-        <input id="smtp-from-email" v-model="form.fromEmail" type="email" class="input !py-2 text-sm" placeholder="noreply@code-qr.stockcity.ru">
+        <input id="smtp-from-email" v-model="form.fromEmail" type="email" class="input !py-2 text-sm" placeholder="noreply@code-qr.stockcity.ru" @change="guessProvider">
       </div>
     </div>
 

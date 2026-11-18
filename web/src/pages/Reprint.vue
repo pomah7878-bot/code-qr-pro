@@ -260,10 +260,16 @@ async function checkCodes() {
   if (lines.length > MAX) { error.value = `За раз можно до ${MAX} кодов, сейчас ${lines.length}`; return; }
   const parsed = lines.map(parseKiz).filter(Boolean);
   if (!parsed.length) { error.value = 'Коды не распознаны. Нужны полные коды с криптохвостом'; return; }
+  const full = parsed.filter((p) => !p.short);
+  const shortCount = parsed.length - full.length;
+  if (!full.length) {
+    error.value = 'В коде нет криптохвоста (91/92). Сканер передал только GTIN и серийник — включите передачу GS и полного DataMatrix.';
+    return;
+  }
   const seen = new Set();
   const unique = [];
   let duplicates = 0;
-  for (const p of parsed) {
+  for (const p of full) {
     if (seen.has(p.code)) { duplicates += 1; continue; }
     seen.add(p.code);
     unique.push(p);
@@ -273,7 +279,7 @@ async function checkCodes() {
     const res = await api.czVerify({ codes: unique.map((p) => p.code) });
     const valid = unique.filter((_, i) => res.results?.[i]?.ok);
     result.value = { valid, total: unique.length };
-    notice.value = `Проверено ${unique.length}: ${valid.length} валидных, ${unique.length - valid.length} с ошибками${duplicates ? `, убрано дублей: ${duplicates}` : ''}`;
+    notice.value = `Проверено ${unique.length}: ${valid.length} валидных, ${unique.length - valid.length} с ошибками${duplicates ? `, убрано дублей: ${duplicates}` : ''}${shortCount ? `, без криптохвоста пропущено: ${shortCount}` : ''}`;
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
 }

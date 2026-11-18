@@ -9,21 +9,35 @@ export function toParen(raw) {
   return `(01)${m[1]}(21)${m[2]}${m[3] ? `(91)${m[3]}` : ''}${m[4] ? `(92)${m[4]}` : ''}`;
 }
 
+export function normalizeScanInput(input) {
+  let s = String(input || '').replace(/^\uFEFF/, '').trim();
+  // Сканеры GS1 часто добавляют префикс идентификатора символологии: ]d2, ]Q3, ]e0, ]C1.
+  s = s.replace(/^\][A-Za-z0-9]{2}/, '');
+  // Невидимые управляющие/zero-width символы в начале и конце, но НЕ внутри кода.
+  s = s.replace(/^[\u0000-\u001f\u007f\u200b-\u200d]+/, '').replace(/[\u0000-\u001f\u007f\u200b-\u200d]+$/, '');
+  return s;
+}
+
 // Один КИЗ в любой записи → строка для редактора
 export function parseKiz(input) {
-  let s = String(input || '').trim();
+  let s = normalizeScanInput(input);
   if (!s || s.startsWith('#') || /^(code|код|киз|gtin|serial)\b/i.test(s)) return null;
   if (s.startsWith('"') && s.endsWith('"')) s = s.slice(1, -1).replace(/""/g, '"');
   if (s.includes('(01)')) {
     const gtin = (s.match(/\(01\)(\d{14})/) || [])[1];
     const serial = (s.match(/\(21\)([\s\S]*?)(?=\(\d{2,4}\)|$)/) || [])[1]?.trim();
     if (!gtin || !serial) return null;
-    return { code: s.replace(/\s+/g, ''), gtin, serial };
+    return { code: s.replace(/\s+/g, ''), gtin, serial, short: !/\(91\)[\s\S]*\(92\)/.test(s) };
   }
   const raw = s.replace(/\s+/g, '');
   const m = raw.match(/^01(\d{14})21([^\x1d]*)/);
   if (!m) return null;
-  return { code: toParen(raw), gtin: m[1], serial: m[2] };
+  return {
+    code: toParen(raw),
+    gtin: m[1],
+    serial: m[2],
+    short: !/\x1d91[^\x1d]*\x1d92[\s\S]+/.test(raw)
+  };
 }
 
 export function kizRows(codes) {

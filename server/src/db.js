@@ -73,7 +73,20 @@ const MIGRATIONS = [
     status TEXT NOT NULL DEFAULT 'ok',
     error TEXT
   );
-  CREATE INDEX idx_job_items_job ON job_items(job_id);`
+  CREATE INDEX idx_job_items_job ON job_items(job_id);`,
+  // v3 — Label & Print
+  `CREATE TABLE label_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    width_mm REAL NOT NULL,
+    height_mm REAL NOT NULL,
+    dpi INTEGER NOT NULL DEFAULT 203,
+    elements TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_templates_user ON label_templates(user_id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

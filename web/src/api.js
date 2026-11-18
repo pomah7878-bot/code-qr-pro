@@ -19,5 +19,10 @@ export const api = {
   createJob: (b) => req('POST', '/api/jobs', b),
   jobs: () => req('GET', '/api/jobs'),
   job: (id) => req('GET', '/api/jobs/' + id),
-  deleteJob: (id) => req('DELETE', '/api/jobs/' + id)
+  deleteJob: (id) => req('DELETE', '/api/jobs/' + id),
+  templates: () => req('GET', '/api/templates'),
+  createTemplate: (b) => req('POST', '/api/templates', b),
+  updateTemplate: (id, b) => req('PUT', '/api/templates/' + id, b),
+  deleteTemplate: (id) => req('DELETE', '/api/templates/' + id),
+  prepareLabel: (b) => req('POST', '/api/labels/prepare', b)
 };

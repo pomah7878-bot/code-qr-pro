@@ -1,6 +1,7 @@
 node_modules/
 dist/
 server/data/
+print-bridge/bridge-token.txt
 .env
 *.log
 .DS_Store

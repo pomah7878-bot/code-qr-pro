@@ -72,5 +72,5 @@ export async function registerRoutes(app) {
 
   app.get('/api/plans', async () => ({ plans: Object.values(PLANS) }));
 
-  app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 2 }));
+  app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 3 }));
 }

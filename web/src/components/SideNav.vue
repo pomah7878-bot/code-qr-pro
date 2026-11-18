@@ -4,8 +4,8 @@ defineProps({ active: String });
 const items = [
   { icon: '📊', t: 'Обзор', to: '/app' },
   { icon: '▦', t: 'Генерация', to: '/app/generate' },
-  { icon: '🏷️', t: 'Этикетки', soon: 'этап 3' },
-  { icon: '🖨️', t: 'Печать', soon: 'этап 3' },
+  { icon: '🏷️', t: 'Этикетки', to: '/app/labels' },
+  { icon: '🖨️', t: 'Печать', to: '/app/labels' },
   { icon: '💳', t: 'Подписка', soon: 'этап 4' },
   { icon: '🔌', t: 'API', soon: 'этап 4' }
 ];

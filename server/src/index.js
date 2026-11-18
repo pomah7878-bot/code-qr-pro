@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';
 import { registerJobRoutes } from './routes-jobs.js';
+import { registerLabelRoutes } from './routes-labels.js';
 import './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +15,7 @@ const app = Fastify({ logger: true, trustProxy: true });
 await app.register(cookie);
 await registerRoutes(app);
 await registerJobRoutes(app);
+await registerLabelRoutes(app);
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');
 if (existsSync(dist)) {

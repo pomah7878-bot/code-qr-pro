@@ -1,0 +1,12 @@
+{
+  "name": "code-qr-pro",
+  "private": true,
+  "version": "0.1.0",
+  "description": "CODE QR PRO — SaaS для GS1 DataMatrix и маркировки Честный ЗНАК",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix server start"
+  }
+}

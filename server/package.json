@@ -1,0 +1,17 @@
+{
+  "name": "code-qr-pro-server",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^9.4.0",
+    "@fastify/static": "^7.0.4",
+    "better-sqlite3": "^11.10.0",
+    "bwip-js": "^4.5.1",
+    "fastify": "^4.28.1"
+  }
+}

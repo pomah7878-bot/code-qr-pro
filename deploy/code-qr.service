@@ -1,0 +1,18 @@
+[Unit]
+Description=CODE QR PRO — GS1 DataMatrix SaaS
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/code-qr/server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3100
+ExecStart=/usr/bin/node /opt/code-qr/server/src/index.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

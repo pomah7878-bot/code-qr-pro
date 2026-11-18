@@ -32,7 +32,7 @@ const fieldList = [
   { key: 'date', label: 'Дата' },
   { key: 'composition', label: 'Состав' },
   { key: 'manufacturer', label: 'Производитель' },
-  { key: 'ean13', label: 'Штрихкод (EAN-13 / цифры)' }
+  { key: 'ean13', label: 'Штрихкод' }
 ];
 
 const category = ref('lp');
@@ -48,6 +48,17 @@ const result = ref(null);
 const shortWarning = ref('');
 const qrOnly = ref(true);
 const qrMargin = ref(0.5);
+const barcodeFormat = ref('ean13');
+const barcodeFormats = [
+  { id: 'ean13', label: 'EAN-13' },
+  { id: 'ean8', label: 'EAN-8' },
+  { id: 'upca', label: 'UPC-A' },
+  { id: 'code128', label: 'Code128' },
+  { id: 'code39', label: 'Code39' },
+  { id: 'itf14', label: 'ITF-14' },
+  { id: 'gs1_128', label: 'GS1-128' },
+  { id: 'pdf417', label: 'PDF417' }
+];
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
@@ -537,10 +548,10 @@ function buildTemplate() {
       const bx = m + dm + m;
       const bw = W - bx - m;
       const bh = Math.min(12, Math.max(6, H * 0.22));
-      elements.push({ id: 'ean', type: 'ean13', field: 'barcode', x: bx, y: m, w: bw, h: bh, fontSize: 8, align: 'left' });
+      elements.push({ id: 'ean', type: barcodeFormat.value, field: 'barcode', x: bx, y: m, w: bw, h: bh, fontSize: 8, align: 'left' });
       topH = Math.max(topH, bh);
     } else if (m + dm + 1 + 9 <= H - m) {
-      elements.push({ id: 'ean', type: 'ean13', field: 'barcode', x: m, y: m + dm + 1, w: W - 2 * m, h: 9, fontSize: 8, align: 'left' });
+      elements.push({ id: 'ean', type: barcodeFormat.value, field: 'barcode', x: m, y: m + dm + 1, w: W - 2 * m, h: 9, fontSize: 8, align: 'left' });
       topH = dm + 1 + 9;
     }
   }
@@ -562,8 +573,9 @@ async function downloadPdf() {
   if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
   if (!result.value?.valid.length) { error.value = 'Сначала проверьте коды'; return; }
   const barcode = String(product.barcode || '').trim();
-  if (!qrOnly.value && fields.ean13 && barcode && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
-    error.value = 'Штрихкод должен содержать цифры';
+  const numericFormats = ['ean13', 'ean8', 'upca', 'itf14'];
+  if (!qrOnly.value && fields.ean13 && barcode && numericFormats.includes(barcodeFormat.value) && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
+    error.value = 'Для выбранного формата штрихкод должен содержать цифры';
     return;
   }
   const template = buildTemplate();
@@ -679,7 +691,10 @@ async function downloadPdf() {
             <p class="text-xs text-slate-500 mb-2">Применяются ко всем кодам в этой печати.</p>
             <div class="grid grid-cols-2 gap-2">
               <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
-              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (EAN-13 или цифры)">
+              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (цифры или текст)">
+              <select v-model="barcodeFormat" class="input !py-1.5 text-sm col-span-2">
+                <option v-for="f in barcodeFormats" :key="f.id" :value="f.id">Формат: {{ f.label }}</option>
+              </select>
             </div>
           </div>
 

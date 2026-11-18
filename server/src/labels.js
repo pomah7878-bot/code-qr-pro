@@ -27,10 +27,10 @@ export async function resolveElements(template, data) {
       out.push({ ...base, pngBase64: png.toString('base64') });
       continue;
     }
-    if (['code128', 'ean13', 'qrcode'].includes(el.type)) {
+    if (['code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode'].includes(el.type)) {
       const content = el.field ? String(data[el.field] ?? '') : (el.text || '');
       if (!content) { out.push({ ...base, text: '' }); continue; }
-      let bcid = el.type;
+      let bcid = el.type === 'gs1_128' ? 'gs1-128' : el.type;
       let text = content;
       if (el.type === 'ean13') {
         const compact = content.trim().replace(/\s+/g, '');
@@ -38,11 +38,9 @@ export async function resolveElements(template, data) {
           if (compact.length === 12 || compact.length === 13) {
             const b = compact.slice(0, 12);
             text = b + eanCheckDigit(b);
-            bcid = 'ean13';
           } else if (compact.length === 14 && compact.startsWith('0')) {
             const b = compact.slice(1, 13);
             text = b + eanCheckDigit(b);
-            bcid = 'ean13';
           } else if (compact.length === 7 || compact.length === 8) {
             const b = compact.slice(0, 7);
             text = b + eanCheckDigit(b);
@@ -55,11 +53,39 @@ export async function resolveElements(template, data) {
           bcid = 'code128';
           text = content;
         }
+      } else if (el.type === 'ean8') {
+        const compact = content.trim().replace(/\s+/g, '').replace(/\D/g, '');
+        if (compact.length === 7 || compact.length === 8) {
+          const b = compact.slice(0, 7);
+          text = b + eanCheckDigit(b);
+        } else {
+          bcid = 'code128';
+          text = compact || content;
+        }
+      } else if (el.type === 'upca') {
+        const compact = content.trim().replace(/\s+/g, '').replace(/\D/g, '');
+        if (compact.length === 11 || compact.length === 12) {
+          const b = compact.slice(0, 11);
+          text = b + eanCheckDigit(b);
+        } else {
+          bcid = 'code128';
+          text = compact || content;
+        }
+      } else if (el.type === 'itf14') {
+        const compact = content.trim().replace(/\s+/g, '').replace(/\D/g, '');
+        if (compact.length === 13 || compact.length === 14) {
+          const b = compact.slice(0, 13);
+          text = b + eanCheckDigit(b);
+        } else {
+          bcid = 'code128';
+          text = compact || content;
+        }
       }
       const opts = { bcid, text, scale: 6, includetext: false };
-      if (bcid === 'code128') opts.height = 12;
-      else if (bcid === 'ean13' || bcid === 'ean8') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
+      if (bcid === 'code128' || bcid === 'code39' || bcid === 'gs1-128') opts.height = 12;
+      else if (bcid === 'ean13' || bcid === 'ean8' || bcid === 'upca' || bcid === 'itf14') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
       else if (bcid === 'qrcode') opts.scale = 4;
+      else if (bcid === 'pdf417') opts.scale = 3;
       const png = await bwipjs.toBuffer(opts);
       out.push({ ...base, pngBase64: png.toString('base64') });
       continue;

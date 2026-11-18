@@ -297,7 +297,7 @@ function draw() {
   ctx.strokeRect(0.5, 0.5, c.width - 1, c.height - 1);
   for (const el of tpl.elements) {
     const x = el.x * S + 1, y = el.y * S + 1, w = el.w * S, h = el.h * S;
-    if (['datamatrix', 'code128', 'ean13', 'qrcode'].includes(el.type)) {
+    if (['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode'].includes(el.type)) {
       if (el.type === 'datamatrix' && itemImg) {
         ctx.drawImage(itemImg, x, y, w, h);
       } else {
@@ -305,7 +305,7 @@ function draw() {
         ctx.fillRect(x, y, w, h);
         ctx.fillStyle = '#475569';
         ctx.font = '10px Inter, sans-serif';
-        ctx.fillText({ datamatrix: '▦ DataMatrix', code128: '||| Code128', ean13: '||| EAN-13', qrcode: 'QR' }[el.type], x + 3, y + 12);
+        ctx.fillText({ datamatrix: '▦ DataMatrix', code128: '||| Code128', ean13: '||| EAN-13', ean8: '||| EAN-8', upca: '||| UPC-A', code39: '||| Code39', itf14: '||| ITF-14', gs1_128: '||| GS1-128', pdf417: '▤ PDF417', qrcode: 'QR' }[el.type], x + 3, y + 12);
       }
     } else {
       const text = el.type === 'field' ? fieldSample(el.field) : (el.text || '');
@@ -339,6 +339,12 @@ function addElement(type, field) {
   if (type === 'field') Object.assign(base, { field: field || 'gtin', w: 32, h: 6, x: 24, y: field === 'serial' ? 10 : 2 });
   if (type === 'code128') Object.assign(base, { w: 40, h: 10, y: 26 });
   if (type === 'ean13') Object.assign(base, { field: field || 'barcode', w: 40, h: 14, x: 26, y: 24 });
+  if (type === 'ean8') Object.assign(base, { field: field || 'barcode', w: 32, h: 12, x: 26, y: 24 });
+  if (type === 'upca') Object.assign(base, { field: field || 'barcode', w: 36, h: 14, x: 26, y: 24 });
+  if (type === 'code39') Object.assign(base, { field: field || 'barcode', w: 40, h: 10, x: 26, y: 24 });
+  if (type === 'itf14') Object.assign(base, { field: field || 'barcode', w: 40, h: 14, x: 26, y: 24 });
+  if (type === 'gs1_128') Object.assign(base, { field: field || 'barcode', w: 40, h: 12, x: 26, y: 24 });
+  if (type === 'pdf417') Object.assign(base, { field: field || 'barcode', w: 40, h: 20, x: 26, y: 2 });
   if (type === 'qrcode') Object.assign(base, { field: field || 'code', w: 20, h: 20, x: 34, y: 2 });
   tpl.elements.push(base);
   selectedId.value = id;
@@ -635,6 +641,12 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('datamatrix')">▦ DataMatrix</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('code128')">||| Code128</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('ean13')">||| EAN-13</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('ean8')">||| EAN-8</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('upca')">||| UPC-A</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('code39')">||| Code39</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('itf14')">||| ITF-14</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('gs1_128')">||| GS1-128</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('pdf417')">▤ PDF417</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('qrcode')">▣ QR</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('text')">Т Текст</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'gtin')">Поле GTIN</button>
@@ -693,7 +705,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
                 <option v-for="f in fieldOptions" :key="f" :value="f">{{ f }}</option>
               </select>
             </template>
-            <template v-if="['code128', 'ean13', 'qrcode'].includes(selected.type)">
+            <template v-if="['code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode'].includes(selected.type)">
               <label class="label !text-xs">Данные для штрихкода</label>
               <select v-model="selected.field" class="input !py-2 text-sm">
                 <option value="">— фиксированный текст —</option>

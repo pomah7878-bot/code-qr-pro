@@ -4,7 +4,7 @@ import { requireAuth } from './routes.js';
 import { resolveElements, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
 
-const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'qrcode', 'text', 'field'];
+const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode', 'text', 'field'];
 
 function validateTemplate(t) {
   if (!t || typeof t !== 'object') return 'Шаблон не передан';

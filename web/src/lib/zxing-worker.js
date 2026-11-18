@@ -47,7 +47,11 @@ self.onmessage = async ({ data }) => {
     }
     self.postMessage({
       id: data.id,
-      results: results.filter((r) => r.isValid).map((r) => ({ text: r.text, format: r.format }))
+      results: results.filter((r) => r.isValid).map((r) => ({
+        text: r.text,
+        format: r.format,
+        position: r.position || null
+      }))
     });
   } catch (e) {
     self.postMessage({ id: data.id, error: e.message || String(e), results: [] });

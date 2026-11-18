@@ -45,6 +45,12 @@ const cameraDevices = ref([]);
 const cameraId = ref('');
 const videoEl = ref(null);
 const cameraCount = ref(0);
+const cameraVideoW = ref(0);
+const cameraVideoH = ref(0);
+const contours = ref([]);
+const cameraNotice = ref('Наведите камеру на DataMatrix');
+let cameraNoticeTimer = 0;
+let contourTimer = 0;
 const torchAvailable = ref(false);
 const torchOn = ref(false);
 const soundEnabled = ref(localStorage.getItem('cq_scan_sound') !== 'off');
@@ -124,13 +130,38 @@ function openSettings() {
   loadCameras();
 }
 
+function setCameraNotice(text, resetMs = 1600) {
+  cameraNotice.value = text;
+  clearTimeout(cameraNoticeTimer);
+  if (resetMs > 0) cameraNoticeTimer = setTimeout(() => { cameraNotice.value = 'Наведите камеру на DataMatrix'; }, resetMs);
+}
+
+function showContours(results) {
+  contours.value = results.map((r) => r.position).filter(Boolean);
+  clearTimeout(contourTimer);
+  if (contours.value.length) contourTimer = setTimeout(() => { contours.value = []; }, 1400);
+}
+
+function polygonPoints(position) {
+  if (!position) return '';
+  return [position.topLeft, position.topRight, position.bottomRight, position.bottomLeft]
+    .filter(Boolean)
+    .map((p) => `${p.x},${p.y}`)
+    .join(' ');
+}
+
 function ensureDecoder() {
   if (decoderWorker) return;
   decoderWorker = new Worker(new URL('../lib/zxing-worker.js', import.meta.url), { type: 'module' });
   decoderWorker.onmessage = ({ data }) => {
     decodePending = false;
     if (data?.error) cameraError.value = `Декодер: ${data.error}`;
-    for (const result of data?.results || []) {
+    const results = data?.results || [];
+    if (results.length) {
+      showContours(results);
+      setCameraNotice(results.length > 1 ? `Считано кодов: ${results.length}` : 'Код считан');
+    }
+    for (const result of results) {
       if (addCode(result.text)) cameraCount.value += 1;
     }
   };
@@ -154,6 +185,10 @@ async function openCamera() {
   if (cameraStream) closeCamera();
   cameraError.value = '';
   cameraCount.value = 0;
+  cameraVideoW.value = 0;
+  cameraVideoH.value = 0;
+  contours.value = [];
+  setCameraNotice('Наведите камеру на DataMatrix', 0);
   torchOn.value = false;
   torchAvailable.value = false;
   cameraOpen.value = true;
@@ -185,6 +220,8 @@ async function openCamera() {
     await nextTick();
     videoEl.value.srcObject = cameraStream;
     await videoEl.value.play().catch(() => {});
+    cameraVideoW.value = videoEl.value.videoWidth;
+    cameraVideoH.value = videoEl.value.videoHeight;
     const track = cameraStream.getVideoTracks()[0];
     const caps = track.getCapabilities?.() || {};
     if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
@@ -245,6 +282,9 @@ function closeCamera() {
   cameraOpen.value = false;
   cameraLoading.value = false;
   cameraError.value = '';
+  contours.value = [];
+  clearTimeout(contourTimer);
+  clearTimeout(cameraNoticeTimer);
   torchOn.value = false;
   if (videoEl.value) videoEl.value.srcObject = null;
 }
@@ -505,27 +545,35 @@ async function downloadPdf() {
       </div>
     </section>
 
-    <div v-if="cameraOpen" class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
-      <div class="relative rounded-2xl overflow-hidden w-full max-w-lg bg-black">
-        <video ref="videoEl" class="w-full" playsinline muted></video>
-        <div v-if="cameraLoading" class="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-sm">Запрос доступа к камере…</div>
-        <div v-else-if="cameraError" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 text-white text-center p-6">
-          <p class="text-sm leading-relaxed">{{ cameraError }}</p>
-          <div class="flex gap-2">
-            <button class="rounded-full bg-white text-slate-900 px-4 py-2 text-sm font-semibold" @click="openCamera">Повторить</button>
-            <button class="rounded-full border border-white/40 px-4 py-2 text-sm" @click="closeCamera">Закрыть</button>
-          </div>
+    <div v-if="cameraOpen" class="fixed inset-0 z-50 bg-black">
+      <video ref="videoEl" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline muted></video>
+      <svg v-if="cameraVideoW && cameraVideoH" class="absolute inset-0 w-full h-full pointer-events-none" :viewBox="`0 0 ${cameraVideoW} ${cameraVideoH}`" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <polygon v-for="(p, i) in contours" :key="i" :points="polygonPoints(p)" fill="none" stroke="#22d3ee" stroke-width="4" />
+      </svg>
+
+      <div class="absolute inset-x-0 top-0 p-3 flex items-center gap-2 bg-gradient-to-b from-black/75 to-transparent">
+        <button class="rounded-full bg-black/50 text-white w-10 h-10" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
+        <h2 class="text-white font-semibold">Сканирование</h2>
+        <div class="ml-auto flex gap-2">
+          <button class="rounded-full bg-black/50 text-white w-10 h-10" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</button>
+          <button v-if="torchAvailable" class="rounded-full bg-black/50 text-white px-3 h-10 text-sm" @click="toggleTorch">{{ torchOn ? 'Фонарик вкл' : 'Фонарик' }}</button>
         </div>
-        <button class="absolute top-2 left-2 rounded-full bg-black/60 text-white w-9 h-9" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</button>
-        <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
-        <div class="absolute inset-x-0 bottom-0 p-3 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent">
-          <span class="text-xs text-white/80">Собрано: {{ cameraCount }}</span>
-          <div class="flex gap-2">
-            <button v-if="torchAvailable" class="rounded-full bg-white/15 text-white px-3 py-1.5 text-xs" @click="toggleTorch">{{ torchOn ? '🔆 Выкл' : '🔆 Фонарик' }}</button>
-            <button class="rounded-full bg-white text-slate-900 px-3 py-1.5 text-xs font-semibold" @click="closeCamera">Готово ({{ cameraCount }})</button>
-          </div>
+      </div>
+
+      <div class="absolute inset-x-0 bottom-0 p-4 space-y-1.5 bg-gradient-to-t from-black/85 to-transparent">
+        <p class="text-white text-sm">Собрано: <b>{{ cameraCount }}</b></p>
+        <p class="text-white/50 text-xs">В основном поле: {{ codesCount }}. Лимит — {{ MAX }} кодов.</p>
+        <p class="text-cyan-300 text-sm">{{ cameraNotice }}</p>
+        <button class="w-full rounded-full bg-white text-slate-900 py-2.5 text-sm font-semibold" @click="closeCamera">Готово ({{ cameraCount }})</button>
+      </div>
+
+      <div v-if="cameraLoading" class="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-sm">Запрос доступа к камере…</div>
+      <div v-else-if="cameraError" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 text-white text-center p-6">
+        <p class="text-sm leading-relaxed max-w-sm">{{ cameraError }}</p>
+        <div class="flex gap-2">
+          <button class="rounded-full bg-white text-slate-900 px-4 py-2 text-sm font-semibold" @click="openCamera">Повторить</button>
+          <button class="rounded-full border border-white/40 px-4 py-2 text-sm" @click="closeCamera">Закрыть</button>
         </div>
-        <p class="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 text-white/80 text-xs px-2 py-1">Наведите на DataMatrix</p>
       </div>
     </div>
 

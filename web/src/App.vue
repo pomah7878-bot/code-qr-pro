@@ -1,19 +1,24 @@
 <script setup>
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 const router = useRouter();
-async function logout() { await store.logout(); router.push('/'); }
+const menuOpen = ref(false);
+async function logout() { await store.logout(); menuOpen.value = false; router.push('/'); }
+function go(path) { menuOpen.value = false; router.push(path); }
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col">
     <header class="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
-      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        <router-link to="/" class="flex items-center gap-2.5 font-display font-extrabold tracking-wide">
+      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <router-link to="/" class="flex items-center gap-2 font-display font-extrabold tracking-wide shrink-0" @click="menuOpen = false">
           <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-8 h-8 shrink-0">
-          <span class="text-slate-900 dark:text-white">CODE QR <span class="text-violet-600 dark:text-violet-400">PRO</span></span>
+          <span class="text-slate-900 dark:text-white whitespace-nowrap text-sm sm:text-base">CODE QR <span class="text-violet-600 dark:text-violet-400">PRO</span></span>
         </router-link>
-        <nav class="flex items-center gap-2">
+
+        <!-- desktop nav -->
+        <nav class="hidden md:flex items-center gap-2">
           <button class="btn-ghost !px-3" @click="toggleTheme" title="Сменить тему">
             <span class="dark:hidden">🌙</span><span class="hidden dark:inline">☀️</span>
           </button>
@@ -26,11 +31,47 @@ async function logout() { await store.logout(); router.push('/'); }
             <router-link to="/register" class="btn-primary !py-2.5">Начать бесплатно</router-link>
           </template>
         </nav>
+
+        <!-- mobile controls -->
+        <div class="flex md:hidden items-center gap-1.5">
+          <button class="btn-ghost !px-2.5 !py-2" @click="toggleTheme" title="Сменить тему">
+            <span class="dark:hidden">🌙</span><span class="hidden dark:inline">☀️</span>
+          </button>
+          <router-link v-if="!store.user" to="/register" class="btn-primary !py-2 !px-3 text-sm whitespace-nowrap">Начать</router-link>
+          <button class="btn-ghost !px-2.5 !py-2" @click="menuOpen = !menuOpen" :aria-label="menuOpen ? 'Закрыть меню' : 'Открыть меню'">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path v-if="!menuOpen" d="M4 7h16M4 12h16M4 17h16"/>
+              <path v-else d="M6 6l12 12M18 6L6 18"/>
+            </svg>
+          </button>
+        </div>
       </div>
+
+      <!-- mobile dropdown menu -->
+      <transition name="menu">
+        <div v-if="menuOpen" class="md:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white/95 dark:bg-ink-950/95 backdrop-blur-xl">
+          <template v-if="store.user">
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')">📊 Кабинет</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/generate')">▦ Генерация</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')">🏷️ Этикетки</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')">💳 Подписка</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
+          </template>
+          <template v-else>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/login')">Войти</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-accent-500 text-white font-semibold" @click="go('/register')">Начать бесплатно →</button>
+          </template>
+        </div>
+      </transition>
     </header>
     <main class="flex-1"><router-view /></main>
-    <footer class="border-t border-slate-200 dark:border-white/10 py-6 text-center text-sm text-slate-500">
+    <footer class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
       CODE QR PRO · code-qr.stockcity.ru · GS1 DataMatrix и маркировка «Честный ЗНАК»
     </footer>
   </div>
 </template>
+
+<style scoped>
+.menu-enter-active, .menu-leave-active { transition: opacity .2s ease, transform .2s ease; }
+.menu-enter-from, .menu-leave-to { opacity: 0; transform: translateY(-8px); }
+</style>

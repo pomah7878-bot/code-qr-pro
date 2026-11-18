@@ -87,12 +87,12 @@ const openFaq = ref(null);
     <div class="orb anim-glow w-[400px] h-[400px] bg-accent-500/15 top-[600px] -right-32" style="animation-delay:1.5s"></div>
 
     <!-- HERO -->
-    <section class="relative max-w-6xl mx-auto px-4 pt-20 pb-24 grid lg:grid-cols-2 gap-14 items-center">
+    <section class="relative max-w-6xl mx-auto px-4 pt-12 pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
       <div>
         <div class="reveal inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-full px-4 py-1.5 mb-6">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Для маркировки «Честный ЗНАК»
         </div>
-        <h1 class="reveal reveal-d1 font-display font-extrabold text-4xl md:text-6xl leading-[1.05] mb-6">
+        <h1 class="reveal reveal-d1 font-display font-extrabold text-[2rem] leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05] mb-6">
           Коды маркировки<br><span class="grad-text grad-animated">за минуты,</span><br>а не за дни
         </h1>
         <p class="reveal reveal-d2 text-lg text-slate-600 dark:text-slate-300 mb-8 max-w-lg leading-relaxed">
@@ -105,16 +105,16 @@ const openFaq = ref(null);
         </div>
         <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — 50 кодов в день. Без карты. Регистрация за 30 секунд.</p>
         <!-- счётчики -->
-        <div class="reveal reveal-d5 grid grid-cols-3 gap-6 mt-10 max-w-md">
-          <div><div class="font-display font-extrabold text-3xl grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-xs text-slate-500 mt-1">кодов/день на PREMIUM</div></div>
-          <div><div class="font-display font-extrabold text-3xl grad-text">{{ counters.uptime }}%</div><div class="text-xs text-slate-500 mt-1">аптайм сервиса</div></div>
-          <div><div class="font-display font-extrabold text-3xl grad-text">30с</div><div class="text-xs text-slate-500 mt-1">до первого кода</div></div>
+        <div class="reveal reveal-d5 grid grid-cols-3 gap-3 sm:gap-6 mt-10 max-w-md">
+          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">кодов/день на PREMIUM</div></div>
+          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">{{ counters.uptime }}%</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">аптайм сервиса</div></div>
+          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">30с</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">до первого кода</div></div>
         </div>
       </div>
       <!-- QR-визуал со сканером -->
-      <div class="reveal reveal-d2 relative anim-float">
+      <div class="reveal reveal-d2 relative anim-float order-first lg:order-last">
         <div class="absolute inset-0 orb bg-violet-600/25 w-full h-full"></div>
-        <div class="relative glass rounded-3xl p-8 max-w-md mx-auto">
+        <div class="relative glass rounded-3xl p-6 sm:p-8 max-w-sm lg:max-w-md mx-auto">
           <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-full h-auto drop-shadow-2xl">
           <div class="scan-line"></div>
           <div class="mt-5 flex items-center justify-between text-xs font-mono text-slate-500">
@@ -173,13 +173,13 @@ const openFaq = ref(null);
       </div>
       <div class="relative grid md:grid-cols-2 gap-8 items-stretch">
         <!-- FREE -->
-        <div v-if="free()" class="reveal glass rounded-3xl p-8 flex flex-col hover:-translate-y-1 transition-transform duration-300">
+        <div v-if="free()" class="reveal glass rounded-3xl p-6 sm:p-8 flex flex-col hover:-translate-y-1 transition-transform duration-300">
           <div class="flex items-center gap-3 mb-2">
             <div class="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center text-xl">🌱</div>
             <h3 class="font-display font-extrabold text-2xl">FREE</h3>
           </div>
           <p class="text-sm text-slate-500 mb-5">Попробовать без риска</p>
-          <div class="text-5xl font-extrabold mb-1">0 ₽</div>
+          <div class="text-4xl sm:text-5xl font-extrabold mb-1">0 ₽</div>
           <div class="text-sm text-slate-500 mb-7">навсегда, без карты</div>
           <ul class="space-y-3 text-sm mb-8 flex-1">
             <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> {{ free().codesPerDay }} кодов в день</li>
@@ -192,7 +192,7 @@ const openFaq = ref(null);
           <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
         </div>
         <!-- PREMIUM -->
-        <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
+        <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-6 sm:p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
           <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap">⭐ Выбор бизнеса</div>
           <div class="flex items-center gap-3 mb-2 mt-2">
             <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center text-xl shadow-lg shadow-violet-600/40">👑</div>
@@ -200,7 +200,7 @@ const openFaq = ref(null);
           </div>
           <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
           <div class="flex items-end gap-2 mb-1">
-            <span class="text-5xl font-extrabold grad-text">{{ minPerMonth().toLocaleString('ru') }} ₽</span>
+            <span class="text-4xl sm:text-5xl font-extrabold grad-text">{{ minPerMonth().toLocaleString('ru') }} ₽</span>
             <span class="text-base font-medium text-slate-500 mb-1.5">/мес</span>
           </div>
           <div class="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">при оплате за {{ periodLabel(bestOffer()?.days || 365) }} · экономия до {{ saving(bestOffer() || {price:0}).toLocaleString('ru') }} ₽</div>

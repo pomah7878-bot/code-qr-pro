@@ -50,10 +50,26 @@ export async function resolveElements(template, data) {
 
 const K = 72 / 25.4; // мм → пункты PDF
 
-// Рисует лист А4 с сеткой этикеток в pdfkit-документ
-export async function renderLabelsPdf(doc, template, dataRows) {
+// Рисует лист А4 с сеткой этикеток или PDF по одной этикетке на страницу
+export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
   const pageW = 595.28, pageH = 841.89, margin = 10 * K;
   const lw = template.widthMm * K, lh = template.heightMm * K;
+
+  if (options.single) {
+    let i = 0;
+    for (const data of dataRows) {
+      if (i > 0) doc.addPage({ size: [lw, lh], margin: 0 });
+      const els = await resolveElements(template, data);
+      for (const el of els) {
+        const ex = el.x * K, ey = el.y * K, ew = el.w * K, eh = el.h * K;
+        if (el.pngBase64) doc.image(Buffer.from(el.pngBase64, 'base64'), ex, ey, { width: ew, height: eh });
+        else if (el.text) doc.fontSize(el.fontSize).fillColor('#000000').text(el.text, ex, ey, { width: ew, height: eh, align: el.align });
+      }
+      i++;
+    }
+    return;
+  }
+
   const cols = Math.max(1, Math.floor((pageW - 2 * margin) / lw));
   const rows = Math.max(1, Math.floor((pageH - 2 * margin) / lh));
   let i = 0;

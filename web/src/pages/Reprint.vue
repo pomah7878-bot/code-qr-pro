@@ -10,7 +10,8 @@ const categories = [
   { id: 'lp', title: 'Легпром', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
   { id: 'shoes', title: 'Обувь', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
   { id: 'toys', title: 'Игрушки', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
-  { id: 'cosmetic', title: 'Косметика и химия', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } }
+  { id: 'cosmetic', title: 'Косметика и химия', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
+  { id: 'pharmacy', title: 'Аптека / медикаменты', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
 ];
 const formats = [
   { id: '58x40v', label: '58×40 вертикальный', w: 40, h: 58 },
@@ -22,23 +23,32 @@ const formats = [
 const fieldList = [
   { key: 'name', label: 'Название' },
   { key: 'article', label: 'Артикул' },
+  { key: 'dosage', label: 'Дозировка' },
+  { key: 'form', label: 'Форма выпуска' },
   { key: 'size', label: 'Размер' },
   { key: 'color', label: 'Цвет' },
+  { key: 'series', label: 'Серия' },
+  { key: 'expiry', label: 'Срок годности' },
   { key: 'date', label: 'Дата' },
   { key: 'composition', label: 'Состав' },
+  { key: 'manufacturer', label: 'Производитель' },
   { key: 'ean13', label: 'Штрихкод EAN-13' }
 ];
 
 const category = ref('lp');
 const format = ref('58x40v');
-const fields = reactive({ ...categories[0].defaults });
-const product = reactive({ name: '', article: '', size: '', color: '', date: '', composition: '', barcode: '' });
+const fields = reactive(Object.fromEntries(fieldList.map((f) => [f.key, false])));
+Object.assign(fields, categories[0].defaults);
+const product = reactive({ name: '', article: '', size: '', color: '', date: '', composition: '', barcode: '', dosage: '', form: '', series: '', expiry: '', manufacturer: '' });
 const codesText = ref('');
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const result = ref(null);
 const shortWarning = ref('');
+const productInfo = ref([]);
+const infoMessage = ref('');
+const infoLoading = ref(false);
 const cameraOpen = ref(false);
 const cameraLoading = ref(false);
 const cameraError = ref('');
@@ -351,6 +361,7 @@ async function disconnectSerial() {
 
 watch(category, (id) => {
   const c = categories.find((x) => x.id === id);
+  for (const f of fieldList) fields[f.key] = false;
   if (c) Object.assign(fields, c.defaults);
   result.value = null;
 });
@@ -363,6 +374,8 @@ async function checkCodes() {
   error.value = '';
   notice.value = '';
   shortWarning.value = '';
+  productInfo.value = [];
+  infoMessage.value = '';
   result.value = null;
   const lines = codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   if (!lines.length) { error.value = 'Вставьте коды — по одному на строку'; return; }
@@ -400,8 +413,38 @@ async function checkCodes() {
     shortWarning.value = uniqueShort.length
       ? 'Коды без криптохвоста (91/92) будут напечатаны как есть — для «Честного ЗНАКа» это неполный код.'
       : '';
+    productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, name: '', producer: '' }));
+    loadProductInfo();
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
+}
+
+async function loadProductInfo() {
+  const valid = result.value?.valid || [];
+  if (!valid.length) return;
+  infoLoading.value = true;
+  try {
+    const res = await fetch(`/api/cz/product?code=${encodeURIComponent(valid[0].code)}`, { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
+    const name = data.product?.name || '';
+    if (name) {
+      const sameGtin = new Set(valid.map((c) => c.gtin)).size === 1;
+      if (sameGtin) {
+        for (const p of productInfo.value) { p.name = name; p.producer = data.product?.producer || ''; }
+        if (!product.name) product.name = name;
+      } else {
+        productInfo.value[0].name = name;
+      }
+    }
+    infoMessage.value = data.configured
+      ? (name ? '' : (data.message || 'Информация о товаре не найдена в ЧЗ'))
+      : (data.message || 'Информация о товаре из ЧЗ не подключена — показываю GTIN и серийник из кода.');
+  } catch (e) {
+    infoMessage.value = `Не удалось получить информацию о товаре: ${e.message}`;
+  } finally {
+    infoLoading.value = false;
+  }
 }
 
 function buildTemplate() {
@@ -456,10 +499,15 @@ async function downloadPdf() {
     barcode: String(product.barcode || '').trim(),
     name: String(product.name || '').trim(),
     article: String(product.article || '').trim(),
+    dosage: String(product.dosage || '').trim(),
+    form: String(product.form || '').trim(),
     size: String(product.size || '').trim(),
     color: String(product.color || '').trim(),
+    series: String(product.series || '').trim(),
+    expiry: String(product.expiry || '').trim(),
     date: String(product.date || '').trim(),
-    composition: String(product.composition || '').trim()
+    composition: String(product.composition || '').trim(),
+    manufacturer: String(product.manufacturer || '').trim()
   }));
   busy.value = true;
   try {
@@ -467,7 +515,7 @@ async function downloadPdf() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template, rows })
+      body: JSON.stringify({ template, rows, single: true })
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -541,12 +589,7 @@ async function downloadPdf() {
             <h3 class="font-semibold text-sm mb-2">Данные товара</h3>
             <p class="text-xs text-slate-500 mb-2">Применяются ко всем кодам в этой печати.</p>
             <div class="grid grid-cols-2 gap-2">
-              <input v-model="product.name" class="input !py-1.5 text-sm" placeholder="Название">
-              <input v-model="product.article" class="input !py-1.5 text-sm" placeholder="Артикул">
-              <input v-model="product.size" class="input !py-1.5 text-sm" placeholder="Размер">
-              <input v-model="product.color" class="input !py-1.5 text-sm" placeholder="Цвет">
-              <input v-model="product.date" class="input !py-1.5 text-sm" placeholder="Дата">
-              <input v-model="product.composition" class="input !py-1.5 text-sm" placeholder="Состав">
+              <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
               <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод EAN-13">
             </div>
           </div>
@@ -556,6 +599,32 @@ async function downloadPdf() {
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="!premium" class="text-xs text-amber-500">PDF-печать доступна на тарифе PREMIUM.</p>
         </div>
+      </div>
+
+      <div v-if="result && productInfo.length" class="glass rounded-2xl p-5 mt-4">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <h2 class="font-display font-semibold">Информация о кодах</h2>
+          <span v-if="infoLoading" class="text-xs text-slate-500">Запрашиваем ЧЗ…</span>
+        </div>
+        <div class="overflow-auto max-h-64">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
+                <th class="py-1.5 pr-3">GTIN</th>
+                <th class="py-1.5 pr-3">Серийник</th>
+                <th class="py-1.5">Товар</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(p, i) in productInfo" :key="i" class="border-b border-slate-100 dark:border-white/5">
+                <td class="py-1.5 pr-3 font-mono">{{ p.gtin }}</td>
+                <td class="py-1.5 pr-3 font-mono">{{ p.serial }}</td>
+                <td class="py-1.5">{{ p.name || '—' }}<span v-if="p.producer" class="text-slate-500"> · {{ p.producer }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="infoMessage" class="text-xs text-slate-500 mt-2">{{ infoMessage }}</p>
       </div>
     </section>
 

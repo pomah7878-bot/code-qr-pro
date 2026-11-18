@@ -102,9 +102,10 @@ export async function registerLabelRoutes(app) {
   app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
     if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
-    const { template, jobId, rows } = req.body || {};
+    const { template, jobId, rows, single } = req.body || {};
     const err = validateTemplate(template);
     if (err) return reply.code(400).send({ error: err });
+    const singlePage = single === true;
     let dataRows;
     if (Array.isArray(rows)) {
       dataRows = cleanDataRows(rows);
@@ -117,11 +118,13 @@ export async function registerLabelRoutes(app) {
       const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
       dataRows = items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
     }
+    const K = 72 / 25.4;
+    const pageSize = singlePage ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
     reply.hijack();
     reply.raw.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="labels.pdf"` });
-    const doc = new PDFDocument({ size: 'A4', margin: 0 });
+    const doc = new PDFDocument({ size: pageSize, margin: 0 });
     doc.pipe(reply.raw);
-    await renderLabelsPdf(doc, template, dataRows);
+    await renderLabelsPdf(doc, template, dataRows, { single: singlePage });
     doc.end();
     return reply;
   });

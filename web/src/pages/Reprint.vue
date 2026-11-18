@@ -423,7 +423,7 @@ async function checkCodes() {
     shortWarning.value = uniqueShort.length
       ? 'Коды без криптохвоста (91/92) будут напечатаны как есть — для «Честного ЗНАКа» это неполный код.'
       : '';
-    productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, short: c.short, name: '', producer: '' }));
+    productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, short: c.short, name: '', producer: '', brand: '', group: '', status: '', owner: '' }));
     applyCatalog();
     loadProductInfo();
   } catch (e) { error.value = e.message; }
@@ -476,21 +476,32 @@ async function loadProductInfo() {
   if (!valid.length) return;
   infoLoading.value = true;
   try {
-    const res = await fetch(`/api/cz/product?code=${encodeURIComponent(valid[0].code)}`, { credentials: 'include' });
+    const res = await fetch(`/api/cz/product?code=${encodeURIComponent(valid[0].code)}&gtin=${encodeURIComponent(valid[0].gtin || '')}`, { credentials: 'include' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
     const name = data.product?.name || '';
-    if (name) {
+    const producer = data.product?.producer || '';
+    const brand = data.product?.brand || '';
+    const group = data.product?.group || '';
+    const status = data.product?.status || '';
+    const owner = data.product?.owner || '';
+    if (name || brand || group || status || owner) {
       const sameGtin = new Set(valid.map((c) => c.gtin)).size === 1;
-      if (sameGtin) {
-        for (const p of productInfo.value) { p.name = name; p.producer = data.product?.producer || ''; }
-        if (!product.name) product.name = name;
-      } else {
-        productInfo.value[0].name = name;
+      for (const p of productInfo.value) {
+        if (sameGtin || p.gtin === valid[0].gtin) {
+          p.name = p.name || name;
+          p.producer = p.producer || producer;
+          p.brand = p.brand || brand;
+          p.group = p.group || group;
+          p.status = p.status || status;
+          p.owner = p.owner || owner;
+        }
       }
+      if (!product.name && name) product.name = name;
+      if (!product.manufacturer && producer) product.manufacturer = producer;
     }
     infoMessage.value = data.configured
-      ? (name ? '' : (data.message || 'Информация о товаре не найдена в ЧЗ'))
+      ? (name || brand ? '' : (data.message || 'Информация о товаре не найдена в ЧЗ'))
       : (data.message || 'Информация о товаре из ЧЗ не подключена — показываю GTIN и серийник из кода.');
   } catch (e) {
     infoMessage.value = `Не удалось получить информацию о товаре: ${e.message}`;
@@ -674,7 +685,8 @@ async function downloadPdf() {
                 <th class="py-1.5 pr-3">Тип</th>
                 <th class="py-1.5 pr-3">Товар</th>
                 <th class="py-1.5 pr-3">Дозировка / форма</th>
-                <th class="py-1.5">Производитель</th>
+                <th class="py-1.5 pr-3">Производитель</th>
+                <th class="py-1.5">Статус</th>
               </tr>
             </thead>
             <tbody>
@@ -682,9 +694,10 @@ async function downloadPdf() {
                 <td class="py-1.5 pr-3 font-mono">{{ p.gtin }}</td>
                 <td class="py-1.5 pr-3 font-mono">{{ p.serial }}</td>
                 <td class="py-1.5 pr-3">{{ p.short ? 'GS1 (93)' : 'КИЗ (91/92)' }}</td>
-                <td class="py-1.5 pr-3">{{ p.name || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.name || '—' }}<span v-if="p.brand || p.group" class="text-slate-500"> · {{ [p.brand, p.group].filter(Boolean).join(' / ') }}</span></td>
                 <td class="py-1.5 pr-3">{{ [p.dosage, p.form].filter(Boolean).join(' · ') || '—' }}</td>
-                <td class="py-1.5">{{ p.producer || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.producer || '—' }}</td>
+                <td class="py-1.5">{{ p.status || '—' }}</td>
               </tr>
             </tbody>
           </table>

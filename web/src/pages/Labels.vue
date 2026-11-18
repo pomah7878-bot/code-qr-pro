@@ -344,7 +344,7 @@ function layout2in1() {
 function layoutQrOnly() {
   const W = Number(tpl.widthMm) || 58;
   const H = Number(tpl.heightMm) || 40;
-  const m = 1;
+  const m = 0.5;
   const size = Math.min(W - 2 * m, H - 2 * m);
   tpl.elements = [{
     id: 'qr' + Date.now(),
@@ -358,7 +358,7 @@ function layoutQrOnly() {
   }];
   selectedId.value = null;
   autoSignature.value = '';
-  notice.value = 'Оставлен только DataMatrix — QR на всю этикетку с отступом 1 мм.';
+  notice.value = 'Оставлен только DataMatrix — QR на всю этикетку с отступом 0.5 мм.';
   draw();
 }
 

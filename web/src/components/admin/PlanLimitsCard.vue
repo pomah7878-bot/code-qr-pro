@@ -40,7 +40,7 @@ onMounted(load);
 <template>
   <div class="glass rounded-2xl p-6">
     <h2 class="font-display font-semibold mb-1">Лимиты тарифов</h2>
-    <p class="text-xs text-slate-500 mb-4">Что доступно на FREE и PREMIUM. Изменения применяются сразу, без деплоя.</p>
+    <p class="text-xs text-slate-500 mb-4">Что доступно на FREE и PREMIUM. Изменения применяются сразу; чтобы увидеть их на главной, обнови страницу сайта.</p>
     <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
     <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 

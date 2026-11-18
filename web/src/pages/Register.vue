@@ -1,10 +1,17 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
 const router = useRouter();
 const name = ref(''), email = ref(''), password = ref(''), error = ref(''), busy = ref(false);
+const freeLimit = ref(50);
+onMounted(async () => {
+  try {
+    const plans = (await api.plans()).plans;
+    freeLimit.value = plans.find((p) => p.id === 'free')?.codesPerDay ?? 50;
+  } catch { /* остаётся значение по умолчанию */ }
+});
 async function submit() {
   error.value = ''; busy.value = true;
   try {
@@ -19,7 +26,7 @@ async function submit() {
   <div class="max-w-md mx-auto px-4 py-20">
     <div class="glass rounded-3xl p-8">
       <h1 class="font-display font-bold text-2xl mb-1">Регистрация</h1>
-      <p class="text-sm text-slate-500 mb-6">FREE-тариф: 50 кодов в день, без карты</p>
+      <p class="text-sm text-slate-500 mb-6">FREE-тариф: {{ freeLimit.toLocaleString('ru') }} кодов в день, без карты</p>
       <form @submit.prevent="submit" class="space-y-4">
         <div><label class="label">Имя</label><input v-model="name" class="input" autocomplete="name" placeholder="Как к вам обращаться"></div>
         <div><label class="label">Email</label><input v-model="email" type="email" class="input" required autocomplete="email"></div>

@@ -1,10 +1,27 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { store } from '../store.js';
+import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
+});
+const bestOffer = ref(null);
+const premiumFrom = computed(() => {
+  const o = bestOffer.value;
+  if (!o) return 1990;
+  return Math.round(o.perMonth ?? o.finalPrice ?? o.price);
+});
+onMounted(async () => {
+  try {
+    const plans = (await api.plans()).plans;
+    const premium = plans.find((p) => p.id === 'premium');
+    const offers = premium?.offers || [];
+    if (offers.length) {
+      bestOffer.value = offers.reduce((a, b) => ((b.perMonth ?? b.finalPrice) < (a.perMonth ?? a.finalPrice) ? b : a));
+    }
+  } catch { /* цена останется базовой */ }
 });
 const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateString('ru') : '';
 </script>
@@ -32,7 +49,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             <li>Форматы: <b>{{ store.plan?.formats.join(', ').toUpperCase() }}</b></li>
           </ul>
           <router-link v-if="store.plan?.id !== 'premium'" to="/app/billing" class="btn-primary w-full mt-5">
-            Оформить PREMIUM — 1 990 ₽/мес
+            Оформить PREMIUM — от {{ premiumFrom.toLocaleString('ru') }} ₽/мес
           </router-link>
           <router-link v-else to="/app/billing" class="btn-ghost w-full mt-5">Продлить подписку</router-link>
         </div>

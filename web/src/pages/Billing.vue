@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { planFeatureRows } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
 
 const route = useRoute();
@@ -23,6 +24,7 @@ const totalPrice = computed(() => {
   if (promo.value && promo.value.days === selectedDays.value) return promo.value.finalAmount;
   return o.finalPrice ?? o.price;
 });
+const features = computed(() => planFeatureRows(store.plan, { onlyEnabled: true }));
 watch(selectedDays, () => { promo.value = null; });
 
 async function applyPromo() {
@@ -113,9 +115,7 @@ onMounted(async () => {
         </div>
         <div class="flex flex-wrap items-center justify-between gap-4 mt-5">
           <ul class="grid md:grid-cols-2 gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-            <li>✓ 10 000 кодов в день</li><li>✓ Пакеты до 5 000 строк</li>
-            <li>✓ Экспорт ZIP и PDF</li><li>✓ Редактор этикеток + Print Bridge</li>
-            <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
+            <li v-for="f in features" :key="f.text">✓ {{ f.text }}</li>
           </ul>
           <div class="text-right">
             <div class="text-3xl font-extrabold">{{ totalPrice.toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days + (promo?.bonusDays || 0) }} дней</span></div>

@@ -101,7 +101,7 @@ r = await http('PUT', '/api/admin/plans', {
   body: {
     plans: {
       free: { ...r.data.free, codesPerDay: 77 },
-      premium: { ...r.data.premium, codesPerDay: 4321 }
+      premium: { ...r.data.premium, codesPerDay: 4321, historyDays: 111 }
     }
   }
 });
@@ -109,6 +109,13 @@ ok(r.status === 200 && r.data.free.codesPerDay === 77, 'лимит FREE изме
 
 r = await http('GET', '/api/me', { jar: client });
 ok(r.data.plan.codesPerDay === 4321, 'новый лимит PREMIUM действует у клиента');
+
+// Витрина (лендинг) получает те же лимиты
+r = await http('GET', '/api/plans');
+const pubFree = r.data.plans.find((p) => p.id === 'free');
+const pubPremium = r.data.plans.find((p) => p.id === 'premium');
+ok(pubFree.codesPerDay === 77 && pubPremium.codesPerDay === 4321, 'витрина видит новые лимиты');
+ok(pubPremium.historyDays === 111, 'история в витрине из настроек');
 
 const broken = await http('PUT', '/api/admin/plans', {
   jar: admin,

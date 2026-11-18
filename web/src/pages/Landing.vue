@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { planFeatureRows } from '../lib/planFeatures.js';
 
 const plans = ref([]);
 const reviews = ref([]);
@@ -10,6 +11,10 @@ const reviewAvg = ref(0);
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 const premium = () => plans.value.find(p => p.id === 'premium');
 const free = () => plans.value.find(p => p.id === 'free');
+const freeFeatures = computed(() => planFeatureRows(free()));
+const premiumFeatures = computed(() => planFeatureRows(premium(), { onlyEnabled: true }));
+const freeCodeLimit = computed(() => free()?.codesPerDay ?? 50);
+const premiumCodeLimit = computed(() => premium()?.codesPerDay ?? 10000);
 const minPerMonth = () => {
   const o = premium()?.offers || [];
   return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 1990;
@@ -36,7 +41,7 @@ function setupReveal() {
 // анимированные счётчики
 const counters = ref({ codes: 0, clients: 0, uptime: 0 });
 function animateCounters() {
-  const targets = { codes: 10000, clients: reviewCount.value || 120, uptime: 99 };
+  const targets = { codes: premiumCodeLimit.value, clients: reviewCount.value || 120, uptime: 99 };
   const dur = 1600; const t0 = performance.now();
   function tick(now) {
     const p = Math.min(1, (now - t0) / dur);
@@ -103,7 +108,7 @@ const openFaq = ref(null);
           <router-link to="/register" class="btn-glow">Начать бесплатно →</router-link>
           <a href="#pricing" class="btn-ghost !py-4 !px-6">Тарифы</a>
         </div>
-        <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — 50 кодов в день. Без карты. Регистрация за 30 секунд.</p>
+        <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день. Без карты. Регистрация за 30 секунд.</p>
         <!-- счётчики -->
         <div class="reveal reveal-d5 grid grid-cols-3 gap-3 sm:gap-6 mt-10 max-w-md">
           <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">кодов/день на PREMIUM</div></div>
@@ -182,12 +187,9 @@ const openFaq = ref(null);
           <div class="text-4xl sm:text-5xl font-extrabold mb-1">0 ₽</div>
           <div class="text-sm text-slate-500 mb-7">навсегда, без карты</div>
           <ul class="space-y-3 text-sm mb-8 flex-1">
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> {{ free().codesPerDay }} кодов в день</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> Пакет до {{ free().batchMax }} строк</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500">✓</span> Форматы PNG, SVG</li>
-            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> Редактор этикеток</li>
-            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> Печать на термопринтер</li>
-            <li class="flex items-center gap-2.5 opacity-40"><span>✗</span> API для 1С</li>
+            <li v-for="f in freeFeatures" :key="f.text" class="flex items-center gap-2.5" :class="f.on ? '' : 'opacity-40'">
+              <span :class="f.on ? 'text-emerald-500' : ''">{{ f.on ? '✓' : '✗' }}</span> {{ f.text }}
+            </li>
           </ul>
           <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
         </div>
@@ -221,18 +223,15 @@ const openFaq = ref(null);
             </div>
           </div>
           <ul class="space-y-3 text-sm mb-8 flex-1">
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> <b>{{ premium().codesPerDay.toLocaleString('ru') }}</b> кодов в день</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Пакеты до <b>{{ premium().batchMax.toLocaleString('ru') }}</b> строк</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Экспорт ZIP и PDF</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Редактор этикеток + Print Bridge</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> API для 1С и складов</li>
-            <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> История 365 дней</li>
+            <li v-for="f in premiumFeatures" :key="f.text" class="flex items-center gap-2.5">
+              <span class="text-emerald-500 font-bold">✓</span> {{ f.text }}
+            </li>
           </ul>
           <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PREMIUM →</router-link>
           <p class="text-center text-xs text-slate-500 mt-3">🔒 Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
         </div>
       </div>
-      <p class="reveal text-center text-sm text-slate-500 mt-8">💡 Не уверены? Начните с FREE — 50 кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
+      <p class="reveal text-center text-sm text-slate-500 mt-8">💡 Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
     </section>
 
     <!-- REVIEWS -->
@@ -270,7 +269,7 @@ const openFaq = ref(null);
       <div class="reveal relative rounded-3xl p-12 text-center overflow-hidden plan-premium">
         <div class="orb anim-glow w-[300px] h-[300px] bg-violet-600/30 -top-20 left-1/2 -translate-x-1/2"></div>
         <div class="relative">
-          <h2 class="font-display font-bold text-3xl md:text-4xl mb-4">Первые 50 кодов — бесплатно,<br>прямо сейчас</h2>
+          <h2 class="font-display font-bold text-3xl md:text-4xl mb-4">Первые {{ freeCodeLimit.toLocaleString('ru') }} кодов — бесплатно,<br>прямо сейчас</h2>
           <p class="text-slate-500 mb-8">Регистрация за 30 секунд. Без карты. Без обязательств.</p>
           <router-link to="/register" class="btn-glow text-lg">Создать аккаунт →</router-link>
         </div>

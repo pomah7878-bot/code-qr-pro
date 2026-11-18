@@ -21,8 +21,12 @@ const dataSource = ref('');
 const dataLabel = ref('');
 const kizData = ref([]);
 const productData = ref([]);
+const barcodeData = ref([]);
 const kizLabel = ref('');
 const btLabel = ref('');
+const barcodeLabel = ref('');
+const barcodeBusy = ref(false);
+const barcodeStatus = ref('');
 const duplicateCount = ref(0);
 const autoLayout = ref(true);
 const autoSignature = ref('');
@@ -66,6 +70,29 @@ const mergeNote = computed(() => {
   if (kizData.value.length === productData.value.length) return '';
   return `КИЗ: ${kizData.value.length}, товары: ${productData.value.length} — строки без пары останутся без штрихкода/названия.`;
 });
+
+const gtinKey = (v) => {
+  const s = String(v || '').trim();
+  return /^\d{1,14}$/.test(s) ? s.padStart(14, '0') : s;
+};
+
+function mergeBarcodes(prod, bc) {
+  if (!bc.length) return prod;
+  if (!prod.length) return bc;
+  const byGtin = new Map();
+  for (const b of bc) {
+    const g = gtinKey(b.gtin);
+    if (!g) continue;
+    if (!byGtin.has(g)) byGtin.set(g, []);
+    byGtin.get(g).push(b);
+  }
+  return prod.map((p, i) => {
+    const g = gtinKey(p.gtin);
+    let pair = g && byGtin.get(g)?.length ? byGtin.get(g).shift() : null;
+    if (!pair) pair = bc[i] || null;
+    return pair ? { ...p, barcode: pair.barcode || p.barcode || '' } : p;
+  });
+}
 function fieldSample(f) {
   if (currentItem.value) return f === 'row' ? String(Number(row.value) + 1) : (currentItem.value[f] ?? '');
   return { gtin: '04600000000015', serial: '5PojkV', row: '1', code: '(01)…(21)…', barcode: '4600000000000', name: 'Товар', sku: 'SKU-1' }[f] || '';
@@ -73,11 +100,7 @@ function fieldSample(f) {
 
 function rebuildData() {
   const kiz = kizData.value;
-  const prod = productData.value;
-  const gtinKey = (v) => {
-    const s = String(v || '').trim();
-    return /^\d{1,14}$/.test(s) ? s.padStart(14, '0') : s;
-  };
+  const prod = mergeBarcodes(productData.value, barcodeData.value);
   let rows = [];
   if (kiz.length && prod.length) {
     const byGtin = new Map();
@@ -99,7 +122,7 @@ function rebuildData() {
   }
   dataRows.value = rows;
   dataSource.value = kiz.length && prod.length ? 'kiz+bartender' : kiz.length ? 'kiz' : prod.length ? 'bartender' : '';
-  dataLabel.value = [kizLabel.value, btLabel.value].filter(Boolean).join(' + ').slice(0, 160);
+  dataLabel.value = [kizLabel.value, btLabel.value, barcodeLabel.value].filter(Boolean).join(' + ').slice(0, 200);
   const seen = new Set();
   const dup = new Set();
   for (const r of rows) {
@@ -388,9 +411,38 @@ function onUp() { drag = null; }
 
 async function loadTemplates() { try { templates.value = (await api.templates()).templates; } catch {} }
 async function loadJobs() { try { jobs.value = (await api.jobs()).jobs.filter(j => j.status === 'done'); } catch {} }
+async function onBarcodeFile(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  error.value = ''; barcodeStatus.value = '';
+  barcodeBusy.value = true;
+  try {
+    const part = await readDataFile(file);
+    const list = [];
+    for (const row of part.rows) {
+      const values = Object.values(row).map((v) => String(v ?? '').trim());
+      const explicit = String(row.barcode || row.ean13 || '').trim();
+      const barcode = explicit || values.find((v) => /^\d{8,14}$/.test(v)) || '';
+      if (!barcode) continue;
+      list.push({ barcode, gtin: String(row.gtin || '').trim() });
+    }
+    if (!list.length) throw new Error('Не найдены штрихкоды (8–14 цифр)');
+    barcodeData.value = list;
+    barcodeLabel.value = file.name;
+    barcodeStatus.value = `Загружено ${list.length} штрихкодов`;
+    notice.value = 'Штрихкоды загружены — можно собирать этикетку';
+    rebuildData();
+  } catch (e) {
+    error.value = 'Штрихкоды: ' + e.message;
+  } finally {
+    barcodeBusy.value = false;
+    ev.target.value = '';
+  }
+}
+
 async function onJobChange() {
   itemImg = null; row.value = 0;
-  kizData.value = []; productData.value = []; kizLabel.value = ''; btLabel.value = ''; duplicateCount.value = 0;
+  kizData.value = []; productData.value = []; barcodeData.value = []; kizLabel.value = ''; btLabel.value = ''; barcodeLabel.value = ''; duplicateCount.value = 0;
   if (jobId.value == null) { dataRows.value = []; dataSource.value = ''; dataLabel.value = ''; draw(); return; }
   try {
     const d = await api.job(jobId.value);
@@ -558,6 +610,20 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
           <p v-if="btBusy" class="text-xs text-slate-500 mt-2">Читаем файлы…</p>
           <p v-if="btStatus" class="text-xs text-emerald-500 mt-2">{{ btStatus }}</p>
           <p v-if="btWarning" class="text-xs text-amber-500 mt-2">{{ btWarning }}</p>
+        </div>
+
+        <div class="glass rounded-2xl p-5 md:col-span-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="font-display font-semibold mb-1">3. Штрихкоды (EAN-13)</h2>
+              <p class="text-xs text-slate-500">Отдельный CSV/TXT/XLSX: один штрихкод на строку или колонка <b>barcode</b> (можно с <b>gtin</b>). Объединится с КИЗ по порядку или по GTIN.</p>
+            </div>
+            <label class="btn-ghost !py-2 !px-3 text-sm cursor-pointer">
+              {{ barcodeBusy ? 'Читаем…' : 'Выбрать файл штрихкодов' }}
+              <input type="file" class="hidden" accept=".csv,.txt,.xlsx,.xls" :disabled="barcodeBusy" @change="onBarcodeFile">
+            </label>
+          </div>
+          <p v-if="barcodeStatus" class="text-xs text-emerald-500 mt-2">{{ barcodeStatus }}</p>
         </div>
       </div>
 

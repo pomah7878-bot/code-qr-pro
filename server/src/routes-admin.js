@@ -3,6 +3,7 @@ import { requireAuth } from './routes.js';
 import { activatePremium } from './billing.js';
 import { getSetting, setSetting } from './settings.js';
 import { czStatus } from './cz.js';
+import { notifyStatusChange } from './notify.js';
 
 const requireAdmin = async (req, reply) => {
   await requireAuth(req, reply);
@@ -36,11 +37,13 @@ export async function registerAdminRoutes(app) {
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     if (plan === 'premium') {
       activatePremium(user.id, 'admin', null, null);
+      notifyStatusChange(user, 'Администратор выдал PREMIUM на 30 дней');
     } else {
       db.transaction(() => {
         db.prepare("UPDATE subscriptions SET status='expired' WHERE user_id=? AND status='active'").run(user.id);
         db.prepare("UPDATE users SET plan='free' WHERE id=?").run(user.id);
       })();
+      notifyStatusChange(user, 'Администратор перевёл на FREE');
     }
     return { ok: true };
   });

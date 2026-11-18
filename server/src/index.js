@@ -11,6 +11,7 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerAdminRoutes } from './routes-admin.js';
 import { registerApiRoutes } from './routes-api.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
+import { notifyConfigured } from './notify.js';
 import { rateLimitHook, securityHeaders } from './security.js';
 import { db } from './db.js';
 
@@ -29,7 +30,7 @@ await registerBillingRoutes(app);
 await registerAdminRoutes(app);
 await registerApiRoutes(app);
 startBillingSweeper();
-app.log.info({ yookassaConfigured: providerConfigured() }, 'billing ready');
+app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');
 if (existsSync(dist)) {

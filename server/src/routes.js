@@ -1,6 +1,7 @@
 import { db, usageToday } from './db.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser } from './auth.js';
 import { PLANS, planOf } from './plans.js';
+import { notifyRegistration } from './notify.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const attempts = new Map(); // ip -> { n, reset }
@@ -43,6 +44,8 @@ export async function registerRoutes(app) {
     const { token, expires } = createSession(info.lastInsertRowid);
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+    const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+    notifyRegistration(user, totalUsers);
     return { user: publicUser(user) };
   });
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { PLANS } from './plans.js';
+import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru';
@@ -95,15 +96,23 @@ export async function checkOrder(order) {
   const data = await yk('GET', '/payments/' + order.external_id);
   if (data.status === 'succeeded') {
     activatePremium(order.user_id, 'yookassa', data.id, order.id);
+    const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+    const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+    notifyPayment(paid, u);
   } else if (data.status === 'canceled') {
     db.prepare("UPDATE orders SET status='canceled' WHERE id=?").run(order.id);
+    const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+    notifyOrderCanceled(order, u);
   }
   return db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
 }
 
 export function expireSubscriptions() {
+  // кого переводим на FREE — для уведомления
+  const expiring = db.prepare("SELECT id, email FROM users WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").all();
   db.prepare("UPDATE subscriptions SET status='expired' WHERE status='active' AND expires_at <= datetime('now')").run();
   db.prepare("UPDATE users SET plan='free' WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").run();
+  for (const u of expiring) notifyStatusChange(u, 'Подписка PREMIUM истекла → FREE');
 }
 
 let sweeping = false;

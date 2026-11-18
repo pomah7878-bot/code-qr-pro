@@ -1,11 +1,34 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
+import { api } from './api.js';
+
 const router = useRouter();
 const menuOpen = ref(false);
+const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
+const needChange = computed(() => Boolean(store.user?.mustChangePassword));
+
 async function logout() { await store.logout(); menuOpen.value = false; router.push('/'); }
 function go(path) { menuOpen.value = false; router.push(path); }
+
+async function changePassword() {
+  pwd.error = '';
+  if (pwd.next.length < 8) { pwd.error = 'Новый пароль — минимум 8 символов'; return; }
+  if (pwd.next !== pwd.repeat) { pwd.error = 'Пароли не совпадают'; return; }
+  pwd.busy = true;
+  try {
+    await api.changePassword({ currentPassword: pwd.current, newPassword: pwd.next });
+    pwd.current = '';
+    pwd.next = '';
+    pwd.repeat = '';
+    await store.load();
+  } catch (e) {
+    pwd.error = e.message;
+  } finally {
+    pwd.busy = false;
+  }
+}
 </script>
 
 <template>
@@ -68,6 +91,33 @@ function go(path) { menuOpen.value = false; router.push(path); }
     <footer class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
       CODE QR PRO · code-qr.stockcity.ru · GS1 DataMatrix и маркировка «Честный ЗНАК»
     </footer>
+
+    <!-- Принудительная смена временного пароля -->
+    <Teleport to="body">
+      <div v-if="needChange" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+        <div class="relative glass rounded-2xl p-6 w-full max-w-md" role="dialog" aria-modal="true" aria-label="Смена временного пароля">
+          <h2 class="font-display font-bold text-xl">Смените временный пароль</h2>
+          <p class="text-sm text-slate-500 mt-1">Администратор выдал временный пароль. Придумайте свой — без него кабинет недоступен.</p>
+          <div class="space-y-3 mt-4">
+            <div>
+              <label class="label !text-xs" for="pwd-current">Текущий (временный) пароль</label>
+              <input id="pwd-current" v-model="pwd.current" type="password" class="input !py-2 text-sm" autocomplete="current-password">
+            </div>
+            <div>
+              <label class="label !text-xs" for="pwd-next">Новый пароль</label>
+              <input id="pwd-next" v-model="pwd.next" type="password" class="input !py-2 text-sm" autocomplete="new-password">
+            </div>
+            <div>
+              <label class="label !text-xs" for="pwd-repeat">Повторите новый пароль</label>
+              <input id="pwd-repeat" v-model="pwd.repeat" type="password" class="input !py-2 text-sm" autocomplete="new-password">
+            </div>
+          </div>
+          <p v-if="pwd.error" class="text-sm text-red-500 mt-3">{{ pwd.error }}</p>
+          <button class="btn-primary w-full mt-4" :disabled="pwd.busy" @click="changePassword">{{ pwd.busy ? 'Сохраняем…' : 'Сменить пароль' }}</button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

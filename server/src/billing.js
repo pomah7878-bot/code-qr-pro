@@ -125,6 +125,19 @@ export async function checkOrder(order) {
   return db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
 }
 
+// Отмена ещё не оплаченного платежа в ЮKassa (best-effort для админки)
+export async function cancelPayment(paymentId) {
+  return yk('POST', '/payments/' + encodeURIComponent(paymentId) + '/cancel', {});
+}
+
+// Возврат по успешному платежу. ЮKassa принимает payment_id и сумму.
+export async function refundPayment(paymentId, amount) {
+  return yk('POST', '/refunds', {
+    payment_id: paymentId,
+    amount: { value: Number(amount).toFixed(2), currency: 'RUB' }
+  });
+}
+
 export function expireSubscriptions() {
   // кого переводим на FREE — для уведомления
   const expiring = db.prepare("SELECT id, email FROM users WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").all();

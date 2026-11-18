@@ -15,10 +15,19 @@ function rateLimit(ip, max = 10, windowMs = 60_000) {
 }
 
 const COOKIE = 'cq_session';
+// Пока стоит флаг must_change_password, работать можно только с этими маршрутами
+const PASSWORD_EXEMPT = new Set(['/api/auth/password', '/api/auth/logout', '/api/me']);
 
 export const requireAuth = async (req, reply) => {
   const user = sessionUser(req.cookies[COOKIE]);
   if (!user) return reply.code(401).send({ error: 'Не авторизован' });
+  if (user.status === 'blocked') {
+    return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
+  }
+  const path = String(req.url || '').split('?')[0];
+  if (user.must_change_password && !PASSWORD_EXEMPT.has(path)) {
+    return reply.code(428).send({ error: 'Сначала смените временный пароль', code: 'password_change_required' });
+  }
   req.user = user;
 };
 
@@ -56,9 +65,28 @@ export async function registerRoutes(app) {
     if (!user || !password || !verifyPassword(password, user.password_hash)) {
       return reply.code(401).send({ error: 'Неверный email или пароль' });
     }
+    if (user.status === 'blocked') {
+      return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
+    }
+    db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
     const { token, expires } = createSession(user.id);
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     return { user: publicUser(user) };
+  });
+
+  app.post('/api/auth/password', { preHandler: requireAuth }, async (req, reply) => {
+    const { currentPassword, newPassword } = req.body || {};
+    const row = db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
+    if (!currentPassword || !row || !verifyPassword(String(currentPassword), row.password_hash)) {
+      return reply.code(400).send({ error: 'Текущий пароль указан неверно' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return reply.code(400).send({ error: 'Новый пароль минимум 8 символов' });
+    }
+    if (newPassword.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
+    db.prepare('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?')
+      .run(hashPassword(newPassword), req.user.id);
+    return { ok: true };
   });
 
   app.post('/api/auth/logout', async (req, reply) => {

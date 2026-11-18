@@ -12,6 +12,8 @@ const requireApiKey = async (req, reply) => {
   const row = k ? db.prepare('SELECT * FROM api_keys WHERE key_hash=?').get(hashKey(String(k))) : null;
   if (!row) return reply.code(401).send({ error: 'Неверный API-ключ (заголовок X-API-Key)' });
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id);
+  if (!user) return reply.code(401).send({ error: 'Неверный API-ключ (заголовок X-API-Key)' });
+  if (user.status === 'blocked') return reply.code(403).send({ error: 'Аккаунт заблокирован' });
   if (!planOf(user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PREMIUM' });
   db.prepare("UPDATE api_keys SET last_used_at=datetime('now') WHERE id=?").run(row.id);
   req.apiUser = user;

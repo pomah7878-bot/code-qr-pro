@@ -26,7 +26,7 @@ export function createSession(userId) {
 export function sessionUser(token) {
   if (!token) return null;
   const row = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.plan, u.created_at
+    `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.created_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > datetime('now')`
   ).get(token);
@@ -38,5 +38,10 @@ export function destroySession(token) {
 }
 
 export function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name, role: u.role, plan: u.plan, createdAt: u.created_at };
+  return {
+    id: u.id, email: u.email, name: u.name, role: u.role, plan: u.plan,
+    status: u.status || 'active',
+    mustChangePassword: Boolean(u.must_change_password),
+    createdAt: u.created_at
+  };
 }

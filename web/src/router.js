@@ -7,10 +7,15 @@ import Dashboard from './pages/Dashboard.vue';
 import Generator from './pages/Generator.vue';
 import Labels from './pages/Labels.vue';
 import Billing from './pages/Billing.vue';
-import Admin from './pages/Admin.vue';
 import ApiKeys from './pages/ApiKeys.vue';
 import Cz from './pages/Cz.vue';
 import Reviews from './pages/Reviews.vue';
+import AdminLayout from './pages/admin/AdminLayout.vue';
+import AdminOverview from './pages/admin/AdminOverview.vue';
+import AdminUsers from './pages/admin/AdminUsers.vue';
+import AdminUser from './pages/admin/AdminUser.vue';
+import AdminOrders from './pages/admin/AdminOrders.vue';
+import AdminSettings from './pages/admin/AdminSettings.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,10 +27,21 @@ const router = createRouter({
     { path: '/app/generate', component: Generator, meta: { auth: true } },
     { path: '/app/labels', component: Labels, meta: { auth: true } },
     { path: '/app/billing', component: Billing, meta: { auth: true } },
-    { path: '/app/admin', component: Admin, meta: { auth: true } },
     { path: '/app/apikeys', component: ApiKeys, meta: { auth: true } },
     { path: '/app/cz', component: Cz, meta: { auth: true } },
     { path: '/app/reviews', component: Reviews, meta: { auth: true } },
+    {
+      path: '/app/admin',
+      component: AdminLayout,
+      meta: { auth: true, admin: true },
+      children: [
+        { path: '', component: AdminOverview },
+        { path: 'users', component: AdminUsers },
+        { path: 'users/:id', component: AdminUser, props: true },
+        { path: 'orders', component: AdminOrders },
+        { path: 'settings', component: AdminSettings }
+      ]
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
   scrollBehavior: () => ({ top: 0 })
@@ -34,6 +50,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (!store.ready) await store.load();
   if (to.meta.auth && !store.user) return '/login';
+  if (to.meta.admin && store.user?.role !== 'admin') return '/app';
   if ((to.path === '/login' || to.path === '/register') && store.user) return '/app';
 });
 

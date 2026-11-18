@@ -129,7 +129,18 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  CREATE INDEX idx_reviews_status ON reviews(status);`
+  CREATE INDEX idx_reviews_status ON reviews(status);`,
+  // v7 — админка: блокировка, заметки, история входов, индексы для фильтров
+  `ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+   ALTER TABLE users ADD COLUMN blocked_at TEXT;
+   ALTER TABLE users ADD COLUMN blocked_reason TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN last_login_at TEXT;
+   ALTER TABLE users ADD COLUMN note TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX idx_users_plan ON users(plan);
+   CREATE INDEX idx_subs_user ON subscriptions(user_id, status);
+   CREATE INDEX idx_orders_created ON orders(created_at);
+   CREATE INDEX idx_jobs_created ON generation_jobs(created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

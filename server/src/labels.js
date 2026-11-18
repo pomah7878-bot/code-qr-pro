@@ -37,7 +37,7 @@ export async function resolveElements(template, data) {
       if (bcid === 'code128') opts.height = 12;
       else if (bcid === 'ean13') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
       else if (bcid === 'qrcode') opts.scale = 4;
-      else { opts.paddingwidth = 10; opts.paddingheight = 10; }
+      else { opts.paddingwidth = 0; opts.paddingheight = 0; }
       const png = await bwipjs.toBuffer(opts);
       out.push({ ...base, pngBase64: png.toString('base64') });
     } else {

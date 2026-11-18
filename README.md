@@ -16,6 +16,13 @@ SaaS-платформа для генерации GS1 DataMatrix («Честны
 - **API для 1С:** ключи X-API-Key (sha256), POST /api/v1/generate, GET /api/v1/jobs/{id}, GET /api/v1/me.
 - **Безопасность:** rate-limit (auth 10/мин, глобально 300/мин), security-заголовки + HSTS, body limit 8 МБ, защита от path traversal, изоляция от ECLIPSE.
 
+## Админка (`/app/admin`)
+
+Разделы: **Обзор** (выручка, MRR, конверсия, графики, здоровье сервиса), **Клиенты** (поиск, карточка, выдача PREMIUM на любой срок, блокировка, сброс пароля, удаление), **Платежи** (ручное подтверждение, отмена, возврат через ЮKassa, CSV), **Задания** (очередь, повтор, удаление), **Маркетинг** (промокоды, рассылки по сегментам), **Журнал** (аудит действий), **Настройки** (лимиты тарифов, 2FA, SMTP, Честный ЗНАК).
+
+Роль `support` видит клиентов и задания, но не деньги, настройки и журнал. 2FA — TOTP без внешних зависимостей, аварийный сброс: `node scripts/reset-2fa.mjs email`.
+
+
 ## Разработка
 
 ```bash
@@ -32,6 +39,10 @@ npm run build        # web/dist
 node scripts/test-stage2.mjs   # генерация/экспорт
 node scripts/test-stage3.mjs   # этикетки/шаблоны
 node scripts/test-stage5.mjs   # безопасность (rate-limit исчерпывает лимит IP на 1 мин)
+node scripts/test-admin-a.mjs  # админка: клиенты, блокировка, пароли, заказы
+node scripts/test-admin-b.mjs  # аналитика, здоровье, задания
+node scripts/test-admin-c.mjs  # аудит, роли, 2FA
+node scripts/test-admin-d.mjs  # промокоды, лимиты тарифов, SMTP, рассылки
 # этап 4 — на отдельном сервере с чистой БД:
 set PORT=3101 DB_PATH=server/data/test4.db JOBS_DIR=server/data/test4-jobs && node server/src/index.js
 node scripts/test-stage4.mjs

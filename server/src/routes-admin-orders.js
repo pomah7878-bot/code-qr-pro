@@ -2,6 +2,8 @@ import { db } from './db.js';
 import { activatePremium, checkOrder, providerConfigured, cancelPayment, refundPayment } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
+import { audit } from './lib/audit.js';
+import { redeemPromo } from './lib/promo.js';
 
 const STATUSES = ['pending', 'paid', 'canceled', 'refunded'];
 
@@ -52,7 +54,7 @@ export async function registerAdminOrderRoutes(app) {
     const { page, per, offset } = paging(req.query);
     const { whereSql, params } = orderFilters(req.query);
     const orders = db.prepare(`
-      SELECT o.id, o.plan, o.days, o.amount, o.status, o.provider,
+      SELECT o.id, o.plan, o.days, o.amount, o.discount, o.promo_code, o.status, o.provider,
              o.external_id, o.confirmation_url, o.created_at, o.paid_at, u.email, u.id AS user_id
       FROM orders o JOIN users u ON u.id=o.user_id
       ${whereSql}
@@ -72,14 +74,14 @@ export async function registerAdminOrderRoutes(app) {
   app.get('/api/admin/orders/export.csv', { preHandler: requireAdmin }, async (req, reply) => {
     const { whereSql, params } = orderFilters(req.query);
     const rows = db.prepare(`
-      SELECT o.id, u.email, o.plan, o.days, o.amount, o.status,
+      SELECT o.id, u.email, o.plan, o.days, o.amount, o.discount, o.promo_code, o.status,
              o.provider, o.external_id, o.created_at, o.paid_at
       FROM orders o JOIN users u ON u.id=o.user_id
       ${whereSql} ORDER BY o.id DESC LIMIT 10000
     `).all(...params);
     return sendCsv(reply, 'code-qr-orders.csv',
-      ['№', 'Email', 'Тариф', 'Дней', 'Сумма', 'Статус', 'Провайдер', 'Платёж', 'Создан', 'Оплачен'],
-      rows.map((o) => [o.id, o.email, o.plan, o.days, o.amount, o.status,
+      ['№', 'Email', 'Тариф', 'Дней', 'Сумма', 'Скидка', 'Промокод', 'Статус', 'Провайдер', 'Платёж', 'Создан', 'Оплачен'],
+      rows.map((o) => [o.id, o.email, o.plan, o.days, o.amount, o.discount, o.promo_code || '', o.status,
         o.provider, o.external_id || '', o.created_at, o.paid_at || ''])
     );
   });
@@ -92,8 +94,10 @@ export async function registerAdminOrderRoutes(app) {
       return reply.code(400).send({ error: 'Подтвердить можно только заказ в статусе «ожидает оплаты»' });
     }
     activatePremium(order.user_id, 'admin', null, order.id, order.days || 30);
+    redeemPromo(getOrder(order.id));
     const user = getUser(order.user_id);
     notifyStatusChange(user, `Заказ №${order.id} подтверждён вручную (${order.amount} ₽)`);
+    audit(req, 'order.confirm', 'order', order.id, { amount: order.amount, days: order.days });
     return { ok: true, order: getOrder(order.id) };
   });
 
@@ -112,6 +116,7 @@ export async function registerAdminOrderRoutes(app) {
       }
     }
     db.prepare("UPDATE orders SET status='canceled' WHERE id=?").run(order.id);
+    audit(req, 'order.cancel', 'order', order.id, { amount: order.amount });
     return { ok: true, order: getOrder(order.id) };
   });
 
@@ -142,6 +147,7 @@ export async function registerAdminOrderRoutes(app) {
     if (revoke) revokePremium(order.user_id);
     const user = getUser(order.user_id);
     notifyStatusChange(user, `Возврат по заказу №${order.id} (${order.amount} ₽)` + (revoke ? ', PREMIUM снят' : ''));
+    audit(req, 'order.refund', 'order', order.id, { amount: order.amount, revoke, refundId: refund.id });
     return { ok: true, order: getOrder(order.id), refund };
   });
 

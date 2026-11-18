@@ -15,6 +15,9 @@ import AdminOverview from './pages/admin/AdminOverview.vue';
 import AdminUsers from './pages/admin/AdminUsers.vue';
 import AdminUser from './pages/admin/AdminUser.vue';
 import AdminOrders from './pages/admin/AdminOrders.vue';
+import AdminJobs from './pages/admin/AdminJobs.vue';
+import AdminAudit from './pages/admin/AdminAudit.vue';
+import AdminMarketing from './pages/admin/AdminMarketing.vue';
 import AdminSettings from './pages/admin/AdminSettings.vue';
 
 const router = createRouter({
@@ -35,11 +38,14 @@ const router = createRouter({
       component: AdminLayout,
       meta: { auth: true, admin: true },
       children: [
-        { path: '', component: AdminOverview },
+        { path: '', component: AdminOverview, meta: { adminOnly: true } },
         { path: 'users', component: AdminUsers },
         { path: 'users/:id', component: AdminUser, props: true },
-        { path: 'orders', component: AdminOrders },
-        { path: 'settings', component: AdminSettings }
+        { path: 'orders', component: AdminOrders, meta: { adminOnly: true } },
+        { path: 'jobs', component: AdminJobs },
+        { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
+        { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
+        { path: 'settings', component: AdminSettings, meta: { adminOnly: true } }
       ]
     },
     { path: '/:pathMatch(.*)*', redirect: '/' }
@@ -50,7 +56,8 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (!store.ready) await store.load();
   if (to.meta.auth && !store.user) return '/login';
-  if (to.meta.admin && store.user?.role !== 'admin') return '/app';
+  if (to.meta.admin && !['admin', 'support'].includes(store.user?.role)) return '/app';
+  if (to.meta.adminOnly && store.user?.role !== 'admin') return '/app/admin/users';
   if ((to.path === '/login' || to.path === '/register') && store.user) return '/app';
 });
 

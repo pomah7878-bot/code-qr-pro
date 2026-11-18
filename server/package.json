@@ -2,7 +2,9 @@
   "name": "code-qr-pro-server",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
@@ -14,6 +16,7 @@
     "better-sqlite3": "^12.4.1",
     "bwip-js": "^4.5.1",
     "fastify": "^4.28.1",
+    "nodemailer": "^7.0.13",
     "pdfkit": "^0.15.2"
   }
 }

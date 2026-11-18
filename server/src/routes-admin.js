@@ -1,8 +1,9 @@
 import { db, today } from './db.js';
 import { getSetting, setSetting } from './settings.js';
-import { getPremiumOffers, getTestPrice } from './plans.js';
+import { getPremiumOffers, getTestPrice, planDef, savePlanLimits } from './plans.js';
 import { czStatus } from './cz.js';
 import { requireAdmin } from './lib/admin.js';
+import { audit } from './lib/audit.js';
 
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
@@ -30,7 +31,24 @@ export async function registerAdminRoutes(app) {
       setSetting('cz_api_url', String(czApiUrl).slice(0, 200));
     }
     if (czToken) setSetting('cz_token', String(czToken).slice(0, 500));
+    audit(req, 'settings.cz', 'settings', 'cz', {
+      enabled: czEnabled !== undefined ? Boolean(czEnabled) : undefined,
+      apiUrl: czApiUrl, tokenChanged: Boolean(czToken)
+    });
     return { ok: true };
+  });
+
+  // === Лимиты тарифов ===
+  app.get('/api/admin/plans', { preHandler: requireAdmin }, async () => ({
+    free: planDef('free'),
+    premium: planDef('premium')
+  }));
+
+  app.put('/api/admin/plans', { preHandler: requireAdmin }, async (req, reply) => {
+    const result = savePlanLimits(req.body?.plans);
+    if (result.error) return reply.code(400).send({ error: result.error });
+    audit(req, 'settings.plans', 'settings', 'plans', { plans: req.body?.plans });
+    return { free: planDef('free'), premium: planDef('premium') };
   });
 
   // === Управление тарифами PREMIUM ===
@@ -66,6 +84,7 @@ export async function registerAdminRoutes(app) {
       if (!Number.isFinite(tp) || tp < 1 || tp > 1000000) return reply.code(400).send({ error: 'Цена TEST: 1–1 000 000 ₽' });
       setSetting('test_price', String(tp));
     }
+    audit(req, 'settings.pricing', 'settings', 'pricing', { offers, testPrice });
     return { offers: getPremiumOffers(), testPrice: getTestPrice() };
   });
 }

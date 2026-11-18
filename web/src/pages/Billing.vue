@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
@@ -14,7 +14,28 @@ const selectedDays = ref(30);
 const error = ref('');
 const notice = ref('');
 const busy = ref(false);
+const promoCode = ref('');
+const promo = ref(null);
+const promoBusy = ref(false);
 const selectedOffer = () => offers.value.find(o => o.days === selectedDays.value) || offers.value[0];
+const totalPrice = computed(() => {
+  const o = selectedOffer();
+  if (promo.value && promo.value.days === selectedDays.value) return promo.value.finalAmount;
+  return o.finalPrice ?? o.price;
+});
+watch(selectedDays, () => { promo.value = null; });
+
+async function applyPromo() {
+  error.value = '';
+  promo.value = null;
+  const code = promoCode.value.trim();
+  if (!code) return;
+  promoBusy.value = true;
+  try {
+    promo.value = await api.checkPromo({ code, days: selectedDays.value });
+  } catch (e) { error.value = e.message; }
+  promoBusy.value = false;
+}
 
 async function load() {
   try {
@@ -29,7 +50,9 @@ async function load() {
 async function checkout(plan = 'premium') {
   error.value = ''; busy.value = true;
   try {
-    const body = plan === 'premium' ? { plan, days: selectedDays.value } : { plan };
+    const body = plan === 'premium'
+      ? { plan, days: selectedDays.value, promoCode: promo.value?.code }
+      : { plan };
     const d = await api.checkout(body);
     if (d.order.confirmationUrl) window.location.href = d.order.confirmationUrl;
     else error.value = 'Не получена ссылка на оплату';
@@ -81,6 +104,13 @@ onMounted(async () => {
             </button>
           </div>
         </div>
+        <div class="flex flex-wrap items-center gap-2 mt-4">
+          <input v-model="promoCode" class="input !py-2 !w-56 text-sm" placeholder="Промокод" aria-label="Промокод" autocomplete="off">
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="promoBusy" @click="applyPromo">{{ promoBusy ? 'Проверяем…' : 'Применить' }}</button>
+          <span v-if="promo" class="text-sm text-emerald-500">
+            {{ promo.code }}: −{{ promo.discount.toLocaleString('ru') }} ₽<template v-if="promo.bonusDays"> · +{{ promo.bonusDays }} дней</template>
+          </span>
+        </div>
         <div class="flex flex-wrap items-center justify-between gap-4 mt-5">
           <ul class="grid md:grid-cols-2 gap-1.5 text-sm text-slate-600 dark:text-slate-300">
             <li>✓ 10 000 кодов в день</li><li>✓ Пакеты до 5 000 строк</li>
@@ -88,8 +118,9 @@ onMounted(async () => {
             <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
           </ul>
           <div class="text-right">
-            <div class="text-3xl font-extrabold">{{ (selectedOffer().finalPrice ?? selectedOffer().price).toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days }} дней</span></div>
-            <div v-if="selectedOffer().discount > 0" class="text-sm text-emerald-500">Скидка {{ selectedOffer().discount }}% · выгода {{ (selectedOffer().price - (selectedOffer().finalPrice ?? selectedOffer().price)).toLocaleString('ru') }} ₽</div>
+            <div class="text-3xl font-extrabold">{{ totalPrice.toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days + (promo?.bonusDays || 0) }} дней</span></div>
+            <div v-if="promo" class="text-sm text-emerald-500">Промокод {{ promo.code }} применён</div>
+            <div v-else-if="selectedOffer().discount > 0" class="text-sm text-emerald-500">Скидка {{ selectedOffer().discount }}% · выгода {{ (selectedOffer().price - (selectedOffer().finalPrice ?? selectedOffer().price)).toLocaleString('ru') }} ₽</div>
             <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('premium')">{{ busy ? 'Создаём заказ…' : (store.plan?.id === 'premium' ? 'Продлить PREMIUM' : 'Оформить PREMIUM') }}</button>
             <p v-if="!providerOk" class="text-xs text-red-500 mt-2">Платёжный провайдер не настроен — сообщите администратору</p>
           </div>

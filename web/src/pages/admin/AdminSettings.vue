@@ -1,6 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { api } from '../../api.js';
+import TwoFactorCard from '../../components/admin/TwoFactorCard.vue';
+import PlanLimitsCard from '../../components/admin/PlanLimitsCard.vue';
+import SmtpCard from '../../components/admin/SmtpCard.vue';
 
 const cz = ref({ czEnabled: false, czApiUrl: '', czConfigured: false });
 const czToken = ref('');
@@ -114,6 +117,12 @@ onMounted(load);
         <button class="btn-primary !py-2 text-sm" :disabled="savingPrice" @click="savePricing">{{ savingPrice ? 'Сохраняем…' : 'Сохранить тарифы' }}</button>
       </div>
     </div>
+
+    <PlanLimitsCard />
+
+    <TwoFactorCard />
+
+    <SmtpCard />
 
     <div class="glass rounded-2xl p-6">
       <h2 class="font-display font-semibold mb-1">Честный ЗНАК (ГИС МТ)</h2>

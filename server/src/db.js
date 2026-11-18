@@ -140,7 +140,83 @@ const MIGRATIONS = [
    CREATE INDEX idx_users_plan ON users(plan);
    CREATE INDEX idx_subs_user ON subscriptions(user_id, status);
    CREATE INDEX idx_orders_created ON orders(created_at);
-   CREATE INDEX idx_jobs_created ON generation_jobs(created_at);`
+   CREATE INDEX idx_jobs_created ON generation_jobs(created_at);`,
+  // v8 — журнал действий администраторов
+  `CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id INTEGER,
+    actor_email TEXT NOT NULL DEFAULT '',
+    actor_role TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    target_type TEXT NOT NULL DEFAULT '',
+    target_id TEXT NOT NULL DEFAULT '',
+    meta TEXT NOT NULL DEFAULT '{}',
+    ip TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_audit_created ON audit_log(created_at);
+  CREATE INDEX idx_audit_actor ON audit_log(actor_id);
+  CREATE INDEX idx_audit_action ON audit_log(action);`,
+  // v9 — сессии с IP/UA и двухфакторная аутентификация
+  `ALTER TABLE sessions ADD COLUMN ip TEXT NOT NULL DEFAULT '';
+   ALTER TABLE sessions ADD COLUMN user_agent TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN totp_secret TEXT;
+   ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN totp_backup TEXT NOT NULL DEFAULT '[]';`,
+  // v10 — промокоды и скидки в заказах
+  `CREATE TABLE promo_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL DEFAULT 'percent',
+    value REAL NOT NULL,
+    max_uses INTEGER NOT NULL DEFAULT 0,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    per_user_limit INTEGER NOT NULL DEFAULT 1,
+    starts_at TEXT,
+    expires_at TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE promo_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    promo_id INTEGER NOT NULL REFERENCES promo_codes(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (promo_id, order_id)
+  );
+  ALTER TABLE orders ADD COLUMN discount REAL NOT NULL DEFAULT 0;
+  ALTER TABLE orders ADD COLUMN promo_code TEXT;`,
+  // v11 — рассылки по email
+  `CREATE TABLE email_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    segment TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    total INTEGER NOT NULL DEFAULT 0,
+    sent INTEGER NOT NULL DEFAULT 0,
+    failed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'queued',
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  );
+  CREATE TABLE email_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+    user_id INTEGER,
+    to_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_at TEXT
+  );
+  CREATE INDEX idx_outbox_status ON email_outbox(status);`,
+  // v12 — отписка от рассылок
+  `ALTER TABLE users ADD COLUMN email_opt_out INTEGER NOT NULL DEFAULT 0;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

@@ -215,6 +215,8 @@ onMounted(load);
               <td class="py-3 px-4">{{ o.plan.toUpperCase() }}<span class="text-slate-500"> · {{ o.days }} дн.</span></td>
               <td class="py-3 px-4">
                 <div class="font-semibold">{{ money(o.amount) }}</div>
+                <div v-if="o.discount > 0" class="text-[11px] text-emerald-500">скидка {{ money(o.discount) }}</div>
+                <div v-if="o.promo_code" class="text-[11px] text-brand-400">{{ o.promo_code }}</div>
               </td>
               <td class="py-3 px-4">
                 <span class="text-xs font-semibold" :class="statusClass(o.status)">{{ STATUS_LABEL[o.status] || o.status }}</span>

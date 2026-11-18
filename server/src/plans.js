@@ -43,11 +43,65 @@ export const PLANS = {
 // Тарифы, которые можно купить через checkout
 export const PURCHASABLE = ['premium'];
 
-export function planOf(user) {
-  return PLANS[user?.plan] || PLANS.free;
+// Лимиты можно менять из админки: переопределения хранятся в app_settings.plan_limits
+const LIMIT_RANGES = { codesPerDay: [1, 1000000], batchMax: [1, 100000], historyDays: [1, 3650] };
+const BOOLEAN_LIMITS = ['apiAccess', 'labelEditor', 'printBridge'];
+const FORMATS = ['png', 'svg', 'pdf', 'zip'];
+
+function limitOverrides() {
+  try {
+    const raw = getSetting('plan_limits', '');
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
 }
 
-import { getSetting } from './settings.js';
+export function sanitizeLimits(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return { error: 'Нет данных' };
+  for (const [key, [min, max]] of Object.entries(LIMIT_RANGES)) {
+    if (input[key] === undefined) continue;
+    const n = Math.round(Number(input[key]));
+    if (!Number.isFinite(n) || n < min || n > max) return { error: `${key}: ${min}–${max}` };
+    out[key] = n;
+  }
+  for (const key of BOOLEAN_LIMITS) {
+    if (input[key] !== undefined) out[key] = Boolean(input[key]);
+  }
+  if (input.formats !== undefined) {
+    if (!Array.isArray(input.formats)) return { error: 'formats: нужен массив' };
+    const formats = [...new Set(input.formats.map(String).filter((f) => FORMATS.includes(f)))];
+    if (!formats.length) return { error: 'Нужен хотя бы один формат' };
+    out.formats = formats;
+  }
+  return { limits: out };
+}
+
+export function savePlanLimits(input) {
+  const clean = {};
+  for (const id of ['free', 'premium']) {
+    if (!input?.[id]) continue;
+    const r = sanitizeLimits(input[id]);
+    if (r.error) return { error: `${id}: ${r.error}` };
+    clean[id] = r.limits;
+  }
+  if (!Object.keys(clean).length) return { error: 'Нет данных' };
+  setSetting('plan_limits', JSON.stringify(clean));
+  return { ok: true };
+}
+
+export function planDef(id) {
+  const base = PLANS[id] || PLANS.free;
+  const extra = limitOverrides()[id] || {};
+  return { ...base, ...extra };
+}
+
+export function planOf(user) {
+  return planDef(user?.plan);
+}
+
+import { getSetting, setSetting } from './settings.js';
 
 // Округление до копеек
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -91,7 +145,7 @@ export function getTestPrice() {
 export function publicPlans() {
   const offers = getPremiumOffers();
   return {
-    free: PLANS.free,
-    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.finalPrice ?? PLANS.premium.priceMonthly }
+    free: planDef('free'),
+    premium: { ...planDef('premium'), offers, priceMonthly: offers[0]?.finalPrice ?? PLANS.premium.priceMonthly }
   };
 }

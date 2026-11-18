@@ -9,7 +9,7 @@ const items = [
   { icon: '🔌', t: 'API', to: '/app/apikeys' },
   { icon: '🛡️', t: 'Честный ЗНАК', to: '/app/cz' },
   { icon: '⭐', t: 'Отзывы', to: '/app/reviews' },
-  ...(store.user?.role === 'admin' ? [{ icon: '⚙️', t: 'Админка', to: '/app/admin' }] : [])
+  ...(['admin', 'support'].includes(store.user?.role) ? [{ icon: '⚙️', t: 'Админка', to: '/app/admin' }] : [])
 ];
 </script>
 

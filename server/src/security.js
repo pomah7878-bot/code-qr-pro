@@ -27,4 +27,15 @@ export async function securityHeaders(req, reply) {
   }
 }
 
+// Простая защита от CSRF: изменяющие запросы из браузера должны приходить с того же хоста
+export async function sameOriginGuard(req, reply) {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
+  const origin = req.headers.origin;
+  if (!origin) return; // curl, 1С, серверные интеграции
+  let host;
+  try { host = new URL(origin).host; } catch { return reply.code(403).send({ error: 'Некорректный Origin' }); }
+  const target = req.headers['x-forwarded-host'] || req.headers.host;
+  if (host !== target) return reply.code(403).send({ error: 'Запрос с чужого источника отклонён' });
+}
+
 export const isRowIndex = (v) => /^\d{1,6}$/.test(String(v));

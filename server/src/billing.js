@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice } from './plans.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
+import { validatePromo, redeemPromo } from './lib/promo.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru';
@@ -45,7 +46,7 @@ export function activatePremium(userId, provider, externalId, orderId, days = 30
   })();
 }
 
-export async function createCheckout(user, planId = 'premium', days = null) {
+export async function createCheckout(user, planId = 'premium', days = null, promoCode = '') {
   // валидация тарифа/периода ДО проверки провайдера
   let amount, termDays;
   if (planId === 'test') {
@@ -71,12 +72,27 @@ export async function createCheckout(user, planId = 'premium', days = null) {
     e.statusCode = 400;
     throw e;
   }
+
+  let promo = null;
+  if (promoCode) {
+    const checked = validatePromo({ code: promoCode, userId: user.id, amount, days: termDays, plan: planId });
+    if (checked.error) {
+      const e = new Error(checked.error);
+      e.statusCode = 400;
+      throw e;
+    }
+    promo = checked;
+    amount = checked.finalAmount;
+    termDays = checked.days;
+  }
+
   if (!providerConfigured()) {
     const e = new Error('Платёжный провайдер не настроен. Обратитесь к администратору.');
     e.statusCode = 503;
     throw e;
   }
-  const info = db.prepare('INSERT INTO orders (user_id, plan, amount, days) VALUES (?, ?, ?, ?)').run(user.id, planId, amount, termDays);
+  const info = db.prepare('INSERT INTO orders (user_id, plan, amount, days, promo_code, discount) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(user.id, planId, amount, termDays, promo?.code || null, promo?.discount || 0);
   const orderId = info.lastInsertRowid;
   const description = planId === 'test'
     ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM ' + termDays + ' дней)'
@@ -115,6 +131,7 @@ export async function checkOrder(order) {
   if (data.status === 'succeeded') {
     activatePremium(order.user_id, 'yookassa', data.id, order.id, order.days || 30);
     const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+    redeemPromo(paid);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
     notifyPayment(paid, u);
   } else if (data.status === 'canceled') {

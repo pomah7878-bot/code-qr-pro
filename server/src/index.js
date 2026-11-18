@@ -11,19 +11,27 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerAdminRoutes } from './routes-admin.js';
 import { registerAdminUserRoutes } from './routes-admin-users.js';
 import { registerAdminOrderRoutes } from './routes-admin-orders.js';
+import { registerAdminAnalyticsRoutes } from './routes-admin-analytics.js';
+import { registerTwoFactorRoutes } from './routes-2fa.js';
+import { registerAdminAuditRoutes } from './routes-admin-audit.js';
+import { registerAdminPromoRoutes } from './routes-admin-promo.js';
+import { registerAdminMailRoutes } from './routes-admin-mail.js';
 import { registerApiRoutes } from './routes-api.js';
 import { registerReviewRoutes } from './routes-reviews.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
+import { startMailQueue } from './lib/mail-queue.js';
 import { notifyConfigured } from './notify.js';
-import { rateLimitHook, securityHeaders } from './security.js';
+import { rateLimitHook, securityHeaders, sameOriginGuard } from './security.js';
 import { db } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 8 * 1024 * 1024 });
 
 app.addHook('onRequest', securityHeaders);
+app.addHook('onRequest', sameOriginGuard);
 app.addHook('onRequest', rateLimitHook());
 setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
+setInterval(() => db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now','-365 days')").run(), 86400000).unref();
 
 await app.register(cookie);
 await registerRoutes(app);
@@ -33,9 +41,15 @@ await registerBillingRoutes(app);
 await registerAdminRoutes(app);
 await registerAdminUserRoutes(app);
 await registerAdminOrderRoutes(app);
+await registerAdminAnalyticsRoutes(app);
+await registerTwoFactorRoutes(app);
+await registerAdminAuditRoutes(app);
+await registerAdminPromoRoutes(app);
+await registerAdminMailRoutes(app);
 await registerApiRoutes(app);
 await registerReviewRoutes(app);
 startBillingSweeper();
+startMailQueue();
 app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');

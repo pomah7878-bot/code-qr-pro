@@ -16,17 +16,18 @@ export function verifyPassword(password, stored) {
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 
-export function createSession(userId) {
+export function createSession(userId, meta = {}) {
   const token = randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, expires);
+  db.prepare('INSERT INTO sessions (token, user_id, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)')
+    .run(token, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200));
   return { token, expires };
 }
 
 export function sessionUser(token) {
   if (!token) return null;
   const row = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.created_at
+    `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.totp_enabled, u.created_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > datetime('now')`
   ).get(token);
@@ -42,6 +43,7 @@ export function publicUser(u) {
     id: u.id, email: u.email, name: u.name, role: u.role, plan: u.plan,
     status: u.status || 'active',
     mustChangePassword: Boolean(u.must_change_password),
+    twoFactorEnabled: Boolean(u.totp_enabled),
     createdAt: u.created_at
   };
 }

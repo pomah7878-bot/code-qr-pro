@@ -2,6 +2,7 @@ import { db, usageToday } from './db.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser } from './auth.js';
 import { PLANS, planOf, publicPlans } from './plans.js';
 import { notifyRegistration } from './notify.js';
+import { issueTicket } from './lib/twofa-ticket.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const attempts = new Map(); // ip -> { n, reset }
@@ -50,7 +51,7 @@ export async function registerRoutes(app) {
     if (db.prepare('SELECT COUNT(*) c FROM users').get().c === 1) {
       db.prepare("UPDATE users SET role='admin' WHERE id=?").run(info.lastInsertRowid);
     }
-    const { token, expires } = createSession(info.lastInsertRowid);
+    const { token, expires } = createSession(info.lastInsertRowid, { ip: req.ip, ua: req.headers['user-agent'] });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
@@ -68,8 +69,11 @@ export async function registerRoutes(app) {
     if (user.status === 'blocked') {
       return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
     }
+    if (user.totp_enabled) {
+      return { twoFactor: true, ticket: issueTicket(user.id), email: user.email };
+    }
     db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
-    const { token, expires } = createSession(user.id);
+    const { token, expires } = createSession(user.id, { ip: req.ip, ua: req.headers['user-agent'] });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     return { user: publicUser(user) };
   });

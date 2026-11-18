@@ -4,7 +4,8 @@ import { hashPassword } from './auth.js';
 import { activatePremium } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { removeJobFiles } from './jobs.js';
-import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
+import { requireAdmin, requireStaff, paging, sendCsv, like, dateOnly } from './lib/admin.js';
+import { audit } from './lib/audit.js';
 
 const ROLES = ['user', 'support', 'admin'];
 const SESSION_RE = /^[a-f0-9]{64}$/;
@@ -80,7 +81,7 @@ function userFilters(query) {
 
 export async function registerAdminUserRoutes(app) {
   // Список клиентов: поиск, фильтры, пагинация
-  app.get('/api/admin/users', { preHandler: requireAdmin }, async (req) => {
+  app.get('/api/admin/users', { preHandler: requireStaff }, async (req) => {
     const { page, per, offset } = paging(req.query);
     const { whereSql, params } = userFilters(req.query);
     const users = db.prepare(`
@@ -99,7 +100,7 @@ export async function registerAdminUserRoutes(app) {
     return { users, total, page, per, pages: Math.max(1, Math.ceil(total / per)) };
   });
 
-  app.get('/api/admin/users/export.csv', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get('/api/admin/users/export.csv', { preHandler: requireStaff }, async (req, reply) => {
     const { whereSql, params } = userFilters(req.query);
     const rows = db.prepare(`
       SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.created_at, u.last_login_at,
@@ -113,7 +114,7 @@ export async function registerAdminUserRoutes(app) {
   });
 
   // Карточка клиента: всё, что нужно для решения по нему
-  app.get('/api/admin/users/:id', { preHandler: requireAdmin }, async (req, reply) => {
+  app.get('/api/admin/users/:id', { preHandler: requireStaff }, async (req, reply) => {
     const user = getUser(req.params.id);
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const subscription = activeSub(user.id);
@@ -121,7 +122,7 @@ export async function registerAdminUserRoutes(app) {
     const orders = db.prepare('SELECT * FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50').all(user.id);
     const jobs = db.prepare('SELECT id,name,mode,format,status,total,valid,done,error,created_at,finished_at FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 50').all(user.id);
     const apiKeys = db.prepare('SELECT id,name,prefix,created_at,last_used_at FROM api_keys WHERE user_id=? ORDER BY id DESC').all(user.id);
-    const sessions = db.prepare("SELECT token, created_at, expires_at FROM sessions WHERE user_id=? AND expires_at > datetime('now') ORDER BY created_at DESC").all(user.id);
+    const sessions = db.prepare("SELECT token, created_at, expires_at, ip, user_agent FROM sessions WHERE user_id=? AND expires_at > datetime('now') ORDER BY created_at DESC").all(user.id);
     const review = db.prepare('SELECT id,rating,text,status,created_at FROM reviews WHERE user_id=?').get(user.id) || null;
     return {
       user: publicAdminUser(user),
@@ -146,6 +147,7 @@ export async function registerAdminUserRoutes(app) {
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     activatePremium(user.id, 'admin', null, null, days);
     notifyStatusChange(user, `Администратор выдал PREMIUM на ${days} дн.`);
+    audit(req, 'user.grant', 'user', user.id, { days });
     const sub = activeSub(user.id);
     return { ok: true, premiumUntil: sub?.expires_at || null, user: publicAdminUser(getUser(user.id)) };
   });
@@ -158,6 +160,7 @@ export async function registerAdminUserRoutes(app) {
       db.prepare("UPDATE users SET plan='free' WHERE id=?").run(user.id);
     })();
     notifyStatusChange(user, 'Администратор снял PREMIUM');
+    audit(req, 'user.revoke', 'user', user.id, {});
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
@@ -175,6 +178,7 @@ export async function registerAdminUserRoutes(app) {
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     })();
     notifyStatusChange(user, 'Администратор заблокировал аккаунт' + (reason ? ': ' + reason : ''));
+    audit(req, 'user.block', 'user', user.id, { reason });
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
@@ -183,6 +187,7 @@ export async function registerAdminUserRoutes(app) {
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     db.prepare("UPDATE users SET status='active', blocked_at=NULL, blocked_reason='' WHERE id=?").run(user.id);
     notifyStatusChange(user, 'Администратор разблокировал аккаунт');
+    audit(req, 'user.unblock', 'user', user.id, {});
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
@@ -195,8 +200,10 @@ export async function registerAdminUserRoutes(app) {
     if (user.role === 'admin' && role !== 'admin' && adminCount() <= 1) {
       return reply.code(400).send({ error: 'Нельзя снять последнего администратора' });
     }
+    const before = user.role;
     db.prepare('UPDATE users SET role=? WHERE id=?').run(role, user.id);
     notifyStatusChange(user, 'Администратор изменил роль: ' + role);
+    audit(req, 'user.role', 'user', user.id, { from: before, to: role });
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
@@ -212,6 +219,7 @@ export async function registerAdminUserRoutes(app) {
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     })();
     notifyStatusChange(user, 'Администратор сбросил пароль — потребуется смена при входе');
+    audit(req, 'user.password_reset', 'user', user.id, {});
     return { ok: true, password, warning: 'Пароль показывается один раз — передайте его клиенту' };
   });
 
@@ -240,6 +248,7 @@ export async function registerAdminUserRoutes(app) {
       try { removeJobFiles(job.id); } catch { /* файлы могли быть уже удалены */ }
     }
     db.prepare('DELETE FROM users WHERE id=?').run(user.id);
+    audit(req, 'user.delete', 'user', user.id, { email: user.email, jobs: jobs.length });
     return { ok: true, deleted: { id: user.id, email: user.email } };
   });
 
@@ -248,6 +257,7 @@ export async function registerAdminUserRoutes(app) {
     const user = getUser(req.params.id);
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const r = db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    audit(req, 'session.kill_all', 'user', user.id, { removed: r.changes });
     return { ok: true, removed: r.changes };
   });
 
@@ -255,8 +265,10 @@ export async function registerAdminUserRoutes(app) {
   app.delete('/api/admin/sessions/:token', { preHandler: requireAdmin }, async (req, reply) => {
     const token = String(req.params.token || '');
     if (!SESSION_RE.test(token)) return reply.code(400).send({ error: 'Некорректный идентификатор сессии' });
+    const session = db.prepare('SELECT user_id FROM sessions WHERE token=?').get(token);
     const r = db.prepare('DELETE FROM sessions WHERE token=?').run(token);
     if (!r.changes) return reply.code(404).send({ error: 'Сессия не найдена' });
+    audit(req, 'session.kill', 'user', session?.user_id || '', { prefix: token.slice(0, 8) });
     return { ok: true };
   });
 }

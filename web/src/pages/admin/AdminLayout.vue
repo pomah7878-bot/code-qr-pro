@@ -6,12 +6,18 @@ import SideNav from '../../components/SideNav.vue';
 
 const route = useRoute();
 const isAdmin = computed(() => store.user?.role === 'admin');
-const links = [
-  { to: '/app/admin', label: 'Обзор' },
-  { to: '/app/admin/users', label: 'Клиенты' },
-  { to: '/app/admin/orders', label: 'Платежи' },
-  { to: '/app/admin/settings', label: 'Настройки' }
-];
+const links = computed(() => {
+  const all = [
+    { to: '/app/admin', label: 'Обзор', adminOnly: true },
+    { to: '/app/admin/users', label: 'Клиенты' },
+    { to: '/app/admin/orders', label: 'Платежи', adminOnly: true },
+    { to: '/app/admin/jobs', label: 'Задания' },
+    { to: '/app/admin/marketing', label: 'Маркетинг', adminOnly: true },
+    { to: '/app/admin/audit', label: 'Журнал', adminOnly: true },
+    { to: '/app/admin/settings', label: 'Настройки', adminOnly: true }
+  ];
+  return store.user?.role === 'admin' ? all : all.filter((l) => !l.adminOnly);
+});
 const isActive = (to) => (to === '/app/admin' ? route.path === '/app/admin' : route.path === to || route.path.startsWith(to + '/'));
 </script>
 

@@ -1,18 +1,44 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { createCheckout, checkOrder, providerConfigured } from './billing.js';
-import { PURCHASABLE } from './plans.js';
+import { PURCHASABLE, getPremiumOffers, offerFinalPrice } from './plans.js';
+import { validatePromo } from './lib/promo.js';
 
 export async function registerBillingRoutes(app) {
   app.post('/api/billing/checkout', { preHandler: requireAuth }, async (req, reply) => {
-    const { plan, days } = req.body || {};
+    const { plan, days, promoCode } = req.body || {};
     if (!PURCHASABLE.includes(plan)) return reply.code(400).send({ error: 'Недоступный тариф' });
     try {
-      const order = await createCheckout(req.user, plan, days ?? null);
+      const order = await createCheckout(req.user, plan, days ?? null, promoCode || '');
       return { order: { id: order.id, amount: order.amount, status: order.status, confirmationUrl: order.confirmation_url } };
     } catch (e) {
       return reply.code(e.statusCode || 502).send({ error: String(e.message || e) });
     }
+  });
+
+  // Проверка промокода и итоговой цены до создания платежа
+  app.post('/api/billing/promo/check', { preHandler: requireAuth }, async (req, reply) => {
+    const offers = getPremiumOffers();
+    const days = req.body?.days;
+    const offer = days != null ? offers.find((o) => o.days === Number(days)) : offers[0];
+    if (!offer) return reply.code(400).send({ error: 'Недоступный период подписки' });
+    const checked = validatePromo({
+      code: req.body?.code,
+      userId: req.user.id,
+      amount: offerFinalPrice(offer),
+      days: offer.days,
+      plan: 'premium'
+    });
+    if (checked.error) return reply.code(400).send({ error: checked.error });
+    return {
+      ok: true,
+      code: checked.code,
+      kind: checked.kind,
+      discount: checked.discount,
+      bonusDays: checked.bonusDays,
+      finalAmount: checked.finalAmount,
+      days: checked.days
+    };
   });
 
   app.post('/api/billing/check', { preHandler: requireAuth }, async (req, reply) => {

@@ -25,6 +25,7 @@ const user = computed(() => data.value?.user || null);
 const premiumUntil = computed(() => data.value?.premiumUntil || null);
 const days = computed(() => daysLeft(premiumUntil.value));
 const isSelf = computed(() => Boolean(user.value && store.user && user.value.id === store.user.id));
+const isAdmin = computed(() => store.user?.role === 'admin');
 const initials = computed(() => {
   const src = (user.value?.name || user.value?.email || '?').trim();
   return src.slice(0, 2).toUpperCase();
@@ -230,7 +231,7 @@ onMounted(load);
         </div>
       </div>
 
-      <div class="grid md:grid-cols-2 gap-5">
+      <div v-if="isAdmin" class="grid md:grid-cols-2 gap-5">
         <!-- PREMIUM -->
         <div class="glass rounded-2xl p-5">
           <div class="flex items-center justify-between gap-2">
@@ -283,7 +284,7 @@ onMounted(load);
       </div>
 
       <!-- Заметка -->
-      <div class="glass rounded-2xl p-5">
+      <div v-if="isAdmin" class="glass rounded-2xl p-5">
         <label class="label" for="admin-user-note">Заметка администратора</label>
         <textarea id="admin-user-note" v-model="noteDraft" rows="3" maxlength="1000" class="input text-sm" placeholder="Например: договорились о продлении, проблема с оплатой…"></textarea>
         <div class="flex justify-end mt-2">
@@ -358,8 +359,9 @@ onMounted(load);
               <div>
                 <div class="font-mono text-xs">{{ s.token.slice(0, 10) }}…</div>
                 <div class="text-xs text-slate-500">создана {{ fmtDateTime(s.created_at) }} · до {{ fmtDateTime(s.expires_at) }}</div>
+                <div v-if="s.ip || s.user_agent" class="text-[11px] text-slate-500 truncate max-w-[360px]">{{ s.ip || '—' }} · {{ s.user_agent || '' }}</div>
               </div>
-              <button class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" @click="killSession(s.token)">Завершить</button>
+              <button v-if="isAdmin" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" @click="killSession(s.token)">Завершить</button>
             </div>
           </div>
           <div>

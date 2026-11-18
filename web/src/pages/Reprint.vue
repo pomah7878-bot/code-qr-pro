@@ -47,6 +47,7 @@ const notice = ref('');
 const result = ref(null);
 const shortWarning = ref('');
 const qrOnly = ref(true);
+const qrMargin = ref(1);
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
@@ -515,7 +516,7 @@ function buildTemplate() {
   const f = currentFormat.value;
   const W = f.w, H = f.h;
   if (qrOnly.value) {
-    const margin = Math.max(1, Math.min(3, Math.min(W, H) * 0.05));
+    const margin = Math.max(0.5, Math.min(3, Number(qrMargin.value) || 1));
     const size = Math.min(W - 2 * margin, H - 2 * margin);
     return {
       name: `QR · ${f.label}`,
@@ -641,6 +642,11 @@ async function downloadPdf() {
             <input v-model="qrOnly" type="checkbox" class="mt-0.5">
             <span><b>Только DataMatrix — QR на всю этикетку</b><br><span class="text-xs text-slate-500">Квадратный код вписывается по меньшей стороне, по краям остаётся небольшой отступ для печати.</span></span>
           </label>
+          <div v-if="qrOnly" class="flex items-center gap-2 text-xs text-slate-500">
+            <label for="qr-margin">Отступ, мм</label>
+            <input id="qr-margin" v-model.number="qrMargin" type="number" min="0.5" max="3" step="0.5" class="input !py-1 !px-2 text-xs w-20">
+            <span>0.5–1 мм — код крупнее, но следи за считываемостью.</span>
+          </div>
           <div v-if="!qrOnly">
             <div class="text-xs text-slate-500 mb-2">Выводить на этикетке</div>
             <label class="flex items-center gap-2 text-sm mb-1.5"><input type="checkbox" checked disabled> GS1 DataMatrix (всегда)</label>

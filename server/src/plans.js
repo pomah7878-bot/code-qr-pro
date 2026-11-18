@@ -46,3 +46,38 @@ export const PURCHASABLE = ['premium', 'test'];
 export function planOf(user) {
   return PLANS[user?.plan] || PLANS.free;
 }
+
+import { getSetting } from './settings.js';
+
+// Редактируемые периоды PREMIUM: [{days, price}]. По умолчанию 30 дней / 1990 ₽.
+export function getPremiumOffers() {
+  try {
+    const raw = getSetting('premium_offers', '');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) {
+        return arr.filter(o => Number.isFinite(o.days) && o.days > 0 && Number.isFinite(o.price) && o.price >= 0)
+          .map(o => ({ days: Math.round(o.days), price: Math.round(o.price * 100) / 100 }))
+          .sort((a, b) => a.days - b.days);
+      }
+    }
+  } catch { /* битый JSON — fallback */ }
+  return [{ days: 30, price: PLANS.premium.priceMonthly }];
+}
+
+export function getTestPrice() {
+  const raw = getSetting('test_price', '');
+  if (raw === '') return PLANS.test.priceMonthly;
+  const v = Number(raw);
+  return Number.isFinite(v) && v > 0 ? v : PLANS.test.priceMonthly;
+}
+
+// Публичное представление тарифов для витрины/checkout
+export function publicPlans() {
+  const offers = getPremiumOffers();
+  return {
+    free: PLANS.free,
+    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.price ?? PLANS.premium.priceMonthly },
+    test: { ...PLANS.test, priceMonthly: getTestPrice() }
+  };
+}

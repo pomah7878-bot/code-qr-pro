@@ -5,11 +5,11 @@ import { PURCHASABLE } from './plans.js';
 
 export async function registerBillingRoutes(app) {
   app.post('/api/billing/checkout', { preHandler: requireAuth }, async (req, reply) => {
-    const { plan } = req.body || {};
+    const { plan, days } = req.body || {};
     if (!PURCHASABLE.includes(plan)) return reply.code(400).send({ error: 'Недоступный тариф' });
     if (plan === 'test' && req.user.role !== 'admin') return reply.code(403).send({ error: 'Тестовый тариф доступен только администратору' });
     try {
-      const order = await createCheckout(req.user, plan);
+      const order = await createCheckout(req.user, plan, days ?? null);
       return { order: { id: order.id, amount: order.amount, status: order.status, confirmationUrl: order.confirmation_url } };
     } catch (e) {
       return reply.code(e.statusCode || 502).send({ error: String(e.message || e) });

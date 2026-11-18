@@ -10,6 +10,7 @@ import Billing from './pages/Billing.vue';
 import Admin from './pages/Admin.vue';
 import ApiKeys from './pages/ApiKeys.vue';
 import Cz from './pages/Cz.vue';
+import Reviews from './pages/Reviews.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -24,6 +25,7 @@ const router = createRouter({
     { path: '/app/admin', component: Admin, meta: { auth: true } },
     { path: '/app/apikeys', component: ApiKeys, meta: { auth: true } },
     { path: '/app/cz', component: Cz, meta: { auth: true } },
+    { path: '/app/reviews', component: Reviews, meta: { auth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
   scrollBehavior: () => ({ top: 0 })

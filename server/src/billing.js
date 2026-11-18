@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { PLANS } from './plans.js';
+import { PLANS, getPremiumOffers, getTestPrice } from './plans.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
@@ -28,11 +28,12 @@ async function yk(method, path, body) {
 
 const sqlNow = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
 
-export function activatePremium(userId, provider, externalId, orderId) {
+export function activatePremium(userId, provider, externalId, orderId, days = 30) {
+  const termDays = Number.isFinite(days) && days > 0 ? days : 30;
   db.transaction(() => {
     const active = db.prepare("SELECT * FROM subscriptions WHERE user_id=? AND plan='premium' AND status='active' AND expires_at > datetime('now') ORDER BY expires_at DESC LIMIT 1").get(userId);
     const base = active ? new Date(active.expires_at.replace(' ', 'T') + 'Z').getTime() : Date.now();
-    const expires = sqlNow(new Date(Math.max(base, Date.now()) + 30 * 86400000));
+    const expires = sqlNow(new Date(Math.max(base, Date.now()) + termDays * 86400000));
     if (active) {
       db.prepare('UPDATE subscriptions SET expires_at=? WHERE id=?').run(expires, active.id);
     } else {
@@ -44,25 +45,42 @@ export function activatePremium(userId, provider, externalId, orderId) {
   })();
 }
 
-export async function createCheckout(user, planId = 'premium') {
+export async function createCheckout(user, planId = 'premium', days = null) {
+  // валидация тарифа/периода ДО проверки провайдера
+  let amount, termDays;
+  if (planId === 'test') {
+    amount = getTestPrice();
+    termDays = 30;
+  } else if (planId === 'premium') {
+    const offers = getPremiumOffers();
+    const offer = days != null ? offers.find(o => o.days === Number(days)) : offers[0];
+    if (!offer) {
+      const e = new Error('Недоступный период подписки');
+      e.statusCode = 400;
+      throw e;
+    }
+    amount = offer.price;
+    termDays = offer.days;
+  } else {
+    const e = new Error('Неизвестный тариф');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!(amount > 0)) {
+    const e = new Error('Некорректная цена тарифа');
+    e.statusCode = 400;
+    throw e;
+  }
   if (!providerConfigured()) {
     const e = new Error('Платёжный провайдер не настроен. Обратитесь к администратору.');
     e.statusCode = 503;
     throw e;
   }
-  const plan = PLANS[planId];
-  if (!plan || !plan.priceMonthly) {
-    const e = new Error('Неизвестный тариф');
-    e.statusCode = 400;
-    throw e;
-  }
-  const amount = plan.priceMonthly;
-  // test-тариф записывается в orders как 'test', но активирует premium-доступ
-  const info = db.prepare('INSERT INTO orders (user_id, plan, amount) VALUES (?, ?, ?)').run(user.id, planId, amount);
+  const info = db.prepare('INSERT INTO orders (user_id, plan, amount, days) VALUES (?, ?, ?, ?)').run(user.id, planId, amount, termDays);
   const orderId = info.lastInsertRowid;
   const description = planId === 'test'
-    ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM 30 дней)'
-    : 'PREMIUM подписка CODE QR PRO (30 дней)';
+    ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM ' + termDays + ' дней)'
+    : 'PREMIUM подписка CODE QR PRO (' + termDays + ' дней)';
   try {
     const data = await yk('POST', '/payments', {
       amount: { value: amount.toFixed(2), currency: 'RUB' },
@@ -95,7 +113,7 @@ export async function checkOrder(order) {
   if (order.status !== 'pending' || !order.external_id) return order;
   const data = await yk('GET', '/payments/' + order.external_id);
   if (data.status === 'succeeded') {
-    activatePremium(order.user_id, 'yookassa', data.id, order.id);
+    activatePremium(order.user_id, 'yookassa', data.id, order.id, order.days || 30);
     const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
     notifyPayment(paid, u);

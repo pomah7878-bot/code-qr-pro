@@ -9,6 +9,9 @@ const users = ref([]);
 const orders = ref([]);
 const cz = ref({ czEnabled: false, czApiUrl: '', czConfigured: false });
 const czToken = ref('');
+const offers = ref([]);
+const testPrice = ref(1);
+const reviews = ref([]);
 const error = ref('');
 const notice = ref('');
 const isAdmin = store.user?.role === 'admin';
@@ -20,7 +23,32 @@ async function load() {
     users.value = (await api.adminUsers()).users;
     orders.value = (await api.adminOrders()).orders;
     cz.value = await api.adminSettings();
+    const pr = await api.adminPricing();
+    offers.value = pr.offers.map(o => ({ ...o }));
+    testPrice.value = pr.testPrice;
+    reviews.value = (await api.adminReviews()).reviews;
   } catch (e) { error.value = e.message; }
+}
+function addOffer() { offers.value.push({ days: 30, price: 1990 }); }
+function removeOffer(i) { offers.value.splice(i, 1); }
+async function savePricing() {
+  error.value = '';
+  try {
+    const d = await api.adminSavePricing({ offers: offers.value, testPrice: testPrice.value });
+    offers.value = d.offers.map(o => ({ ...o }));
+    testPrice.value = d.testPrice;
+    notice.value = 'Тарифы сохранены';
+  } catch (e) { error.value = e.message; }
+}
+async function moderate(r, status) {
+  error.value = '';
+  try { await api.adminModerateReview(r.id, { status }); notice.value = 'Отзыв №' + r.id + ': ' + status; reviews.value = (await api.adminReviews()).reviews; }
+  catch (e) { error.value = e.message; }
+}
+async function delReview(r) {
+  error.value = '';
+  try { await api.deleteReview(r.id); reviews.value = (await api.adminReviews()).reviews; }
+  catch (e) { error.value = e.message; }
 }
 async function setPlan(u, plan) {
   error.value = '';
@@ -76,6 +104,42 @@ onMounted(load);
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="glass rounded-2xl p-6">
+        <h2 class="font-display font-semibold mb-1">💳 Тарифы PREMIUM</h2>
+        <p class="text-xs text-slate-500 mb-4">Периоды подписки и цены. Клиенты выберут период на странице оплаты. Срок 1–3650 дней, цена 1–1 000 000 ₽.</p>
+        <div class="space-y-2">
+          <div v-for="(o, i) in offers" :key="i" class="flex items-center gap-3">
+            <div class="flex items-center gap-1"><input v-model.number="o.days" type="number" min="1" max="3650" class="input !py-2 text-sm w-24"><span class="text-sm text-slate-500">дн.</span></div>
+            <div class="flex items-center gap-1"><input v-model.number="o.price" type="number" min="1" class="input !py-2 text-sm w-32"><span class="text-sm text-slate-500">₽</span></div>
+            <button class="text-slate-400 hover:text-red-500 ml-auto" @click="removeOffer(i)" title="Удалить период">✕</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-3 mt-4 items-center">
+          <button class="btn-ghost !py-2 text-sm" @click="addOffer">+ Добавить период</button>
+          <div class="flex items-center gap-2 ml-auto"><span class="text-sm text-slate-500">TEST:</span><input v-model.number="testPrice" type="number" min="1" class="input !py-2 text-sm w-24"><span class="text-sm text-slate-500">₽</span></div>
+        </div>
+        <button class="btn-primary !py-2 mt-4" @click="savePricing">Сохранить тарифы</button>
+      </div>
+
+      <div class="glass rounded-2xl p-6 overflow-x-auto">
+        <h2 class="font-display font-semibold mb-4">⭐ Отзывы клиентов</h2>
+        <p v-if="!reviews.length" class="text-sm text-slate-500">Отзывов пока нет.</p>
+        <div v-for="r in reviews" :key="r.id" class="border-b border-slate-100 dark:border-white/5 py-3">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-amber-500">{{ '★'.repeat(r.rating) }}{{ '☆'.repeat(5 - r.rating) }}</span>
+            <b>{{ r.author_name || 'Клиент' }}</b>
+            <span class="text-xs text-slate-500">{{ r.email }}</span>
+            <span class="chip-soon ml-auto" :class="r.status === 'approved' ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : r.status === 'hidden' ? '!text-red-500 !border-red-500/30 !bg-red-500/10' : ''">{{ r.status }}</span>
+          </div>
+          <p class="text-sm mt-1 text-slate-600 dark:text-slate-300">{{ r.text }}</p>
+          <div class="flex gap-2 mt-2">
+            <button v-if="r.status !== 'approved'" class="btn-ghost !py-1 !px-2 text-xs text-emerald-500" @click="moderate(r, 'approved')">Одобрить</button>
+            <button v-if="r.status !== 'hidden'" class="btn-ghost !py-1 !px-2 text-xs text-amber-500" @click="moderate(r, 'hidden')">Скрыть</button>
+            <button class="btn-ghost !py-1 !px-2 text-xs text-red-500" @click="delReview(r)">Удалить</button>
+          </div>
+        </div>
       </div>
 
       <div class="glass rounded-2xl p-6">

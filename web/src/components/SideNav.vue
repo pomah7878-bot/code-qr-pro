@@ -9,6 +9,7 @@ const items = [
   { icon: '💳', t: 'Подписка', to: '/app/billing' },
   { icon: '🔌', t: 'API', to: '/app/apikeys' },
   { icon: '🛡️', t: 'Честный ЗНАК', to: '/app/cz' },
+  { icon: '⭐', t: 'Отзывы', to: '/app/reviews' },
   ...(store.user?.role === 'admin' ? [{ icon: '⚙️', t: 'Админка', to: '/app/admin' }] : [])
 ];
 </script>

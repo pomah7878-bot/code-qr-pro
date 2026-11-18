@@ -10,6 +10,7 @@ import { registerLabelRoutes } from './routes-labels.js';
 import { registerBillingRoutes } from './routes-billing.js';
 import { registerAdminRoutes } from './routes-admin.js';
 import { registerApiRoutes } from './routes-api.js';
+import { registerReviewRoutes } from './routes-reviews.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { notifyConfigured } from './notify.js';
 import { rateLimitHook, securityHeaders } from './security.js';
@@ -29,6 +30,7 @@ await registerLabelRoutes(app);
 await registerBillingRoutes(app);
 await registerAdminRoutes(app);
 await registerApiRoutes(app);
+await registerReviewRoutes(app);
 startBillingSweeper();
 app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 

@@ -9,22 +9,32 @@ const route = useRoute();
 const sub = ref(null);
 const providerOk = ref(true);
 const orders = ref([]);
+const offers = ref([{ days: 30, price: 1990 }]);
+const selectedDays = ref(30);
+const testPrice = ref(1);
 const error = ref('');
 const notice = ref('');
 const busy = ref(false);
+const selectedOffer = () => offers.value.find(o => o.days === selectedDays.value) || offers.value[0];
 
 async function load() {
   try {
     const d = await api.subscription();
     sub.value = d.subscription; providerOk.value = d.providerConfigured;
     orders.value = (await api.orders()).orders;
+    const plans = (await api.plans()).plans;
+    const prem = plans.find(p => p.id === 'premium');
+    if (prem?.offers?.length) { offers.value = prem.offers; selectedDays.value = prem.offers[0].days; }
+    const t = plans.find(p => p.id === 'test');
+    if (t) testPrice.value = t.priceMonthly;
   } catch (e) { error.value = e.message; }
 }
 const isAdmin = store.user?.role === 'admin';
 async function checkout(plan = 'premium') {
   error.value = ''; busy.value = true;
   try {
-    const d = await api.checkout({ plan });
+    const body = plan === 'premium' ? { plan, days: selectedDays.value } : { plan };
+    const d = await api.checkout(body);
     if (d.order.confirmationUrl) window.location.href = d.order.confirmationUrl;
     else error.value = 'Не получена ссылка на оплату';
   } catch (e) { error.value = e.message; }
@@ -61,29 +71,41 @@ onMounted(async () => {
             <div class="font-display font-extrabold text-2xl" :class="store.plan?.id === 'premium' ? 'grad-text' : ''">{{ store.plan?.title }}</div>
             <div v-if="sub" class="text-sm text-emerald-500 mt-1">PREMIUM активен до {{ fmt(sub.expires_at) }}</div>
           </div>
-          <div v-if="store.plan?.id !== 'premium'" class="text-right">
-            <div class="text-3xl font-extrabold">1 990 ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
-            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('premium')">{{ busy ? 'Создаём заказ…' : 'Оформить PREMIUM' }}</button>
+        </div>
+        <div class="mt-5">
+          <div class="text-sm text-slate-500 mb-2">Выберите период подписки:</div>
+          <div class="flex flex-wrap gap-3">
+            <button v-for="o in offers" :key="o.days" @click="selectedDays = o.days"
+              class="rounded-xl border px-5 py-3 text-left transition"
+              :class="selectedDays === o.days ? 'border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40' : 'border-slate-200 dark:border-white/15 hover:border-brand-500/50'">
+              <div class="font-display font-bold text-lg">{{ o.price.toLocaleString('ru') }} ₽</div>
+              <div class="text-xs text-slate-500">{{ o.days }} дней<span v-if="o.days > 30"> · {{ Math.round(o.price / o.days * 30).toLocaleString('ru') }} ₽/мес</span></div>
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-4 mt-5">
+          <ul class="grid md:grid-cols-2 gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <li>✓ 10 000 кодов в день</li><li>✓ Пакеты до 5 000 строк</li>
+            <li>✓ Экспорт ZIP и PDF</li><li>✓ Редактор этикеток + Print Bridge</li>
+            <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
+          </ul>
+          <div class="text-right">
+            <div class="text-3xl font-extrabold">{{ selectedOffer().price.toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days }} дней</span></div>
+            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('premium')">{{ busy ? 'Создаём заказ…' : (store.plan?.id === 'premium' ? 'Продлить PREMIUM' : 'Оформить PREMIUM') }}</button>
             <p v-if="!providerOk" class="text-xs text-red-500 mt-2">Платёжный провайдер не настроен — сообщите администратору</p>
           </div>
-          <button v-else class="btn-ghost" :disabled="busy" @click="checkout('premium')">Продлить на 30 дней</button>
         </div>
-        <ul class="grid md:grid-cols-2 gap-1.5 text-sm mt-5 text-slate-600 dark:text-slate-300">
-          <li>✓ 10 000 кодов в день</li><li>✓ Пакеты до 5 000 строк</li>
-          <li>✓ Экспорт ZIP и PDF</li><li>✓ Редактор этикеток + Print Bridge</li>
-          <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
-        </ul>
-        <p class="text-xs text-slate-500 mt-4">Предоплата за 30 дней через YooKassa (карта, СБП). Автопродления нет — продлевайте кнопкой. Чек приходит на email (54-ФЗ).</p>
+        <p class="text-xs text-slate-500 mt-4">Предоплата через YooKassa (карта, СБП). Автопродления нет — продлевайте кнопкой. Чек приходит на email (54-ФЗ).</p>
       </div>
 
       <div v-if="isAdmin" class="glass rounded-2xl p-6 border-amber-500/40">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div class="font-display font-semibold flex items-center gap-2">🧪 Тестовый платёж <span class="chip-soon">админ</span></div>
-            <p class="text-sm text-slate-500 mt-1">Полный PREMIUM на 30 дней за 1 ₽ — боевая проверка оплаты через YooKassa без траты 1990 ₽.</p>
+            <p class="text-sm text-slate-500 mt-1">Полный PREMIUM на 30 дней за {{ testPrice }} ₽ — боевая проверка оплаты через YooKassa.</p>
           </div>
           <div class="text-right">
-            <div class="text-3xl font-extrabold">1 ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
+            <div class="text-3xl font-extrabold">{{ testPrice }} ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
             <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('test')">{{ busy ? 'Создаём заказ…' : 'Тест за 1 ₽' }}</button>
           </div>
         </div>

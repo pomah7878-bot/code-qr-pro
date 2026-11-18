@@ -1,6 +1,6 @@
 import { db, usageToday } from './db.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser } from './auth.js';
-import { PLANS, planOf } from './plans.js';
+import { PLANS, planOf, publicPlans } from './plans.js';
 import { notifyRegistration } from './notify.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -76,7 +76,7 @@ export async function registerRoutes(app) {
     };
   });
 
-  app.get('/api/plans', async () => ({ plans: Object.values(PLANS) }));
+  app.get('/api/plans', async () => ({ plans: Object.values(publicPlans()) }));
 
   app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 5 }));
 }

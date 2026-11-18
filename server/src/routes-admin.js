@@ -2,6 +2,7 @@ import { db, today } from './db.js';
 import { requireAuth } from './routes.js';
 import { activatePremium } from './billing.js';
 import { getSetting, setSetting } from './settings.js';
+import { getPremiumOffers, getTestPrice } from './plans.js';
 import { czStatus } from './cz.js';
 import { notifyStatusChange } from './notify.js';
 
@@ -68,5 +69,39 @@ export async function registerAdminRoutes(app) {
     }
     if (czToken) setSetting('cz_token', String(czToken).slice(0, 500));
     return { ok: true };
+  });
+
+  // === Управление тарифами PREMIUM ===
+  app.get('/api/admin/pricing', { preHandler: requireAdmin }, async () => ({
+    offers: getPremiumOffers(),
+    testPrice: getTestPrice()
+  }));
+
+  app.put('/api/admin/pricing', { preHandler: requireAdmin }, async (req, reply) => {
+    const { offers, testPrice } = req.body || {};
+    if (offers !== undefined) {
+      if (!Array.isArray(offers) || offers.length === 0 || offers.length > 12) {
+        return reply.code(400).send({ error: 'Нужен 1–12 периодов подписки' });
+      }
+      const seen = new Set();
+      const clean = [];
+      for (const o of offers) {
+        const days = Math.round(Number(o.days));
+        const price = Math.round(Number(o.price) * 100) / 100;
+        if (!Number.isFinite(days) || days < 1 || days > 3650) return reply.code(400).send({ error: 'Срок: 1–3650 дней' });
+        if (!Number.isFinite(price) || price < 1 || price > 1000000) return reply.code(400).send({ error: 'Цена: 1–1 000 000 ₽' });
+        if (seen.has(days)) return reply.code(400).send({ error: 'Периоды не должны повторяться' });
+        seen.add(days);
+        clean.push({ days, price });
+      }
+      clean.sort((a, b) => a.days - b.days);
+      setSetting('premium_offers', JSON.stringify(clean));
+    }
+    if (testPrice !== undefined) {
+      const tp = Math.round(Number(testPrice) * 100) / 100;
+      if (!Number.isFinite(tp) || tp < 1 || tp > 1000000) return reply.code(400).send({ error: 'Цена TEST: 1–1 000 000 ₽' });
+      setSetting('test_price', String(tp));
+    }
+    return { offers: getPremiumOffers(), testPrice: getTestPrice() };
   });
 }

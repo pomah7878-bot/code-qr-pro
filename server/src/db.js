@@ -115,7 +115,21 @@ const MIGRATIONS = [
     prefix TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_used_at TEXT
-  );`
+  );`,
+  // v5 — редактируемые тарифы: срок подписки в заказе
+  `ALTER TABLE orders ADD COLUMN days INTEGER NOT NULL DEFAULT 30;`,
+  // v6 — отзывы клиентов
+  `CREATE TABLE reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    author_name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_reviews_status ON reviews(status);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

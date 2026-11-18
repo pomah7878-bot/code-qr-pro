@@ -3,7 +3,14 @@ import { ref, onMounted } from 'vue';
 import { api } from '../api.js';
 import DataMatrixArt from '../components/DataMatrixArt.vue';
 const plans = ref([]);
-onMounted(async () => { try { plans.value = (await api.plans()).plans; } catch {} });
+const reviews = ref([]);
+const reviewCount = ref(0);
+const reviewAvg = ref(0);
+const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+onMounted(async () => {
+  try { plans.value = (await api.plans()).plans; } catch {}
+  try { const d = await api.reviews(); reviews.value = d.reviews.slice(0, 6); reviewCount.value = d.count; reviewAvg.value = d.avgRating; } catch {}
+});
 const features = [
   { icon: '▦', title: 'GS1 DataMatrix engine', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.', soon: false },
   { icon: '📥', title: 'Импорт CSV / XLSX', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически.', soon: false },
@@ -97,6 +104,24 @@ const steps = [
             {{ p.id === 'premium' ? 'Оформить PREMIUM' : 'Начать бесплатно' }}
           </router-link>
         </div>
+      </div>
+    </section>
+
+    <!-- reviews -->
+    <section v-if="reviews.length" class="max-w-6xl mx-auto px-4 py-16">
+      <div class="text-center mb-10">
+        <h2 class="font-display font-bold text-3xl mb-2">Отзывы клиентов</h2>
+        <p class="text-slate-500"><span class="text-amber-500">★</span> {{ reviewAvg }} из 5 · {{ reviewCount }} отзывов</p>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div v-for="r in reviews" :key="r.id" class="glass rounded-2xl p-5">
+          <div class="text-amber-500 mb-2">{{ stars(r.rating) }}</div>
+          <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-3">{{ r.text }}</p>
+          <div class="text-sm font-semibold">{{ r.authorName }}</div>
+        </div>
+      </div>
+      <div class="text-center mt-8">
+        <router-link to="/app/reviews" class="btn-ghost">Все отзывы и оставить свой →</router-link>
       </div>
     </section>
 

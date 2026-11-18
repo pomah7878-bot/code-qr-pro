@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { parseKiz } from '../lib/labelData.js';
@@ -38,6 +38,65 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const result = ref(null);
+const cameraOpen = ref(false);
+const cameraError = ref('');
+const cameraSupported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+const videoEl = ref(null);
+let cameraStream = null;
+let cameraTimer = null;
+let detector = null;
+
+function addCode(raw) {
+  const code = String(raw || '').trim();
+  if (!code) return;
+  const lines = codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (!lines.includes(code)) lines.push(code);
+  codesText.value = lines.join('\n');
+  result.value = null;
+  notice.value = `Добавлен код, всего строк: ${lines.length}`;
+}
+
+async function openCamera() {
+  cameraError.value = '';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    cameraOpen.value = true;
+    await nextTick();
+    videoEl.value.srcObject = cameraStream;
+    await videoEl.value.play();
+    let supported = [];
+    try { supported = await window.BarcodeDetector.getSupportedFormats?.() || []; } catch { supported = []; }
+    const formats = ['data_matrix', 'qr_code', 'ean_13', 'code_128'].filter((f) => supported.includes(f));
+    detector = new window.BarcodeDetector(formats.length ? { formats } : undefined);
+    scanFrame();
+  } catch (e) {
+    cameraError.value = e.message;
+    cameraOpen.value = false;
+    if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
+    cameraStream = null;
+  }
+}
+
+async function scanFrame() {
+  if (!cameraOpen.value || !detector) return;
+  try {
+    const found = await detector.detect(videoEl.value);
+    if (found.length) {
+      addCode(found[0].rawValue);
+      closeCamera();
+      return;
+    }
+  } catch { /* кадр не распознан */ }
+  cameraTimer = setTimeout(scanFrame, 350);
+}
+
+function closeCamera() {
+  cameraOpen.value = false;
+  clearTimeout(cameraTimer);
+  if (cameraStream) cameraStream.getTracks().forEach((t) => t.stop());
+  cameraStream = null;
+  detector = null;
+}
 
 watch(category, (id) => {
   const c = categories.find((x) => x.id === id);
@@ -58,12 +117,20 @@ async function checkCodes() {
   if (lines.length > MAX) { error.value = `За раз можно до ${MAX} кодов, сейчас ${lines.length}`; return; }
   const parsed = lines.map(parseKiz).filter(Boolean);
   if (!parsed.length) { error.value = 'Коды не распознаны. Нужны полные коды с криптохвостом'; return; }
+  const seen = new Set();
+  const unique = [];
+  let duplicates = 0;
+  for (const p of parsed) {
+    if (seen.has(p.code)) { duplicates += 1; continue; }
+    seen.add(p.code);
+    unique.push(p);
+  }
   busy.value = true;
   try {
-    const res = await api.czVerify({ codes: parsed.map((p) => p.code) });
-    const valid = parsed.filter((_, i) => res.results?.[i]?.ok);
-    result.value = { valid, total: parsed.length };
-    notice.value = `Проверено ${parsed.length}: ${valid.length} валидных, ${parsed.length - valid.length} с ошибками`;
+    const res = await api.czVerify({ codes: unique.map((p) => p.code) });
+    const valid = unique.filter((_, i) => res.results?.[i]?.ok);
+    result.value = { valid, total: unique.length };
+    notice.value = `Проверено ${unique.length}: ${valid.length} валидных, ${unique.length - valid.length} с ошибками${duplicates ? `, убрано дублей: ${duplicates}` : ''}`;
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
 }
@@ -159,7 +226,7 @@ async function downloadPdf() {
           <h1 class="font-display font-bold text-3xl">Повторная печать этикеток</h1>
           <p class="text-sm text-slate-500 mt-1">Быстрый макет для повторной печати КИЗ: DataMatrix, EAN-13 и данные товара.</p>
         </div>
-        <a href="https://gsdmx.ru/" target="_blank" rel="noopener" class="btn-ghost !py-2 !px-3 text-sm">Открыть gsdmx.ru ↗</a>
+        <span class="text-xs text-slate-500">Встроенная повторная печать, без внешних сервисов</span>
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
@@ -189,6 +256,11 @@ async function downloadPdf() {
           <h2 class="font-display font-semibold">Коды маркировки</h2>
           <textarea v-model="codesText" rows="6" class="input font-mono text-xs" placeholder="Вставьте полные коды — по одному на строку"></textarea>
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <button v-if="cameraSupported" class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera">📷 Камера</button>
+            <span class="text-xs text-slate-500">USB-сканер печатает прямо в поле кодов</span>
+          </div>
+          <p v-if="cameraError" class="text-xs text-red-500">{{ cameraError }}</p>
           <button class="btn-primary !py-2 text-sm" :disabled="busy" @click="checkCodes">{{ busy ? 'Проверяем…' : 'Проверить коды' }}</button>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 
@@ -213,5 +285,13 @@ async function downloadPdf() {
         </div>
       </div>
     </section>
+
+    <div v-if="cameraOpen" class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+      <div class="relative rounded-2xl overflow-hidden w-full max-w-lg bg-black">
+        <video ref="videoEl" class="w-full" playsinline muted></video>
+        <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
+        <p class="text-center text-xs text-white/70 py-2">Наведите камеру на DataMatrix</p>
+      </div>
+    </div>
   </div>
 </template>

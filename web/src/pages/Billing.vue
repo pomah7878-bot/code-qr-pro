@@ -20,10 +20,11 @@ async function load() {
     orders.value = (await api.orders()).orders;
   } catch (e) { error.value = e.message; }
 }
-async function checkout() {
+const isAdmin = store.user?.role === 'admin';
+async function checkout(plan = 'premium') {
   error.value = ''; busy.value = true;
   try {
-    const d = await api.checkout({ plan: 'premium' });
+    const d = await api.checkout({ plan });
     if (d.order.confirmationUrl) window.location.href = d.order.confirmationUrl;
     else error.value = 'Не получена ссылка на оплату';
   } catch (e) { error.value = e.message; }
@@ -62,10 +63,10 @@ onMounted(async () => {
           </div>
           <div v-if="store.plan?.id !== 'premium'" class="text-right">
             <div class="text-3xl font-extrabold">1 990 ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
-            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout">{{ busy ? 'Создаём заказ…' : 'Оформить PREMIUM' }}</button>
+            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('premium')">{{ busy ? 'Создаём заказ…' : 'Оформить PREMIUM' }}</button>
             <p v-if="!providerOk" class="text-xs text-red-500 mt-2">Платёжный провайдер не настроен — сообщите администратору</p>
           </div>
-          <button v-else class="btn-ghost" :disabled="busy" @click="checkout">Продлить на 30 дней</button>
+          <button v-else class="btn-ghost" :disabled="busy" @click="checkout('premium')">Продлить на 30 дней</button>
         </div>
         <ul class="grid md:grid-cols-2 gap-1.5 text-sm mt-5 text-slate-600 dark:text-slate-300">
           <li>✓ 10 000 кодов в день</li><li>✓ Пакеты до 5 000 строк</li>
@@ -73,6 +74,19 @@ onMounted(async () => {
           <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
         </ul>
         <p class="text-xs text-slate-500 mt-4">Предоплата за 30 дней через YooKassa (карта, СБП). Автопродления нет — продлевайте кнопкой. Чек приходит на email (54-ФЗ).</p>
+      </div>
+
+      <div v-if="isAdmin" class="glass rounded-2xl p-6 border-amber-500/40">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="font-display font-semibold flex items-center gap-2">🧪 Тестовый платёж <span class="chip-soon">админ</span></div>
+            <p class="text-sm text-slate-500 mt-1">Полный PREMIUM на 30 дней за 1 ₽ — боевая проверка оплаты через YooKassa без траты 1990 ₽.</p>
+          </div>
+          <div class="text-right">
+            <div class="text-3xl font-extrabold">1 ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
+            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('test')">{{ busy ? 'Создаём заказ…' : 'Тест за 1 ₽' }}</button>
+          </div>
+        </div>
       </div>
 
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

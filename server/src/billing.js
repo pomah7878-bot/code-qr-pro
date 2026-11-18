@@ -43,16 +43,25 @@ export function activatePremium(userId, provider, externalId, orderId) {
   })();
 }
 
-export async function createCheckout(user) {
+export async function createCheckout(user, planId = 'premium') {
   if (!providerConfigured()) {
     const e = new Error('Платёжный провайдер не настроен. Обратитесь к администратору.');
     e.statusCode = 503;
     throw e;
   }
-  const amount = PLANS.premium.priceMonthly;
-  const info = db.prepare("INSERT INTO orders (user_id, plan, amount) VALUES (?, 'premium', ?)").run(user.id, amount);
+  const plan = PLANS[planId];
+  if (!plan || !plan.priceMonthly) {
+    const e = new Error('Неизвестный тариф');
+    e.statusCode = 400;
+    throw e;
+  }
+  const amount = plan.priceMonthly;
+  // test-тариф записывается в orders как 'test', но активирует premium-доступ
+  const info = db.prepare('INSERT INTO orders (user_id, plan, amount) VALUES (?, ?, ?)').run(user.id, planId, amount);
   const orderId = info.lastInsertRowid;
-  const description = 'PREMIUM подписка CODE QR PRO (30 дней)';
+  const description = planId === 'test'
+    ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM 30 дней)'
+    : 'PREMIUM подписка CODE QR PRO (30 дней)';
   try {
     const data = await yk('POST', '/payments', {
       amount: { value: amount.toFixed(2), currency: 'RUB' },

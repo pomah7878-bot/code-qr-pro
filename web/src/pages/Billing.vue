@@ -72,10 +72,12 @@ onMounted(async () => {
           <div class="text-sm text-slate-500 mb-2">Выберите период подписки:</div>
           <div class="flex flex-wrap gap-3">
             <button v-for="o in offers" :key="o.days" @click="selectedDays = o.days"
-              class="rounded-xl border px-5 py-3 text-left transition"
+              class="relative rounded-xl border px-5 py-3 text-left transition"
               :class="selectedDays === o.days ? 'border-brand-500 bg-brand-500/10 ring-2 ring-brand-500/40' : 'border-slate-200 dark:border-white/15 hover:border-brand-500/50'">
-              <div class="font-display font-bold text-lg">{{ o.price.toLocaleString('ru') }} ₽</div>
-              <div class="text-xs text-slate-500">{{ o.days }} дней<span v-if="o.days > 30"> · {{ Math.round(o.price / o.days * 30).toLocaleString('ru') }} ₽/мес</span></div>
+              <span v-if="o.discount > 0" class="absolute -top-2 -right-2 text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5">−{{ o.discount }}%</span>
+              <div class="font-display font-bold text-lg">{{ (o.finalPrice ?? o.price).toLocaleString('ru') }} ₽</div>
+              <div v-if="o.discount > 0" class="text-xs text-slate-400 line-through">{{ o.price.toLocaleString('ru') }} ₽</div>
+              <div class="text-xs text-slate-500">{{ o.days }} дней<span v-if="o.days > 30"> · {{ (o.perMonth ?? Math.round(o.price / o.days * 30)).toLocaleString('ru') }} ₽/мес</span></div>
             </button>
           </div>
         </div>
@@ -86,7 +88,8 @@ onMounted(async () => {
             <li>✓ API для 1С и складов</li><li>✓ История 365 дней</li>
           </ul>
           <div class="text-right">
-            <div class="text-3xl font-extrabold">{{ selectedOffer().price.toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days }} дней</span></div>
+            <div class="text-3xl font-extrabold">{{ (selectedOffer().finalPrice ?? selectedOffer().price).toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days }} дней</span></div>
+            <div v-if="selectedOffer().discount > 0" class="text-sm text-emerald-500">Скидка {{ selectedOffer().discount }}% · выгода {{ (selectedOffer().price - (selectedOffer().finalPrice ?? selectedOffer().price)).toLocaleString('ru') }} ₽</div>
             <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('premium')">{{ busy ? 'Создаём заказ…' : (store.plan?.id === 'premium' ? 'Продлить PREMIUM' : 'Оформить PREMIUM') }}</button>
             <p v-if="!providerOk" class="text-xs text-red-500 mt-2">Платёжный провайдер не настроен — сообщите администратору</p>
           </div>

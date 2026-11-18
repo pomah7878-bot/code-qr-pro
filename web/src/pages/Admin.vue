@@ -27,7 +27,8 @@ async function load() {
     reviews.value = (await api.adminReviews()).reviews;
   } catch (e) { error.value = e.message; }
 }
-function addOffer() { offers.value.push({ days: 30, price: 1990 }); }
+function finalPrice(o) { const d = Math.min(90, Math.max(0, Number(o.discount) || 0)); return Math.round(Number(o.price) * (1 - d / 100) * 100) / 100; }
+function addOffer() { offers.value.push({ days: 30, price: 1990, discount: 0 }); }
 function removeOffer(i) { offers.value.splice(i, 1); }
 async function savePricing() {
   error.value = '';
@@ -105,18 +106,27 @@ onMounted(load);
 
       <div class="glass rounded-2xl p-6">
         <h2 class="font-display font-semibold mb-1">💳 Тарифы PREMIUM</h2>
-        <p class="text-xs text-slate-500 mb-4">Периоды подписки и цены. Клиенты выберут период на странице оплаты. Срок 1–3650 дней, цена 1–1 000 000 ₽.</p>
+        <p class="text-xs text-slate-500 mb-4">Периоды, базовая цена и скидка %. Итоговая цена пересчитывается автоматически и видна клиентам. Скидка 0–90%.</p>
+        <div class="hidden md:grid grid-cols-[90px_1fr_90px_1fr_40px] gap-3 text-xs text-slate-500 mb-2 px-1">
+          <span>Срок, дн.</span><span>Базовая цена, ₽</span><span>Скидка, %</span><span>Итого клиенту</span><span></span>
+        </div>
         <div class="space-y-2">
-          <div v-for="(o, i) in offers" :key="i" class="flex items-center gap-3">
-            <div class="flex items-center gap-1"><input v-model.number="o.days" type="number" min="1" max="3650" class="input !py-2 text-sm w-24"><span class="text-sm text-slate-500">дн.</span></div>
-            <div class="flex items-center gap-1"><input v-model.number="o.price" type="number" min="1" class="input !py-2 text-sm w-32"><span class="text-sm text-slate-500">₽</span></div>
-            <button class="text-slate-400 hover:text-red-500 ml-auto" @click="removeOffer(i)" title="Удалить период">✕</button>
+          <div v-for="(o, i) in offers" :key="i" class="grid grid-cols-2 md:grid-cols-[90px_1fr_90px_1fr_40px] gap-3 items-center">
+            <input v-model.number="o.days" type="number" min="1" max="3650" class="input !py-2 text-sm" placeholder="дн.">
+            <input v-model.number="o.price" type="number" min="1" class="input !py-2 text-sm" placeholder="₽">
+            <input v-model.number="o.discount" type="number" min="0" max="90" class="input !py-2 text-sm" placeholder="%">
+            <div class="text-sm">
+              <b class="text-emerald-600 dark:text-emerald-400">{{ finalPrice(o).toLocaleString('ru') }} ₽</b>
+              <span v-if="o.discount > 0" class="text-xs text-slate-400 line-through ml-2">{{ Number(o.price).toLocaleString('ru') }}</span>
+              <div class="text-xs text-slate-500">{{ Math.round(finalPrice(o) / o.days * 30).toLocaleString('ru') }} ₽/мес</div>
+            </div>
+            <button class="text-slate-400 hover:text-red-500 justify-self-end" @click="removeOffer(i)" title="Удалить период">✕</button>
           </div>
         </div>
         <div class="flex flex-wrap gap-3 mt-4 items-center">
           <button class="btn-ghost !py-2 text-sm" @click="addOffer">+ Добавить период</button>
+          <button class="btn-primary !py-2 text-sm ml-auto" @click="savePricing">Сохранить тарифы</button>
         </div>
-        <button class="btn-primary !py-2 mt-4" @click="savePricing">Сохранить тарифы</button>
       </div>
 
       <div class="glass rounded-2xl p-6 overflow-x-auto">

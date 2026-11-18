@@ -88,11 +88,13 @@ export async function registerAdminRoutes(app) {
       for (const o of offers) {
         const days = Math.round(Number(o.days));
         const price = Math.round(Number(o.price) * 100) / 100;
+        const discount = o.discount === undefined || o.discount === '' ? 0 : Math.round(Number(o.discount));
         if (!Number.isFinite(days) || days < 1 || days > 3650) return reply.code(400).send({ error: 'Срок: 1–3650 дней' });
         if (!Number.isFinite(price) || price < 1 || price > 1000000) return reply.code(400).send({ error: 'Цена: 1–1 000 000 ₽' });
+        if (!Number.isFinite(discount) || discount < 0 || discount > 90) return reply.code(400).send({ error: 'Скидка: 0–90%' });
         if (seen.has(days)) return reply.code(400).send({ error: 'Периоды не должны повторяться' });
         seen.add(days);
-        clean.push({ days, price });
+        clean.push({ days, price, discount });
       }
       clean.sort((a, b) => a.days - b.days);
       setSetting('premium_offers', JSON.stringify(clean));

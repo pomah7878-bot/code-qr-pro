@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { PLANS, getPremiumOffers, getTestPrice } from './plans.js';
+import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice } from './plans.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
@@ -59,7 +59,7 @@ export async function createCheckout(user, planId = 'premium', days = null) {
       e.statusCode = 400;
       throw e;
     }
-    amount = offer.price;
+    amount = offerFinalPrice(offer);
     termDays = offer.days;
   } else {
     const e = new Error('Неизвестный тариф');

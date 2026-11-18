@@ -49,20 +49,35 @@ export function planOf(user) {
 
 import { getSetting } from './settings.js';
 
-// Редактируемые периоды PREMIUM: [{days, price}]. По умолчанию 30 дней / 1990 ₽.
+// Округление до копеек
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// Итоговая цена с учётом скидки (%)
+export function offerFinalPrice(o) {
+  const d = Number.isFinite(o.discount) ? Math.min(90, Math.max(0, o.discount)) : 0;
+  return round2(o.price * (1 - d / 100));
+}
+
+// Редактируемые периоды PREMIUM: [{days, price, discount}]. По умолчанию 30 дней / 1990 ₽.
 export function getPremiumOffers() {
+  let base = [{ days: 30, price: PLANS.premium.priceMonthly, discount: 0 }];
   try {
     const raw = getSetting('premium_offers', '');
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr) && arr.length) {
-        return arr.filter(o => Number.isFinite(o.days) && o.days > 0 && Number.isFinite(o.price) && o.price >= 0)
-          .map(o => ({ days: Math.round(o.days), price: Math.round(o.price * 100) / 100 }))
+        base = arr.filter(o => Number.isFinite(o.days) && o.days > 0 && Number.isFinite(o.price) && o.price >= 0)
+          .map(o => ({
+            days: Math.round(o.days),
+            price: round2(o.price),
+            discount: Number.isFinite(o.discount) ? Math.min(90, Math.max(0, Math.round(o.discount))) : 0
+          }))
           .sort((a, b) => a.days - b.days);
       }
     }
   } catch { /* битый JSON — fallback */ }
-  return [{ days: 30, price: PLANS.premium.priceMonthly }];
+  // добавляем вычисленные поля для витрины
+  return base.map(o => ({ ...o, finalPrice: offerFinalPrice(o), perMonth: round2(offerFinalPrice(o) / o.days * 30) }));
 }
 
 export function getTestPrice() {
@@ -77,6 +92,6 @@ export function publicPlans() {
   const offers = getPremiumOffers();
   return {
     free: PLANS.free,
-    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.price ?? PLANS.premium.priceMonthly }
+    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.finalPrice ?? PLANS.premium.priceMonthly }
   };
 }

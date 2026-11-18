@@ -449,6 +449,21 @@ async function exportPdf() {
   } catch (e) { error.value = e.message; }
 }
 
+async function exportPdfSingle() {
+  error.value = '';
+  if (!dataRows.value.length) { error.value = 'Загрузите коды КИЗ или данные BarTender'; return; }
+  if (jobId.value == null && dataRows.value.length > 10000) {
+    error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
+    return;
+  }
+  try {
+    const body = jobId.value != null
+      ? { template: tpl, jobId: jobId.value, single: true }
+      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true };
+    await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`);
+  } catch (e) { error.value = e.message; }
+}
+
 function saveToken() { localStorage.setItem('cq_bridge_token', bridge.token); }
 async function bridgePing() {
   bridge.status = 'checking';
@@ -628,6 +643,8 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <div>Серийник: <span class="font-mono">{{ currentItem.serial || '—' }}</span></div>
             </div>
             <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf">⬇ PDF-лист А4 ({{ dataRows.length || 0 }})</button>
+            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle">⬇ PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
+            <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">

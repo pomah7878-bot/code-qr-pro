@@ -62,7 +62,7 @@ export async function registerApiRoutes(app) {
   // Проверка кодов «Честного ЗНАКа» (локальная валидация + статус ГИС МТ)
   app.post('/api/cz/verify', { preHandler: requireAuth }, async (req, reply) => {
     const codes = req.body?.codes;
-    if (!Array.isArray(codes) || !codes.length || codes.length > 100) return reply.code(400).send({ error: 'Передайте до 100 кодов' });
+    if (!Array.isArray(codes) || !codes.length || codes.length > 1000) return reply.code(400).send({ error: 'Передайте до 1000 кодов' });
     return verifyCodes(codes);
   });
 }

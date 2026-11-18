@@ -3,8 +3,8 @@ import { computed, ref } from 'vue';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 
-const CHUNK = 100;
-const MAX = 5000;
+const CHUNK = 1000;
+const MAX = 30000;
 const text = ref('');
 const result = ref(null);
 const error = ref('');
@@ -61,7 +61,7 @@ async function verify() {
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">Проверка кодов «Честный ЗНАК»</h1>
       <div class="glass rounded-2xl p-6">
-        <label class="label" for="cz-codes">Коды маркировки (по одному на строку, до {{ MAX }})</label>
+        <label class="label" for="cz-codes">Коды маркировки (по одному на строку, до 30 000 — как в отчёте о нанесении)</label>
         <textarea id="cz-codes" v-model="text" rows="8" class="input font-mono text-sm" placeholder="(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA=="></textarea>
         <button class="btn-primary mt-4" :disabled="busy" @click="verify">{{ busy ? 'Проверяем…' : 'Проверить' }}</button>
         <p v-if="busy && progress.total" class="text-sm text-slate-500 mt-3">Проверено {{ progress.done }} из {{ progress.total }}…</p>

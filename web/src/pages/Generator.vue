@@ -56,8 +56,22 @@ function extractRows(sheetRows) {
 async function onFile(ev) {
   const file = ev.target.files?.[0];
   if (!file) return;
-  error.value = ''; fileName.value = file.name;
+  error.value = '';
+  fileName.value = file.name;
+  rows.value = [];
   try {
+    // PDF — не таблица: SheetJS читает его как текст и делает строку из каждой строки файла
+    const head = await file.slice(0, 1024).text();
+    if (head.includes('%PDF-') || /\.pdf$/i.test(file.name)) {
+      fileName.value = '';
+      error.value = 'PDF не поддерживается. Выгрузите коды в CSV/XLSX или вставьте их текстом — одна строка = один код.';
+      return;
+    }
+    if (!/\.(csv|xlsx|xls|txt)$/i.test(file.name)) {
+      fileName.value = '';
+      error.value = 'Поддерживаются CSV, XLSX, XLS и TXT.';
+      return;
+    }
     if (/\.txt$/i.test(file.name)) {
       rows.value = (await file.text()).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     } else {
@@ -66,7 +80,11 @@ async function onFile(ev) {
       rows.value = extractRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
     }
     if (!rows.value.length) error.value = 'Не удалось извлечь строки из файла';
-  } catch (e) { error.value = 'Ошибка чтения файла: ' + e.message; }
+  } catch (e) {
+    error.value = 'Ошибка чтения файла: ' + e.message;
+  } finally {
+    ev.target.value = '';
+  }
 }
 
 function usePaste() {
@@ -166,6 +184,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
               <span class="text-4xl mb-2">📥</span>
               <span class="font-semibold">{{ fileName || 'Перетащите или выберите файл' }}</span>
               <span class="text-xs text-slate-500 mt-1">CSV, XLSX, TXT · колонки GTIN/Serial/Crypto или один столбец с кодами</span>
+              <span class="text-[11px] text-slate-400 mt-1">PDF не поддерживается — выгрузите коды в CSV/XLSX</span>
               <input type="file" accept=".csv,.xlsx,.xls,.txt" class="hidden" @change="onFile">
             </label>
           </div>
@@ -173,7 +192,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <textarea v-model="pasteText" rows="8" class="input font-mono text-sm" placeholder="По одному коду на строку:&#10;(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA==&#10;или raw с GS-разделителями"></textarea>
             <button class="btn-ghost mt-3" @click="usePaste">Использовать текст</button>
           </div>
-          <p v-if="rows.length" class="mt-4 text-sm text-slate-500">Извлечено строк: <b class="text-slate-700 dark:text-slate-200">{{ rows.length }}</b> <span v-if="fileName">· {{ fileName }}</span></p>
+          <p v-if="rows.length" class="mt-4 text-sm text-slate-500">Извлечено строк: <b class="text-slate-700 dark:text-slate-200">{{ rows.length }}</b> <span v-if="fileName">· {{ fileName }}</span> <span class="text-xs">— одна строка = один код</span></p>
           <p v-if="error" class="mt-3 text-sm text-red-500">{{ error }}</p>
           <button class="btn-primary mt-5" :disabled="!rows.length || busy" @click="doValidate">
             {{ busy ? 'Проверяем…' : 'Проверить данные →' }}

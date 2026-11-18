@@ -2,7 +2,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { parseKiz } from '../lib/labelData.js';
+import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 
 const MAX = 100;
@@ -49,6 +49,9 @@ const shortWarning = ref('');
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
+const catalog = ref({});
+const catalogStatus = ref('');
+try { catalog.value = JSON.parse(localStorage.getItem('cq_product_catalog') || '{}'); } catch { catalog.value = {}; }
 const cameraOpen = ref(false);
 const cameraLoading = ref(false);
 const cameraError = ref('');
@@ -369,6 +372,13 @@ watch(category, (id) => {
 const currentFormat = computed(() => formats.find((f) => f.id === format.value) || formats[0]);
 const premium = computed(() => !!store.plan?.labelEditor);
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
+const infoRows = computed(() => productInfo.value.map((p) => ({
+  ...p,
+  name: p.name || product.name,
+  producer: p.producer || product.manufacturer,
+  dosage: product.dosage,
+  form: product.form
+})));
 
 async function checkCodes() {
   error.value = '';
@@ -413,14 +423,56 @@ async function checkCodes() {
     shortWarning.value = uniqueShort.length
       ? 'Коды без криптохвоста (91/92) будут напечатаны как есть — для «Честного ЗНАКа» это неполный код.'
       : '';
-    productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, name: '', producer: '' }));
+    productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, short: c.short, name: '', producer: '' }));
+    applyCatalog();
     loadProductInfo();
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
 }
 
+function applyCatalog() {
+  for (const p of productInfo.value) {
+    const key = String(p.gtin || '').replace(/^0+/, '');
+    const c = catalog.value[p.gtin] || catalog.value[key];
+    if (!c) continue;
+    p.name = p.name || c.name || c.product_name || '';
+    p.producer = p.producer || c.manufacturer || c.producer || '';
+    if (!product.name && (c.name || c.product_name)) product.name = c.name || c.product_name;
+    if (!product.article && c.article) product.article = c.article;
+    if (!product.dosage && c.dosage) product.dosage = c.dosage;
+    if (!product.form && c.form) product.form = c.form;
+    if (!product.series && c.series) product.series = c.series;
+    if (!product.expiry && c.expiry) product.expiry = c.expiry;
+    if (!product.manufacturer && (c.manufacturer || c.producer)) product.manufacturer = c.manufacturer || c.producer;
+  }
+}
+
+async function loadCatalog(ev) {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  catalogStatus.value = '';
+  try {
+    const part = await readDataFile(file);
+    if (!part.rows.length) throw new Error('В файле не найдены строки с GTIN');
+    const map = {};
+    for (const row of part.rows) {
+      const gtin = String(row.gtin || '').trim();
+      if (gtin) map[gtin] = row;
+    }
+    if (!Object.keys(map).length) throw new Error('Нужна колонка GTIN');
+    catalog.value = map;
+    localStorage.setItem('cq_product_catalog', JSON.stringify(map));
+    catalogStatus.value = `Справочник: ${Object.keys(map).length} GTIN`;
+    applyCatalog();
+  } catch (e) {
+    catalogStatus.value = e.message;
+  } finally {
+    ev.target.value = '';
+  }
+}
+
 async function loadProductInfo() {
-  const valid = result.value?.valid || [];
+  const valid = productInfo.value.length ? productInfo.value : (result.value?.valid || []);
   if (!valid.length) return;
   infoLoading.value = true;
   try {
@@ -602,29 +654,43 @@ async function downloadPdf() {
       </div>
 
       <div v-if="result && productInfo.length" class="glass rounded-2xl p-5 mt-4">
-        <div class="flex items-center justify-between gap-2 mb-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h2 class="font-display font-semibold">Информация о кодах</h2>
-          <span v-if="infoLoading" class="text-xs text-slate-500">Запрашиваем ЧЗ…</span>
+          <div class="flex items-center gap-2">
+            <span v-if="infoLoading" class="text-xs text-slate-500">Запрашиваем ЧЗ…</span>
+            <label class="btn-ghost !py-1 !px-2 text-xs cursor-pointer">
+              Справочник товаров
+              <input type="file" class="hidden" accept=".csv,.xlsx,.xls" @change="loadCatalog">
+            </label>
+          </div>
         </div>
+        <p v-if="catalogStatus" class="text-xs text-emerald-500 mb-1">{{ catalogStatus }}</p>
         <div class="overflow-auto max-h-64">
-          <table class="w-full text-xs">
+          <table class="w-full text-xs min-w-[680px]">
             <thead>
               <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
                 <th class="py-1.5 pr-3">GTIN</th>
                 <th class="py-1.5 pr-3">Серийник</th>
-                <th class="py-1.5">Товар</th>
+                <th class="py-1.5 pr-3">Тип</th>
+                <th class="py-1.5 pr-3">Товар</th>
+                <th class="py-1.5 pr-3">Дозировка / форма</th>
+                <th class="py-1.5">Производитель</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(p, i) in productInfo" :key="i" class="border-b border-slate-100 dark:border-white/5">
+              <tr v-for="(p, i) in infoRows" :key="i" class="border-b border-slate-100 dark:border-white/5">
                 <td class="py-1.5 pr-3 font-mono">{{ p.gtin }}</td>
                 <td class="py-1.5 pr-3 font-mono">{{ p.serial }}</td>
-                <td class="py-1.5">{{ p.name || '—' }}<span v-if="p.producer" class="text-slate-500"> · {{ p.producer }}</span></td>
+                <td class="py-1.5 pr-3">{{ p.short ? 'GS1 (93)' : 'КИЗ (91/92)' }}</td>
+                <td class="py-1.5 pr-3">{{ p.name || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ [p.dosage, p.form].filter(Boolean).join(' · ') || '—' }}</td>
+                <td class="py-1.5">{{ p.producer || '—' }}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <p v-if="infoMessage" class="text-xs text-slate-500 mt-2">{{ infoMessage }}</p>
+        <p class="text-xs text-slate-500 mt-2">Для маркировки печатается GS1 DataMatrix с полным кодом; QR не заменяет DataMatrix и в 20×20 не помещается.</p>
       </div>
     </section>
 

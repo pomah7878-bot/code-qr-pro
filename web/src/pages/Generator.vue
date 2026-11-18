@@ -3,6 +3,7 @@ import { ref, computed, onUnmounted } from 'vue';
 import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { extractKizCodes } from '../lib/pdfCodes.js';
 import SideNav from '../components/SideNav.vue';
 
 const mode = ref('cz');
@@ -18,6 +19,7 @@ const pasteText = ref('');
 const inputTab = ref('file');
 const error = ref('');
 const busy = ref(false);
+const reading = ref(false);
 const preview = ref(null);
 const jobName = ref('');
 const format = ref('png');
@@ -53,6 +55,32 @@ function extractRows(sheetRows) {
   return body.map(r => String(r[idx] ?? '').trim()).filter(Boolean);
 }
 
+async function readPdfText(file) {
+  // pdfjs грузится только при выборе PDF, основной бандл не растёт
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
+  const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  const pdf = await pdfjs.getDocument({
+    data: new Uint8Array(await file.arrayBuffer()),
+    isEvalSupported: false
+  }).promise;
+  let text = '';
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      for (const item of content.items) {
+        if (typeof item.str !== 'string') continue;
+        text += item.str + (item.hasEOL ? '\n' : ' ');
+      }
+      page.cleanup();
+    }
+  } finally {
+    await pdf.destroy();
+  }
+  return text;
+}
+
 async function onFile(ev) {
   const file = ev.target.files?.[0];
   if (!file) return;
@@ -60,16 +88,21 @@ async function onFile(ev) {
   fileName.value = file.name;
   rows.value = [];
   try {
-    // PDF — не таблица: SheetJS читает его как текст и делает строку из каждой строки файла
     const head = await file.slice(0, 1024).text();
-    if (head.includes('%PDF-') || /\.pdf$/i.test(file.name)) {
-      fileName.value = '';
-      error.value = 'PDF не поддерживается. Выгрузите коды в CSV/XLSX или вставьте их текстом — одна строка = один код.';
+    const isPdf = head.includes('%PDF-') || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      reading.value = true;
+      const text = await readPdfText(file);
+      rows.value = extractKizCodes(text);
+      if (!rows.value.length) {
+        fileName.value = '';
+        error.value = 'В PDF не найдены коды маркировки. Нужен PDF с текстовым слоем (не скан).';
+      }
       return;
     }
     if (!/\.(csv|xlsx|xls|txt)$/i.test(file.name)) {
       fileName.value = '';
-      error.value = 'Поддерживаются CSV, XLSX, XLS и TXT.';
+      error.value = 'Поддерживаются PDF, CSV, XLSX, XLS и TXT.';
       return;
     }
     if (/\.txt$/i.test(file.name)) {
@@ -83,6 +116,7 @@ async function onFile(ev) {
   } catch (e) {
     error.value = 'Ошибка чтения файла: ' + e.message;
   } finally {
+    reading.value = false;
     ev.target.value = '';
   }
 }
@@ -183,19 +217,20 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-10 cursor-pointer hover:border-brand-500/60 transition">
               <span class="text-4xl mb-2">📥</span>
               <span class="font-semibold">{{ fileName || 'Перетащите или выберите файл' }}</span>
-              <span class="text-xs text-slate-500 mt-1">CSV, XLSX, TXT · колонки GTIN/Serial/Crypto или один столбец с кодами</span>
-              <span class="text-[11px] text-slate-400 mt-1">PDF не поддерживается — выгрузите коды в CSV/XLSX</span>
-              <input type="file" accept=".csv,.xlsx,.xls,.txt" class="hidden" @change="onFile">
+              <span class="text-xs text-slate-500 mt-1">PDF с текстовым слоем, CSV, XLSX, TXT · коды GTIN/Serial/Crypto или один столбец</span>
+              <span class="text-[11px] text-slate-400 mt-1">В PDF считаются только сами коды маркировки, а не строки файла</span>
+              <input type="file" accept=".pdf,.csv,.xlsx,.xls,.txt" class="hidden" @change="onFile">
             </label>
           </div>
           <div v-else>
             <textarea v-model="pasteText" rows="8" class="input font-mono text-sm" placeholder="По одному коду на строку:&#10;(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA==&#10;или raw с GS-разделителями"></textarea>
             <button class="btn-ghost mt-3" @click="usePaste">Использовать текст</button>
           </div>
-          <p v-if="rows.length" class="mt-4 text-sm text-slate-500">Извлечено строк: <b class="text-slate-700 dark:text-slate-200">{{ rows.length }}</b> <span v-if="fileName">· {{ fileName }}</span> <span class="text-xs">— одна строка = один код</span></p>
+          <p v-if="reading" class="mt-4 text-sm text-slate-500">Читаем PDF и ищем коды маркировки…</p>
+          <p v-if="rows.length" class="mt-4 text-sm text-slate-500">Извлечено кодов: <b class="text-slate-700 dark:text-slate-200">{{ rows.length }}</b> <span v-if="fileName">· {{ fileName }}</span> <span class="text-xs">— один код = одна строка</span></p>
           <p v-if="error" class="mt-3 text-sm text-red-500">{{ error }}</p>
-          <button class="btn-primary mt-5" :disabled="!rows.length || busy" @click="doValidate">
-            {{ busy ? 'Проверяем…' : 'Проверить данные →' }}
+          <button class="btn-primary mt-5" :disabled="!rows.length || busy || reading" @click="doValidate">
+            {{ reading ? 'Читаем PDF…' : busy ? 'Проверяем…' : 'Проверить данные →' }}
           </button>
         </div>
       </div>

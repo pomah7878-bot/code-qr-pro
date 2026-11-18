@@ -10,7 +10,6 @@ const orders = ref([]);
 const cz = ref({ czEnabled: false, czApiUrl: '', czConfigured: false });
 const czToken = ref('');
 const offers = ref([]);
-const testPrice = ref(1);
 const reviews = ref([]);
 const error = ref('');
 const notice = ref('');
@@ -25,7 +24,6 @@ async function load() {
     cz.value = await api.adminSettings();
     const pr = await api.adminPricing();
     offers.value = pr.offers.map(o => ({ ...o }));
-    testPrice.value = pr.testPrice;
     reviews.value = (await api.adminReviews()).reviews;
   } catch (e) { error.value = e.message; }
 }
@@ -34,9 +32,8 @@ function removeOffer(i) { offers.value.splice(i, 1); }
 async function savePricing() {
   error.value = '';
   try {
-    const d = await api.adminSavePricing({ offers: offers.value, testPrice: testPrice.value });
+    const d = await api.adminSavePricing({ offers: offers.value });
     offers.value = d.offers.map(o => ({ ...o }));
-    testPrice.value = d.testPrice;
     notice.value = 'Тарифы сохранены';
   } catch (e) { error.value = e.message; }
 }
@@ -118,7 +115,6 @@ onMounted(load);
         </div>
         <div class="flex flex-wrap gap-3 mt-4 items-center">
           <button class="btn-ghost !py-2 text-sm" @click="addOffer">+ Добавить период</button>
-          <div class="flex items-center gap-2 ml-auto"><span class="text-sm text-slate-500">TEST:</span><input v-model.number="testPrice" type="number" min="1" class="input !py-2 text-sm w-24"><span class="text-sm text-slate-500">₽</span></div>
         </div>
         <button class="btn-primary !py-2 mt-4" @click="savePricing">Сохранить тарифы</button>
       </div>

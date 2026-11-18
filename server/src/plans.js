@@ -40,8 +40,8 @@ export const PLANS = {
   }
 };
 
-// Тарифы, которые можно купить через checkout (test — только админ)
-export const PURCHASABLE = ['premium', 'test'];
+// Тарифы, которые можно купить через checkout
+export const PURCHASABLE = ['premium'];
 
 export function planOf(user) {
   return PLANS[user?.plan] || PLANS.free;
@@ -77,7 +77,6 @@ export function publicPlans() {
   const offers = getPremiumOffers();
   return {
     free: PLANS.free,
-    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.price ?? PLANS.premium.priceMonthly },
-    test: { ...PLANS.test, priceMonthly: getTestPrice() }
+    premium: { ...PLANS.premium, offers, priceMonthly: offers[0]?.price ?? PLANS.premium.priceMonthly }
   };
 }

@@ -10,16 +10,8 @@ async function logout() { await store.logout(); router.push('/'); }
     <header class="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
       <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         <router-link to="/" class="flex items-center gap-2.5 font-display font-extrabold tracking-wide">
-          <svg width="26" height="26" viewBox="0 0 22 22" class="shrink-0">
-            <rect width="22" height="22" rx="3" fill="currentColor" opacity=".08"/>
-            <g fill="currentColor">
-              <rect x="3" y="3" width="2" height="16"/><rect x="3" y="17" width="16" height="2"/>
-              <rect x="7" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="15" y="3" width="2" height="2"/>
-              <rect x="17" y="7" width="2" height="2"/><rect x="17" y="11" width="2" height="2"/><rect x="17" y="15" width="2" height="2"/>
-              <rect x="7" y="7" width="2" height="2"/><rect x="11" y="9" width="2" height="2"/><rect x="9" y="13" width="2" height="2"/><rect x="13" y="13" width="2" height="2"/>
-            </g>
-          </svg>
-          <span>CODE QR <span class="grad-text">PRO</span></span>
+          <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-8 h-8 shrink-0">
+          <span class="text-slate-900 dark:text-white">CODE QR <span class="text-violet-600 dark:text-violet-400">PRO</span></span>
         </router-link>
         <nav class="flex items-center gap-2">
           <button class="btn-ghost !px-3" @click="toggleTheme" title="Сменить тему">

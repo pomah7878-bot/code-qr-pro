@@ -11,7 +11,6 @@ const providerOk = ref(true);
 const orders = ref([]);
 const offers = ref([{ days: 30, price: 1990 }]);
 const selectedDays = ref(30);
-const testPrice = ref(1);
 const error = ref('');
 const notice = ref('');
 const busy = ref(false);
@@ -25,11 +24,8 @@ async function load() {
     const plans = (await api.plans()).plans;
     const prem = plans.find(p => p.id === 'premium');
     if (prem?.offers?.length) { offers.value = prem.offers; selectedDays.value = prem.offers[0].days; }
-    const t = plans.find(p => p.id === 'test');
-    if (t) testPrice.value = t.priceMonthly;
   } catch (e) { error.value = e.message; }
 }
-const isAdmin = store.user?.role === 'admin';
 async function checkout(plan = 'premium') {
   error.value = ''; busy.value = true;
   try {
@@ -96,19 +92,6 @@ onMounted(async () => {
           </div>
         </div>
         <p class="text-xs text-slate-500 mt-4">Предоплата через YooKassa (карта, СБП). Автопродления нет — продлевайте кнопкой. Чек приходит на email (54-ФЗ).</p>
-      </div>
-
-      <div v-if="isAdmin" class="glass rounded-2xl p-6 border-amber-500/40">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div class="font-display font-semibold flex items-center gap-2">🧪 Тестовый платёж <span class="chip-soon">админ</span></div>
-            <p class="text-sm text-slate-500 mt-1">Полный PREMIUM на 30 дней за {{ testPrice }} ₽ — боевая проверка оплаты через YooKassa.</p>
-          </div>
-          <div class="text-right">
-            <div class="text-3xl font-extrabold">{{ testPrice }} ₽<span class="text-sm text-slate-500 font-medium">/30 дней</span></div>
-            <button class="btn-primary mt-2" :disabled="busy || !providerOk" @click="checkout('test')">{{ busy ? 'Создаём заказ…' : 'Тест за 1 ₽' }}</button>
-          </div>
-        </div>
       </div>
 
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

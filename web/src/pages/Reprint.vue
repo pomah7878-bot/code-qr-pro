@@ -7,11 +7,11 @@ import SideNav from '../components/SideNav.vue';
 
 const MAX = 100;
 const categories = [
-  { id: 'lp', title: 'Легпром', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
-  { id: 'shoes', title: 'Обувь', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
-  { id: 'toys', title: 'Игрушки', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
-  { id: 'cosmetic', title: 'Косметика и химия', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
-  { id: 'pharmacy', title: 'Аптека / медикаменты', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
+  { id: 'lp', title: 'Легпром', icon: '👕', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
+  { id: 'shoes', title: 'Обувь', icon: '👟', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
+  { id: 'toys', title: 'Игрушки', icon: '🧸', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
+  { id: 'cosmetic', title: 'Косметика и химия', icon: '🧴', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
+  { id: 'pharmacy', title: 'Аптека / медикаменты', icon: '💊', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
 ];
 const formats = [
   { id: '58x40h', label: '58×40 мм — горизонтальный (5.8×4 см)', w: 58, h: 40 },
@@ -627,9 +627,12 @@ async function downloadPdf() {
         <div class="glass rounded-2xl p-5 space-y-3">
           <h2 class="font-display font-semibold">Категория и шаблон</h2>
           <div class="grid grid-cols-2 gap-2">
-            <button v-for="c in categories" :key="c.id" class="rounded-xl border px-3 py-2 text-sm transition"
+            <button v-for="c in categories" :key="c.id" class="rounded-xl border px-3 py-2 text-sm transition flex items-center gap-2 text-left"
               :class="category === c.id ? 'border-brand-500 bg-brand-500/10 font-semibold' : 'border-slate-200 dark:border-white/10 text-slate-500'"
-              @click="category = c.id">{{ c.title }}</button>
+              @click="category = c.id">
+              <span class="text-xl leading-none">{{ c.icon }}</span>
+              <span class="leading-tight">{{ c.title }}</span>
+            </button>
           </div>
           <div>
             <label class="label !text-xs" for="reprint-format">Формат этикетки</label>

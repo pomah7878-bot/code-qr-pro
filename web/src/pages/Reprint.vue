@@ -46,6 +46,8 @@ const videoEl = ref(null);
 const cameraCount = ref(0);
 const torchAvailable = ref(false);
 const torchOn = ref(false);
+const soundEnabled = ref(localStorage.getItem('cq_scan_sound') !== 'off');
+let audioCtx = null;
 let cameraStream = null;
 let cameraSession = 0;
 let scanTimer = 0;
@@ -73,8 +75,40 @@ function addCode(raw) {
   codesText.value = lines.join('\n');
   result.value = null;
   notice.value = `Добавлен код, всего строк: ${lines.length}`;
+  playBeep();
   try { navigator.vibrate?.(40); } catch { /* без вибрации */ }
   return true;
+}
+
+function ensureAudio() {
+  if (!audioCtx) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtor) audioCtx = new AudioCtor();
+  }
+  if (audioCtx?.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+function playBeep() {
+  if (!soundEnabled.value) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 1180;
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.13);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.14);
+}
+
+function toggleSound() {
+  soundEnabled.value = !soundEnabled.value;
+  localStorage.setItem('cq_scan_sound', soundEnabled.value ? 'on' : 'off');
+  if (soundEnabled.value) playBeep();
 }
 
 async function loadCameras() {
@@ -111,6 +145,7 @@ async function openCamera() {
   cameraCount.value = 0;
   torchOn.value = false;
   torchAvailable.value = false;
+  ensureAudio();
   const session = ++cameraSession;
   try {
     const video = cameraId.value
@@ -196,6 +231,7 @@ async function toggleTorch() {
 
 async function connectSerial() {
   serialError.value = '';
+  ensureAudio();
   if (!serialSupported) { serialError.value = 'Web Serial не поддерживается этим браузером'; return; }
   try {
     serialPort = await navigator.serial.requestPort();
@@ -287,12 +323,13 @@ async function checkCodes() {
 function buildTemplate() {
   const f = currentFormat.value;
   const W = f.w, H = f.h;
-  const m = Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
+  const tiny = W <= 22 && H <= 22;
+  const m = tiny ? Math.min(W, H) * 0.1 : Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
   const elements = [];
-  const dm = Math.min(W * 0.45, H * 0.5, 35);
+  const dm = tiny ? Math.min(W - 2 * m, H - 2 * m, 32) : Math.min(W * 0.45, H * 0.5, 35);
   elements.push({ id: 'dm', type: 'datamatrix', x: m, y: m, w: dm, h: dm, fontSize: 8, align: 'left' });
   let topH = dm;
-  if (fields.ean13 && String(product.barcode).trim()) {
+  if (!tiny && fields.ean13 && String(product.barcode).trim()) {
     if (W >= 50) {
       const bx = m + dm + m;
       const bw = W - bx - m;
@@ -440,6 +477,7 @@ async function downloadPdf() {
     <div v-if="cameraOpen" class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
       <div class="relative rounded-2xl overflow-hidden w-full max-w-lg bg-black">
         <video ref="videoEl" class="w-full" playsinline muted></video>
+        <button class="absolute top-2 left-2 rounded-full bg-black/60 text-white w-9 h-9" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</button>
         <button class="absolute top-2 right-2 rounded-full bg-black/60 text-white w-9 h-9" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
         <div class="absolute inset-x-0 bottom-0 p-3 flex items-center justify-between gap-2 bg-gradient-to-t from-black/80 to-transparent">
           <span class="text-xs text-white/80">Собрано: {{ cameraCount }}</span>
@@ -448,7 +486,7 @@ async function downloadPdf() {
             <button class="rounded-full bg-white text-slate-900 px-3 py-1.5 text-xs font-semibold" @click="closeCamera">Готово ({{ cameraCount }})</button>
           </div>
         </div>
-        <p class="absolute top-3 left-3 rounded-full bg-black/50 text-white/80 text-xs px-2 py-1">Наведите на DataMatrix</p>
+        <p class="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 text-white/80 text-xs px-2 py-1">Наведите на DataMatrix</p>
       </div>
     </div>
 

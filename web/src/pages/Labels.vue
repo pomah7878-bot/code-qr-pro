@@ -3,7 +3,7 @@ import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
-import { codeLinesFromText, kizRows, readDataFile, readSpreadsheet } from '../lib/labelData.js';
+import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 
@@ -529,8 +529,8 @@ async function onBarcodeFile(ev) {
     const part = await readDataFile(file);
     const list = [];
     for (const row of part.rows) {
-      const values = Object.values(row).map((v) => String(v ?? '').trim());
-      const explicit = String(row.barcode || row.ean13 || '').trim();
+      const values = Object.values(row).map((v) => normalizeScanInput(v)).filter(Boolean);
+      const explicit = normalizeScanInput(row.barcode || row.ean13 || '');
       const barcode = explicit || values.find((v) => /^\d{8,14}$/.test(v)) || '';
       if (!barcode) continue;
       list.push({ barcode, gtin: String(row.gtin || '').trim() });

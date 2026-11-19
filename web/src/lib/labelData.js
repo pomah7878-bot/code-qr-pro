@@ -115,8 +115,14 @@ function canonicalKey(value) {
 export function tableToRows(table) {
   if (!table.length) return { rows: [], columns: [] };
   if (table.length === 1 && table[0].length === 1) {
-    const k = parseKiz(table[0][0]);
-    return k ? { rows: [{ ...k, row: '1' }], columns: Object.keys(k) } : { rows: [], columns: [] };
+    const raw = normalizeScanInput(table[0][0]);
+    const k = parseKiz(raw);
+    if (k) return { rows: [{ ...k, row: '1' }], columns: Object.keys(k) };
+    // Одна строка с обычным штрихкодом EAN/UPC — не КИЗ, но это валидные данные.
+    if (/^\d{8,14}$/.test(raw)) {
+      return { rows: [{ barcode: raw, row: '1' }], columns: ['barcode', 'row'] };
+    }
+    return { rows: [], columns: [] };
   }
   const first = table[0];
   const looksHeader = first.some((c) => /^(code|код|киз|gtin|serial|серий|наимен|name|крипто|crypto|дата|date|цена|price|баркод|штрихкод|barcode|sku|артикул)$/i.test(String(c).trim()));

@@ -14,7 +14,7 @@ const error = ref('');
 const notice = ref('');
 const pdfUrl = ref('');
 const setCodesText = ref('');
-const componentTexts = ref([]);
+const componentTexts = ref([{ codesText: '' }]);
 
 const formats = [
   { id: '58x80', label: '58×80 мм — набор с составом' },

@@ -6,6 +6,7 @@ import { importPdf } from '../lib/pdfImport.js';
 import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 import { openPrintWindow } from '../lib/print.js';
 
 const S = 4; // px на мм для предпросмотра
@@ -711,7 +712,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
         note="Если что-то не совпало, в блоке «Данные для предпросмотра» можно выбрать строку и посмотреть все поля."
       />
       <div v-if="!premium" class="glass rounded-2xl p-4 text-sm border-brand-500/40">
-        ✏️ Проектируйте шаблоны бесплатно. Рендер, PDF-листы и печать через Bridge — на тарифе <b class="grad-text">PREMIUM</b> (подключение на этапе 4).
+        <BrandIcon name="edit" :size="15" class="inline-block mr-1 -mt-0.5" />Проектируйте шаблоны бесплатно. Рендер, PDF-листы и печать через Bridge — на тарифе <b class="grad-text">PREMIUM</b> (подключение на этапе 4).
       </div>
 
       <div class="grid md:grid-cols-2 gap-4">
@@ -777,7 +778,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'serial')">Поле Serial</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'code')">Поле КИЗ</button>
             <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="addElement('field', 'row')">Поле №</button>
-            <button v-if="selected" class="btn-ghost !py-1.5 !px-3 text-xs text-red-500 ml-auto" @click="removeSelected">✕ Удалить</button>
+            <button v-if="selected" class="btn-ghost !py-1.5 !px-3 text-xs text-red-500 ml-auto" @click="removeSelected"><BrandIcon name="close" :size="14" class="inline-block mr-1 -mt-0.5" />Удалить</button>
           </div>
           <div class="overflow-auto rounded-xl bg-slate-100 dark:bg-ink-900 p-6 flex justify-center">
             <canvas ref="canvas" class="shadow-xl cursor-move touch-none" @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp"></canvas>
@@ -807,13 +808,13 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <div><label class="label !text-xs">DPI</label><select v-model.number="tpl.dpi" class="input !py-1.5 text-sm"><option :value="203">203</option><option :value="300">300</option></select></div>
             </div>
             <div class="flex gap-2">
-              <button class="btn-primary !py-2 !px-4 text-sm flex-1" @click="saveTemplate">💾 Сохранить</button>
+              <button class="btn-primary !py-2 !px-4 text-sm flex-1" @click="saveTemplate"><BrandIcon name="save" :size="16" class="inline-block mr-1 -mt-0.5" />Сохранить</button>
               <button class="btn-ghost !py-2 !px-3 text-sm" @click="newTemplate">Новый</button>
             </div>
             <div v-if="templates.length" class="space-y-1 max-h-32 overflow-auto">
               <div v-for="t in templates" :key="t.id" class="flex items-center gap-2 text-xs">
                 <button class="truncate hover:text-brand-400" :class="currentTemplateId === t.id ? 'font-bold text-brand-400' : ''" @click="openTemplate(t)">{{ t.name }} ({{ t.widthMm }}×{{ t.heightMm }})</button>
-                <button class="ml-auto text-slate-400 hover:text-red-500" @click="removeTemplate(t.id)">✕</button>
+                <button class="ml-auto text-slate-400 hover:text-red-500" @click="removeTemplate(t.id)"><BrandIcon name="close" :size="17" /></button>
               </div>
             </div>
           </div>
@@ -904,17 +905,17 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               </div>
             </template>
 
-            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf">⬇ PDF-лист А4 ({{ dataRows.length || 0 }})</button>
-            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle">⬇ PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
-            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels">🖨 Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
+            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF-лист А4 ({{ dataRows.length || 0 }})</button>
+            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
+            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels"><BrandIcon name="print" :size="15" class="inline-block mr-1 -mt-0.5" />Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
             <p class="text-xs text-slate-500">При печати из браузера выбери бумагу {{ tpl.widthMm }}×{{ tpl.heightMm }} мм; Adobe PDF/A4 добавит белые поля.</p>
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">
-            <h2 class="font-display font-semibold text-sm">🖨️ Print Bridge</h2>
+            <h2 class="font-display font-semibold text-sm"><span class="inline-flex items-center gap-2"><BrandIcon name="print" :size="17" />Print Bridge</span></h2>
             <div class="text-xs" :class="bridge.status === 'ok' ? 'text-emerald-500' : bridge.status === 'fail' ? 'text-red-500' : 'text-slate-500'">
-              {{ { unknown: 'Не подключён', checking: 'Проверяем…', ok: '✓ Bridge на связи', fail: '✗ Bridge недоступен — запустите start.bat', token: '✗ Неверный токен' }[bridge.status] }}
+              {{ { unknown: 'Не подключён', checking: 'Проверяем…', ok: 'Bridge на связи', fail: 'Bridge недоступен — запустите start.bat', token: 'Неверный токен' }[bridge.status] }}
             </div>
             <input v-model="bridge.token" class="input !py-2 text-sm font-mono" placeholder="Токен из консоли Bridge" @change="saveToken">
             <button class="btn-ghost w-full !py-2 text-sm" @click="bridgePing">Подключиться</button>
@@ -926,8 +927,8 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
                 <label class="label !text-xs !mb-0">Копий</label>
                 <input v-model.number="bridge.copies" type="number" min="1" max="999" class="input !py-1.5 text-sm w-20">
               </div>
-              <button class="btn-primary w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(false)">🖨️ Печатать этикетку</button>
-              <button class="btn-ghost w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(true)">👁 Предпросмотр рендера</button>
+              <button class="btn-primary w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(false)"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печатать этикетку</button>
+              <button class="btn-ghost w-full !py-2 text-sm" :disabled="bridge.busy || !dataRows.length" @click="bridgePrint(true)"><BrandIcon name="eye" :size="16" class="inline-block mr-1 -mt-0.5" />Предпросмотр рендера</button>
             </template>
             <img v-if="previewPng" :src="previewPng" class="w-full rounded-lg border border-slate-200 dark:border-white/10" alt="Рендер этикетки">
           </div>

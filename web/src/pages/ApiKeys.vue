@@ -1,4 +1,5 @@
 <script setup>
+import BrandIcon from '../components/BrandIcon.vue';
 import { ref, onMounted } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
@@ -47,7 +48,7 @@ onMounted(load);
             <button class="btn-primary" @click="create">Создать</button>
           </div>
           <div v-if="newKey" class="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/40 p-4">
-            <div class="text-xs text-amber-600 dark:text-amber-400 mb-2">⚠️ Ключ показывается один раз — сохраните его:</div>
+            <div class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mb-2"><BrandIcon name="warning" :size="15" />Ключ показывается один раз — сохраните его:</div>
             <div class="flex gap-2 items-center">
               <code class="text-xs font-mono break-all flex-1">{{ newKey }}</code>
               <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="copy">Копировать</button>
@@ -60,7 +61,7 @@ onMounted(load);
             <code class="font-mono text-xs">{{ k.prefix }}…</code>
             <span class="font-medium">{{ k.name }}</span>
             <span class="text-xs text-slate-500 ml-auto">{{ k.last_used_at ? 'использован ' + k.last_used_at.slice(0, 10) : 'не использован' }}</span>
-            <button class="text-slate-400 hover:text-red-500" @click="revoke(k.id)">✕</button>
+            <button class="text-slate-400 hover:text-red-500" @click="revoke(k.id)"><BrandIcon name="close" :size="16" /></button>
           </div>
         </div>
         <div class="glass rounded-2xl p-6">

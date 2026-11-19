@@ -10,7 +10,6 @@ const plans = ref([]);
 const reviews = ref([]);
 const reviewCount = ref(0);
 const reviewAvg = ref(0);
-const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 const premium = () => plans.value.find(p => p.id === 'premium');
 const free = () => plans.value.find(p => p.id === 'free');
 const freeFeatures = computed(() => planFeatureRows(free()));
@@ -130,7 +129,7 @@ const openFaq = ref(null);
           <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-full h-auto drop-shadow-2xl">
           <div class="scan-line"></div>
           <div class="mt-5 flex items-center justify-between text-xs font-mono text-slate-500">
-            <span>GS1 · ECC200 · FNC1</span><span class="text-emerald-500 font-bold">✓ валиден</span>
+            <span>GS1 · ECC200 · FNC1</span><span class="inline-flex items-center gap-1 text-emerald-500 font-bold"><BrandIcon name="check" :size="13" />валиден</span>
           </div>
         </div>
       </div>
@@ -219,7 +218,7 @@ const openFaq = ref(null);
       <div class="orb anim-glow w-[400px] h-[400px] bg-violet-600/15 top-20 left-1/2 -translate-x-1/2"></div>
       <div class="reveal relative text-center mb-14">
         <div class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-4 py-1.5 mb-5">
-          <span v-if="maxDiscount() > 0">🔥 Скидки до {{ maxDiscount() }}% на длинные периоды</span>
+          <span v-if="maxDiscount() > 0" class="inline-flex items-center gap-1.5"><BrandIcon name="flame" :size="15" />Скидки до {{ maxDiscount() }}% на длинные периоды</span>
           <span v-else>Выгоднее при оплате за год</span>
         </div>
         <h2 class="font-display font-bold text-3xl md:text-5xl mb-4">Выберите свой тариф</h2>
@@ -229,7 +228,7 @@ const openFaq = ref(null);
         <!-- FREE -->
         <div v-if="free()" class="reveal glass rounded-3xl p-6 sm:p-8 flex flex-col hover:-translate-y-1 transition-transform duration-300">
           <div class="flex items-center gap-3 mb-2">
-            <div class="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center text-xl">🌱</div>
+            <div class="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center"><BrandIcon name="seed" :size="24" /></div>
             <h3 class="font-display font-extrabold text-2xl">FREE</h3>
           </div>
           <p class="text-sm text-slate-500 mb-5">Попробовать без риска</p>
@@ -237,16 +236,16 @@ const openFaq = ref(null);
           <div class="text-sm text-slate-500 mb-7">навсегда, без карты</div>
           <ul class="space-y-3 text-sm mb-8 flex-1">
             <li v-for="f in freeFeatures" :key="f.text" class="flex items-center gap-2.5" :class="f.on ? '' : 'opacity-40'">
-              <span :class="f.on ? 'text-emerald-500' : ''">{{ f.on ? '✓' : '✗' }}</span> {{ f.text }}
+              <span :class="f.on ? 'text-emerald-500' : 'text-red-400'"><BrandIcon :name="f.on ? 'check' : 'close'" :size="14" /></span> {{ f.text }}
             </li>
           </ul>
           <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
         </div>
         <!-- PREMIUM -->
         <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-6 sm:p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
-          <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap">⭐ Выбор бизнеса</div>
+          <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap"><span class="inline-flex items-center gap-1"><BrandIcon name="star-filled" :size="13" />Выбор бизнеса</span></div>
           <div class="flex items-center gap-3 mb-2 mt-2">
-            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center text-xl shadow-lg shadow-violet-600/40">👑</div>
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center shadow-lg shadow-violet-600/40"><BrandIcon name="crown" :size="24" /></div>
             <h3 class="font-display font-extrabold text-2xl grad-text">PREMIUM</h3>
           </div>
           <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
@@ -273,25 +272,25 @@ const openFaq = ref(null);
           </div>
           <ul class="space-y-3 text-sm mb-8 flex-1">
             <li v-for="f in premiumFeatures" :key="f.text" class="flex items-center gap-2.5">
-              <span class="text-emerald-500 font-bold">✓</span> {{ f.text }}
+              <span class="text-emerald-500 font-bold"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
             </li>
           </ul>
           <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PREMIUM →</router-link>
-          <p class="text-center text-xs text-slate-500 mt-3">🔒 Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
+          <p class="text-center text-xs text-slate-500 mt-3 inline-flex items-center gap-1.5"><BrandIcon name="lock" :size="14" />Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
         </div>
       </div>
-      <p class="reveal text-center text-sm text-slate-500 mt-8">💡 Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
+      <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
     </section>
 
     <!-- REVIEWS -->
     <section v-if="reviews.length" class="max-w-6xl mx-auto px-4 py-16">
       <div class="reveal text-center mb-10">
         <h2 class="font-display font-bold text-3xl md:text-4xl mb-2">Отзывы клиентов</h2>
-        <p class="text-slate-500"><span class="text-amber-500">★</span> {{ reviewAvg }} из 5 · {{ reviewCount }} отзывов</p>
+        <p class="text-slate-500"><span class="text-amber-500"><BrandIcon name="star-filled" :size="15" /></span> {{ reviewAvg }} из 5 · {{ reviewCount }} отзывов</p>
       </div>
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div v-for="(r, i) in reviews" :key="r.id" class="reveal glass rounded-2xl p-5" :class="'reveal-d' + ((i % 3) + 1)">
-          <div class="text-amber-500 mb-2">{{ stars(r.rating) }}</div>
+          <div class="mb-2 flex gap-0.5 text-amber-500"><BrandIcon v-for="i in 5" :key="i" :name="i <= r.rating ? 'star-filled' : 'star'" :size="14" /></div>
           <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-3">{{ r.text }}</p>
           <div class="text-sm font-semibold">{{ r.authorName }}</div>
         </div>

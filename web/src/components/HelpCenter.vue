@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { hints } from '../lib/hints.js';
+import BrandIcon from './BrandIcon.vue';
 
 const open = ref(false);
 </script>
@@ -11,7 +12,7 @@ const open = ref(false);
       class="flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-500 to-accent-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-500/30 hover:opacity-95"
       @click="open = true"
     >
-      <span class="text-base leading-none">?</span>
+      <BrandIcon name="help" :size="18" />
       <span class="hidden sm:inline">Помощь</span>
     </button>
   </div>
@@ -24,7 +25,7 @@ const open = ref(false);
             <h2 class="font-display font-bold text-xl">Помощь</h2>
             <p class="text-xs text-slate-500 mt-1">Короткие подсказки по работе с сервисом.</p>
           </div>
-          <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none" aria-label="Закрыть" @click="open = false">✕</button>
+          <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none" aria-label="Закрыть" @click="open = false"><BrandIcon name="close" :size="18" /></button>
         </div>
 
         <div class="mt-4 rounded-xl border border-slate-200 dark:border-white/10 p-3">
@@ -40,23 +41,23 @@ const open = ref(false);
 
         <div class="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
           <div>
-            <div class="font-semibold text-slate-800 dark:text-white">▦ Генерация</div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="generate" :size="17" />Генерация</div>
             <p>Загрузите CSV/XLSX/PDF или вставьте коды → проверьте пакет → скачайте PDF или ZIP.</p>
           </div>
           <div>
-            <div class="font-semibold text-slate-800 dark:text-white">🖨️ Повторная печать</div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="print" :size="17" />Повторная печать</div>
             <p>Вставьте коды или отсканируйте камерой → выберите размер → нажмите «Скачать PDF». Проверка запустится сама.</p>
           </div>
           <div>
-            <div class="font-semibold text-slate-800 dark:text-white">🏷️ Этикетки</div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="label" :size="17" />Этикетки</div>
             <p>Загрузите КИЗ и данные → настройте макет → скачайте PDF по размеру этикетки.</p>
           </div>
           <div>
-            <div class="font-semibold text-slate-800 dark:text-white">🔌 API</div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="api" :size="17" />API</div>
             <p>Создайте ключ, передавайте его в заголовке <code class="text-xs">X-API-Key</code>. Генерация — <code class="text-xs">POST /api/v1/generate</code>, статус — <code class="text-xs">GET /api/v1/jobs/{id}</code>.</p>
           </div>
           <div>
-            <div class="font-semibold text-slate-800 dark:text-white">🛡️ Честный ЗНАК</div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="cz" :size="17" />Честный ЗНАК</div>
             <p>Вставьте коды и нажмите «Проверить». «Валидный» — значит формат GS1 верный, но это не подтверждение подлинности в ГИС МТ.</p>
           </div>
         </div>

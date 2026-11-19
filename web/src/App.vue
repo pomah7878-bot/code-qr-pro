@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 import { api } from './api.js';
 import HelpCenter from './components/HelpCenter.vue';
+import BrandIcon from './components/BrandIcon.vue';
 
 const router = useRouter();
 const menuOpen = ref(false);
@@ -44,7 +45,7 @@ async function changePassword() {
         <!-- desktop nav -->
         <nav class="hidden md:flex items-center gap-2">
           <button class="btn-ghost !px-3" @click="toggleTheme" title="Сменить тему">
-            <span class="dark:hidden">🌙</span><span class="hidden dark:inline">☀️</span>
+            <BrandIcon name="moon" :size="18" class="dark:hidden" /><BrandIcon name="sun" :size="18" class="hidden dark:inline" />
           </button>
           <template v-if="store.user">
             <router-link to="/app" class="btn-ghost">Кабинет</router-link>
@@ -59,7 +60,7 @@ async function changePassword() {
         <!-- mobile controls -->
         <div class="flex md:hidden items-center gap-1.5">
           <button class="btn-ghost !px-2.5 !py-2" @click="toggleTheme" title="Сменить тему">
-            <span class="dark:hidden">🌙</span><span class="hidden dark:inline">☀️</span>
+            <BrandIcon name="moon" :size="18" class="dark:hidden" /><BrandIcon name="sun" :size="18" class="hidden dark:inline" />
           </button>
           <router-link v-if="!store.user" to="/register" class="btn-primary !py-2 !px-3 text-sm whitespace-nowrap">Начать</router-link>
           <button class="btn-ghost !px-2.5 !py-2" @click="menuOpen = !menuOpen" :aria-label="menuOpen ? 'Закрыть меню' : 'Открыть меню'">
@@ -82,14 +83,14 @@ async function changePassword() {
       <transition name="menu">
         <div v-if="menuOpen" class="md:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white/95 dark:bg-ink-950/95 backdrop-blur-xl">
           <template v-if="store.user">
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')">📊 Кабинет</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/history')">🕘 История</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/generate')">▦ Генерация</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')">🏷️ Этикетки</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/sets')">🎁 Наборы</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/reprint')">🖨️ Повторная печать</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')">💳 Подписка</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/security')">🔐 Безопасность</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')"><BrandIcon name="overview" :size="18" class="inline-block mr-2 -mt-0.5" />Кабинет</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/history')"><BrandIcon name="history" :size="18" class="inline-block mr-2 -mt-0.5" />История</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/generate')"><BrandIcon name="generate" :size="18" class="inline-block mr-2 -mt-0.5" />Генерация</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')"><BrandIcon name="label" :size="18" class="inline-block mr-2 -mt-0.5" />Этикетки</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/sets')"><BrandIcon name="set" :size="18" class="inline-block mr-2 -mt-0.5" />Наборы</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/reprint')"><BrandIcon name="print" :size="18" class="inline-block mr-2 -mt-0.5" />Повторная печать</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')"><BrandIcon name="billing" :size="18" class="inline-block mr-2 -mt-0.5" />Подписка</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/security')"><BrandIcon name="lock" :size="18" class="inline-block mr-2 -mt-0.5" />Безопасность</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
           </template>
           <template v-else>

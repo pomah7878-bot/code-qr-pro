@@ -6,15 +6,16 @@ import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 import { openPrintWindow } from '../lib/print.js';
 
 const MAX = 1000;
 const categories = [
-  { id: 'lp', title: 'Легпром', icon: '👕', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
-  { id: 'shoes', title: 'Обувь', icon: '👟', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
-  { id: 'toys', title: 'Игрушки', icon: '🧸', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
-  { id: 'cosmetic', title: 'Косметика и химия', icon: '🧴', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
-  { id: 'pharmacy', title: 'Аптека / медикаменты', icon: '💊', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
+  { id: 'lp', title: 'Легпром', icon: 'shirt', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
+  { id: 'shoes', title: 'Обувь', icon: 'shoe', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
+  { id: 'toys', title: 'Игрушки', icon: 'toy', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
+  { id: 'cosmetic', title: 'Косметика и химия', icon: 'bottle', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
+  { id: 'pharmacy', title: 'Аптека / медикаменты', icon: 'pill', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
 ];
 const formats = [
   { id: '58x40h', label: '58×40 мм — горизонтальный (5.8×4 см)', w: 58, h: 40 },
@@ -208,7 +209,7 @@ function cameraErrorMessage(e) {
   if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') return 'Доступ к камере запрещён. Нажмите на замочек в адресной строке → «Камера» → «Разрешить» и повторите.';
   if (e?.name === 'NotFoundError' || e?.name === 'DevicesNotFoundError') return 'Камера не найдена. Проверьте, что она подключена и не отключена в системе.';
   if (e?.name === 'NotReadableError') return 'Камера занята другим приложением. Закройте Zoom/Teams/камеру и повторите.';
-  if (e?.name === 'OverconstrainedError') return 'Выбранная камера недоступна. Выберите другую в настройках ⚙️.';
+  if (e?.name === 'OverconstrainedError') return 'Выбранная камера недоступна. Выберите другую в настройках сканера.';
   return e?.message || 'Не удалось открыть камеру';
 }
 
@@ -713,7 +714,7 @@ async function printLabels() {
             <button v-for="c in categories" :key="c.id" class="rounded-xl border px-3 py-2 text-sm transition flex items-center gap-2 text-left"
               :class="category === c.id ? 'border-brand-500 bg-brand-500/10 font-semibold' : 'border-slate-200 dark:border-white/10 text-slate-500'"
               @click="category = c.id">
-              <span class="text-xl leading-none">{{ c.icon }}</span>
+              <BrandIcon :name="c.icon" :size="20" />
               <span class="leading-tight">{{ c.title }}</span>
             </button>
           </div>
@@ -747,9 +748,9 @@ async function printLabels() {
           <textarea v-model="codesText" rows="6" class="input font-mono text-xs" placeholder="Вставьте полные коды — по одному на строку"></textarea>
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>
           <div class="flex flex-wrap items-center gap-2">
-            <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera">📷 Камера</button>
+            <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera"><BrandIcon name="camera" :size="16" class="inline-block mr-1 -mt-0.5" />Камера</button>
             <button class="btn-ghost !py-2 !px-3 text-sm" @click="connectSerial">{{ serialConnected ? 'COM подключён' : 'COM-сканер' }}</button>
-            <button class="btn-ghost !py-2 !px-2.5 text-sm" title="Настройки сканера" aria-label="Настройки сканера" @click="openSettings">⚙️</button>
+            <button class="btn-ghost !py-2 !px-2.5 text-sm" title="Настройки сканера" aria-label="Настройки сканера" @click="openSettings"><BrandIcon name="settings" :size="16" /></button>
           </div>
           <p v-if="cameraError" class="text-xs text-red-500">{{ cameraError }}</p>
           <p v-if="serialError" class="text-xs text-amber-500">{{ serialError }}</p>
@@ -759,9 +760,9 @@ async function printLabels() {
 
           <div class="grid grid-cols-2 gap-2">
             <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
-              {{ busy ? 'Готовим…' : `⬇ PDF (${result?.valid?.length || codesCount})` }}
+              <BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? 'Готовим…' : `PDF (${result?.valid?.length || codesCount})` }}
             </button>
-            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels">🖨 Печать</button>
+            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
           </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
           <p class="text-xs text-slate-500">При печати выберите принтер этикеток и бумагу {{ currentFormat.w }}×{{ currentFormat.h }} мм. Adobe PDF/A4 добавит белые поля.</p>
@@ -835,10 +836,10 @@ async function printLabels() {
       </svg>
 
       <div class="absolute inset-x-0 top-0 p-3 flex items-center gap-2 bg-gradient-to-b from-black/75 to-transparent">
-        <button class="rounded-full bg-black/50 text-white w-10 h-10" aria-label="Закрыть камеру" @click="closeCamera">✕</button>
+        <button class="rounded-full bg-black/50 text-white w-10 h-10" aria-label="Закрыть камеру" @click="closeCamera"><BrandIcon name="close" :size="18" /></button>
         <h2 class="text-white font-semibold">Сканирование</h2>
         <div class="ml-auto flex gap-2">
-          <button class="rounded-full bg-black/50 text-white w-10 h-10" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound">{{ soundEnabled ? '🔊' : '🔇' }}</button>
+          <button class="rounded-full bg-black/50 text-white w-10 h-10" :aria-label="soundEnabled ? 'Выключить звук' : 'Включить звук'" @click="toggleSound"><BrandIcon :name="soundEnabled ? 'sound' : 'mute'" :size="18" /></button>
           <button v-if="torchAvailable" class="rounded-full bg-black/50 text-white px-3 h-10 text-sm" @click="toggleTorch">{{ torchOn ? 'Фонарик вкл' : 'Фонарик' }}</button>
         </div>
       </div>
@@ -864,7 +865,7 @@ async function printLabels() {
       <div class="glass rounded-2xl p-5 w-full max-w-md space-y-4">
         <div class="flex items-center justify-between">
           <h3 class="font-display font-semibold">Настройки сканера</h3>
-          <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white" aria-label="Закрыть настройки" @click="settingsOpen = false">✕</button>
+          <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white" aria-label="Закрыть настройки" @click="settingsOpen = false"><BrandIcon name="close" :size="18" /></button>
         </div>
 
         <div>

@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 
 const CHUNK = 1000;
 const MAX = 30000;
@@ -110,7 +111,7 @@ async function verify() {
                 <td class="py-2 pr-3 font-mono text-xs max-w-[240px] truncate" :title="r.code">{{ r.code }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ r.gtin || '—' }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ r.serial || '—' }}</td>
-                <td class="py-2"><span v-if="r.ok" class="text-emerald-500">✓ GS1 валиден</span><span v-else class="text-red-500">✗ {{ r.error }}</span></td>
+                <td class="py-2"><span v-if="r.ok" class="inline-flex items-center gap-1 text-emerald-500"><BrandIcon name="check" :size="14" />GS1 валиден</span><span v-else class="inline-flex items-center gap-1 text-red-500"><BrandIcon name="close" :size="14" />{{ r.error }}</span></td>
               </tr>
             </tbody>
           </table>

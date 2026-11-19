@@ -1,5 +1,6 @@
 <script setup>
 import { hints } from '../lib/hints.js';
+import BrandIcon from './BrandIcon.vue';
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -12,7 +13,7 @@ const props = defineProps({
 <template>
   <div v-if="hints.isVisible(props.id)" class="glass rounded-2xl p-4 border-l-4 border-brand-500 bg-brand-500/5">
     <div class="flex items-start gap-3">
-      <span class="text-xl leading-none mt-0.5" aria-hidden="true">💡</span>
+      <BrandIcon name="info" :size="20" class="mt-0.5 shrink-0" />
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-start justify-between gap-2">
           <h2 class="font-display font-semibold text-sm">{{ title }}</h2>

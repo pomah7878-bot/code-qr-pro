@@ -1,4 +1,5 @@
 <script setup>
+import BrandIcon from '../../components/BrandIcon.vue';
 import { onMounted, ref } from 'vue';
 import { api } from '../../api.js';
 import TwoFactorCard from '../../components/admin/TwoFactorCard.vue';
@@ -91,7 +92,7 @@ onMounted(load);
     <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 
     <div class="glass rounded-2xl p-6">
-      <h2 class="font-display font-semibold mb-1">💳 Тарифы PREMIUM</h2>
+      <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="billing" :size="19" />Тарифы PREMIUM</h2>
       <p class="text-xs text-slate-500 mb-4">Периоды, базовая цена и скидка %. Итоговая цена пересчитывается автоматически и видна клиентам. Скидка 0–90%.</p>
       <div class="hidden md:grid grid-cols-[90px_1fr_90px_1fr_40px] gap-3 text-xs text-slate-500 mb-2 px-1">
         <span>Срок, дн.</span><span>Базовая цена, ₽</span><span>Скидка, %</span><span>Итого клиенту</span><span></span>
@@ -106,7 +107,7 @@ onMounted(load);
             <span v-if="o.discount > 0" class="text-xs text-slate-400 line-through ml-2">{{ Number(o.price).toLocaleString('ru') }}</span>
             <div class="text-xs text-slate-500">{{ Math.round(finalPrice(o) / o.days * 30).toLocaleString('ru') }} ₽/мес</div>
           </div>
-          <button class="text-slate-400 hover:text-red-500 justify-self-end" title="Удалить период" aria-label="Удалить период" @click="removeOffer(i)">✕</button>
+          <button class="text-slate-400 hover:text-red-500 justify-self-end" title="Удалить период" aria-label="Удалить период" @click="removeOffer(i)"><BrandIcon name="close" :size="17" /></button>
         </div>
       </div>
       <div class="flex flex-wrap gap-3 mt-4 items-center">

@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import AdSlot from '../components/AdSlot.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
@@ -86,19 +87,19 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
         <h2 class="font-display font-semibold mb-4">Что дальше</h2>
         <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
           <router-link to="/app/history" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
-            <div class="font-semibold mb-1">🕘 История →</div>
+            <div class="font-semibold mb-1"><BrandIcon name="history" :size="16" class="inline-block mr-1.5 -mt-0.5" />История →</div>
             <p class="text-slate-500">Пакеты, архивы, проверки и печать — с автоматическим сроком хранения.</p>
           </router-link>
           <router-link to="/app/generate" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
-            <div class="font-semibold mb-1">▦ Генерация →</div>
+            <div class="font-semibold mb-1"><BrandIcon name="generate" :size="16" class="inline-block mr-1.5 -mt-0.5" />Генерация →</div>
             <p class="text-slate-500">Импорт CSV/XLSX, валидация GS1, пакетная генерация и экспорт.</p>
           </router-link>
           <router-link to="/app/labels" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
-            <div class="font-semibold mb-1">🏷️ Этикетки →</div>
+            <div class="font-semibold mb-1"><BrandIcon name="label" :size="16" class="inline-block mr-1.5 -mt-0.5" />Этикетки →</div>
             <p class="text-slate-500">Редактор шаблонов и печать на термопринтеры через Print Bridge.</p>
           </router-link>
           <router-link to="/app/billing" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
-            <div class="font-semibold mb-1">💳 PREMIUM →</div>
+            <div class="font-semibold mb-1"><BrandIcon name="billing" :size="16" class="inline-block mr-1.5 -mt-0.5" />PREMIUM →</div>
             <p class="text-slate-500">Оплата подписки, расширенные лимиты и API.</p>
           </router-link>
         </div>

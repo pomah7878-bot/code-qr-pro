@@ -6,6 +6,7 @@ import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
 import { buildCznCsv, downloadCznCsv } from '../lib/cznCsv.js';
 import SideNav from '../components/SideNav.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
 
@@ -193,7 +194,7 @@ onUnmounted(() => { if (poll) clearInterval(poll); });
 loadHistory();
 
 const statusLabel = { queued: 'В очереди', running: 'Генерация…', done: 'Готово', error: 'Ошибка' };
-const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid: '✗ ошибка' };
+const itemStatus = { ok: 'ожидает', generated: 'готов', invalid: 'ошибка' };
 </script>
 
 <template>
@@ -237,7 +238,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
           </div>
           <div v-if="inputTab === 'file'">
             <label class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-white/20 rounded-2xl p-10 cursor-pointer hover:border-brand-500/60 transition">
-              <span class="text-4xl mb-2">📥</span>
+              <span class="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20"><BrandIcon name="upload" :size="30" /></span>
               <span class="font-semibold">{{ fileName || 'Перетащите или выберите файл' }}</span>
               <span class="text-xs text-slate-500 mt-1">PDF (текст или DataMatrix), CSV, XLSX, TXT · коды GTIN/Serial/Crypto или один столбец</span>
               <span class="text-[11px] text-slate-400 mt-1">В PDF считаются только сами коды маркировки, а не строки файла</span>
@@ -286,8 +287,8 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
                 <td class="py-2 pr-3 font-mono text-xs">{{ it.gtin || '—' }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ it.serial || '—' }}</td>
                 <td class="py-2">
-                  <span v-if="it.ok" class="text-emerald-500">✓ ок</span>
-                  <span v-else class="text-red-500" :title="it.error">✗ {{ it.error }}</span>
+                  <span v-if="it.ok" class="text-emerald-500"><BrandIcon name="check" :size="13" class="inline-block mr-0.5 -mt-0.5" />ок</span>
+                  <span v-else class="text-red-500" :title="it.error"><BrandIcon name="close" :size="13" class="inline-block mr-0.5 -mt-0.5" />{{ it.error }}</span>
                 </td>
               </tr>
             </tbody>
@@ -299,7 +300,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
           <div><label class="label">Формат</label>
             <select v-model="format" class="input"><option value="png">PNG</option><option value="svg">SVG</option></select>
           </div>
-          <button class="btn-ghost" :disabled="!validCount" title="Один CSV-файл для отчёта о нанесении: полные коды с GS, поля экранированы" @click="downloadForCz">⬇ CSV для отчёта ЧЗ</button>
+          <button class="btn-ghost" :disabled="!validCount" title="Один CSV-файл для отчёта о нанесении: полные коды с GS, поля экранированы" @click="downloadForCz"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />CSV для отчёта ЧЗ</button>
           <button class="btn-primary" :disabled="!validCount || busy" @click="doGenerate">
             {{ busy ? 'Создаём…' : `Сгенерировать ${validCount} кодов` }}
           </button>
@@ -326,11 +327,11 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
               <div class="text-sm text-slate-500">{{ statusLabel[job.status] }} · сгенерировано {{ job.done }} из {{ job.valid }} <span v-if="job.error" class="text-red-500">· {{ job.error }}</span></div>
             </div>
             <div class="flex gap-2 flex-wrap">
-              <button class="btn-ghost !py-2.5" @click="downloadForCz">⬇ CSV для отчёта ЧЗ</button>
-              <a v-if="canExport('zip')" :href="`/api/jobs/${job.id}/export?format=zip`" class="btn-primary !py-2.5">⬇ ZIP</a>
-              <a v-if="canExport('pdf')" :href="`/api/jobs/${job.id}/export?format=pdf`" class="btn-primary !py-2.5">⬇ PDF А4</a>
+              <button class="btn-ghost !py-2.5" @click="downloadForCz"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />CSV для отчёта ЧЗ</button>
+              <a v-if="canExport('zip')" :href="`/api/jobs/${job.id}/export?format=zip`" class="btn-primary !py-2.5"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />ZIP</a>
+              <a v-if="canExport('pdf')" :href="`/api/jobs/${job.id}/export?format=pdf`" class="btn-primary !py-2.5"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF А4</a>
               <span v-if="!canExport('zip')" class="chip-soon self-center">ZIP/PDF — PREMIUM</span>
-              <button v-if="job.status === 'error'" class="btn-ghost !py-2.5" @click="retryJob(job.id)">↻ Повторить</button>
+              <button v-if="job.status === 'error'" class="btn-ghost !py-2.5" @click="retryJob(job.id)"><BrandIcon name="refresh" :size="15" class="inline-block mr-1 -mt-0.5" />Повторить</button>
               <button class="btn-ghost !py-2.5 text-red-500" @click="removeJob(job.id)">Удалить</button>
             </div>
           </div>
@@ -346,8 +347,8 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
                 <td class="py-2 pr-3 font-mono text-xs">{{ it.gtin || '—' }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ it.serial || '—' }}</td>
                 <td class="py-2 pr-3">
-                  <span v-if="it.status === 'generated'" class="text-emerald-500">✓ готов</span>
-                  <span v-else-if="it.status === 'invalid'" class="text-red-500" :title="it.error">✗ {{ it.error }}</span>
+                  <span v-if="it.status === 'generated'" class="text-emerald-500"><BrandIcon name="check" :size="13" class="inline-block mr-0.5 -mt-0.5" />готов</span>
+                  <span v-else-if="it.status === 'invalid'" class="text-red-500" :title="it.error"><BrandIcon name="close" :size="13" class="inline-block mr-0.5 -mt-0.5" />{{ it.error }}</span>
                   <span v-else class="text-slate-500">{{ itemStatus[it.status] || it.status }}</span>
                 </td>
                 <td class="py-2">
@@ -373,7 +374,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <button class="font-medium hover:text-brand-400 truncate" @click="openJob(h.id)">{{ h.name }}</button>
             <span class="text-slate-500 text-xs">{{ h.mode.toUpperCase() }} · {{ h.done }}/{{ h.valid }}</span>
             <span class="ml-auto text-xs" :class="h.status === 'done' ? 'text-emerald-500' : h.status === 'error' ? 'text-red-500' : 'text-slate-500'">{{ statusLabel[h.status] || h.status }}</span>
-            <button class="text-slate-400 hover:text-red-500" @click="removeJob(h.id)">✕</button>
+            <button class="text-slate-400 hover:text-red-500" @click="removeJob(h.id)"><BrandIcon name="close" :size="17" /></button>
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ import { store } from '../store.js';
 import { planFeatureRows } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 
 const route = useRoute();
 const sub = ref(null);
@@ -143,7 +144,7 @@ onMounted(async () => {
         </div>
         <div class="flex flex-wrap items-center justify-between gap-4 mt-5">
           <ul class="grid md:grid-cols-2 gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-            <li v-for="f in features" :key="f.text">✓ {{ f.text }}</li>
+            <li v-for="f in features" :key="f.text" class="flex items-start gap-1.5"><BrandIcon name="check" :size="14" class="mt-0.5 shrink-0" />{{ f.text }}</li>
           </ul>
           <div class="text-right">
             <div class="text-3xl font-extrabold">{{ totalPrice.toLocaleString('ru') }} ₽<span class="text-sm text-slate-500 font-medium">/{{ selectedOffer().days + (promo?.bonusDays || 0) }} дней</span></div>

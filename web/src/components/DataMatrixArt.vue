@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import BrandIcon from './BrandIcon.vue';
 const N = 22;
 const cells = computed(() => {
   const out = [];
@@ -26,7 +27,7 @@ const cells = computed(() => {
     </div>
     <div class="scanline absolute left-4 right-4 h-[3px] rounded-full bg-gradient-to-r from-transparent via-accent-400 to-transparent"></div>
     <div class="mt-4 flex items-center justify-between text-xs font-mono text-slate-500">
-      <span>GS1 · ECC200 · FNC1</span><span class="text-accent-400">✓ валиден</span>
+      <span>GS1 · ECC200 · FNC1</span><span class="inline-flex items-center gap-1 text-accent-400"><BrandIcon name="check" :size="13" />валиден</span>
     </div>
   </div>
 </template>

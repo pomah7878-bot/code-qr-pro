@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { formatArchiveSize } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 
 const data = ref(null);
 const loading = ref(true);
@@ -38,7 +39,7 @@ const statusLabel = { queued: 'В очереди', running: 'Генерация'
 const statusClass = { done: 'text-emerald-500', error: 'text-red-500', queued: 'text-slate-500', running: 'text-amber-500' };
 const modeLabel = { cz: 'ЧЗ', gs1: 'GS1', text: 'Текст' };
 const kindLabel = { cz_verify: 'Проверка ЧЗ', labels_pdf: 'PDF этикеток' };
-const kindIcon = { cz_verify: '🛡️', labels_pdf: '🏷️' };
+const kindIcon = { cz_verify: 'cz', labels_pdf: 'label' };
 
 async function load() {
   loading.value = true; error.value = '';
@@ -147,7 +148,7 @@ onMounted(load);
       <div v-else class="space-y-3">
         <p v-if="!activity.length" class="glass rounded-2xl p-8 text-sm text-slate-500 text-center">Пока нет проверок и печати.</p>
         <div v-for="a in activity" :key="a.id" class="glass rounded-2xl p-4 flex flex-wrap items-start gap-3">
-          <div class="text-xl">{{ kindIcon[a.kind] || '•' }}</div>
+          <div class="shrink-0"><BrandIcon :name="kindIcon[a.kind] || 'info'" :size="20" /></div>
           <div class="min-w-0 flex-1">
             <div class="font-semibold">{{ a.title || kindLabel[a.kind] || a.kind }}</div>
             <div class="text-xs text-slate-500 mt-1">
@@ -157,7 +158,7 @@ onMounted(load);
               <span v-if="a.expires_at"> · до {{ fmtDate(a.expires_at) }}</span>
             </div>
           </div>
-          <span class="text-xs" :class="a.status === 'ok' ? 'text-emerald-500' : 'text-red-500'">{{ a.status === 'ok' ? '✓' : '✗' }}</span>
+          <span class="text-xs" :class="a.status === 'ok' ? 'text-emerald-500' : 'text-red-500'"><BrandIcon :name="a.status === 'ok' ? 'check' : 'close'" :size="13" /></span>
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import SideNav from '../components/SideNav.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 
 const reviews = ref([]);
 const count = ref(0);
@@ -41,7 +42,6 @@ async function removeMine() {
   try { await api.deleteReview(mine.value.id); mine.value = null; text.value = ''; rating.value = 5; notice.value = 'Отзыв удалён'; await load(); }
   catch (e) { error.value = e.message; }
 }
-const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 const fmt = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateString('ru') : '';
 const statusText = (s) => s === 'approved' ? 'опубликован' : s === 'hidden' ? 'скрыт модератором' : 'на модерации';
 onMounted(load);
@@ -53,13 +53,13 @@ onMounted(load);
     <section class="space-y-6 min-w-0">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <h1 class="font-display font-bold text-3xl">Отзывы</h1>
-        <div v-if="count" class="text-sm text-slate-500"><span class="text-amber-500 text-lg">★</span> <b class="text-slate-700 dark:text-slate-200">{{ avg }}</b> · {{ count }} отзывов</div>
+        <div v-if="count" class="text-sm text-slate-500"><span class="text-amber-500"><BrandIcon name="star-filled" :size="16" /></span> <b class="text-slate-700 dark:text-slate-200">{{ avg }}</b> · {{ count }} отзывов</div>
       </div>
 
       <div v-if="store.user" class="glass rounded-2xl p-6">
         <h2 class="font-display font-semibold mb-3">{{ mine ? 'Ваш отзыв' : 'Оставить отзыв' }}</h2>
         <div class="flex items-center gap-1 mb-3 text-2xl">
-          <button v-for="n in 5" :key="n" @click="rating = n" class="transition" :class="n <= rating ? 'text-amber-500' : 'text-slate-300 dark:text-white/20'">★</button>
+          <button v-for="n in 5" :key="n" @click="rating = n" class="transition" :class="n <= rating ? 'text-amber-500' : 'text-slate-300 dark:text-white/20'"><BrandIcon :name="n <= rating ? 'star-filled' : 'star'" :size="22" /></button>
           <span class="text-sm text-slate-500 ml-2">{{ rating }} из 5</span>
         </div>
         <input v-model="authorName" class="input mb-3" placeholder="Ваше имя (как подписать отзыв)" maxlength="60">
@@ -80,7 +80,7 @@ onMounted(load);
       <div class="space-y-4">
         <div v-for="r in reviews" :key="r.id" class="glass rounded-2xl p-5">
           <div class="flex items-center gap-2 mb-1">
-            <span class="text-amber-500">{{ stars(r.rating) }}</span>
+            <span class="flex gap-0.5 text-amber-500"><BrandIcon v-for="i in 5" :key="i" :name="i <= r.rating ? 'star-filled' : 'star'" :size="14" /></span>
             <b class="text-sm">{{ r.authorName }}</b>
             <span class="text-xs text-slate-500 ml-auto">{{ fmt(r.createdAt) }}</span>
           </div>

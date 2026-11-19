@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../../api.js';
 import { fmtDateTime, money } from '../../lib/format.js';
 import LineChart from '../../components/admin/LineChart.vue';
+import BrandIcon from '../../components/BrandIcon.vue';
 
 const loading = ref(true);
 const error = ref('');
@@ -240,7 +241,7 @@ onMounted(load);
       <p v-if="!pendingReviews.length" class="text-sm text-slate-500">Новых отзывов нет — всё проверено.</p>
       <div v-for="r in pendingReviews.slice(0, 3)" :key="r.id" class="py-3 border-b border-slate-100 dark:border-white/5 last:border-0">
         <div class="flex items-center gap-2 text-sm">
-          <span class="text-amber-500">{{ '★'.repeat(r.rating) }}{{ '☆'.repeat(5 - r.rating) }}</span>
+          <span class="flex gap-0.5 text-amber-500"><BrandIcon v-for="i in 5" :key="i" :name="i <= r.rating ? 'star-filled' : 'star'" :size="14" /></span>
           <b class="truncate">{{ r.author_name || 'Клиент' }}</b>
           <span class="text-xs text-slate-500 truncate">{{ r.email }}</span>
         </div>

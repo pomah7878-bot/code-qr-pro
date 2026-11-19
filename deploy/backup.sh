@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Ежедневный бэкап БД CODE QR PRO (sqlite .backup — консистентно при WAL)
+# Ежедневный бэкап БД CODE QR PRO: AES-256-GCM + проверка восстановлением.
 set -euo pipefail
-DIR=/opt/backups/code-qr
-mkdir -p "$DIR"
-STAMP=$(date +%Y%m%d-%H%M%S)
-sqlite3 /opt/code-qr/server/data/app.db ".backup '$DIR/app-$STAMP.db'"
-gzip -f "$DIR/app-$STAMP.db"
-find "$DIR" -name "app-*.db.gz" -mtime +14 -delete
-echo "backup ok: app-$STAMP.db.gz"
+BACKUP_DIR="${BACKUP_DIR:-/opt/backups/code-qr}"
+cd /opt/code-qr/server
+export BACKUP_DIR
+/usr/bin/node scripts/backup.mjs
+LATEST=$(ls -t "$BACKUP_DIR"/app-*.db.enc | head -1)
+/usr/bin/node scripts/verify-backup.mjs "$LATEST"
+# Старые незашифрованные .gz больше не нужны после успешной проверки.
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'app-*.db.gz' -delete
+echo "backup ok + restore verified: $LATEST"

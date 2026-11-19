@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { planOf } from './plans.js';
-import { renderSetsPdf, normalizeSetPayload, validateSetPayload } from './sets.js';
+import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin } from './sets.js';
 import { logActivity } from './lib/activity.js';
 
 const rowToTemplate = (r) => ({
@@ -16,10 +16,10 @@ const rowToTemplate = (r) => ({
 function cleanTemplate(body = {}) {
   const p = normalizeSetPayload({ template: body, setCodes: ['x'], onlySet: true, componentCodes: [] });
   if (!p.name) return { error: 'Укажите название набора' };
-  if (!/^\d{14}$/.test(p.setGtin)) return { error: 'GTIN набора должен содержать 14 цифр' };
+  if (!validGtin(p.setGtin)) return { error: 'GTIN набора должен содержать 14 цифр с правильной контрольной цифрой' };
   if (!p.components.length) return { error: 'Добавьте хотя бы один товар в набор' };
   for (const c of p.components) {
-    if (!/^\d{14}$/.test(c.gtin)) return { error: `GTIN товара «${c.name || 'без названия'}» должен быть 14 цифр` };
+    if (!validGtin(c.gtin)) return { error: `GTIN товара «${c.name || 'без названия'}» должен содержать 14 цифр с правильной контрольной цифрой` };
     if (!c.name) return { error: 'У каждого товара должно быть название' };
   }
   return { template: { name: p.name, setGtin: p.setGtin, format: p.format, components: p.components } };

@@ -37,10 +37,28 @@ const lines = (text) => String(text || '').split(/\r?\n/).map((s) => normalizeSc
 const setCount = computed(() => lines(setCodesText.value).length);
 const requiredFor = (c) => setCount.value * Math.max(1, Number(c.qty) || 1);
 const codeCount = (i) => lines(componentTexts.value[i]?.codesText || '').length;
-const gtinOk = (v) => /^\d{14}$/.test(String(v || '').replace(/\D/g, ''));
+function gtinOk(v) {
+  const s = String(v || '').replace(/\D/g, '');
+  if (!/^\d{14}$/.test(s)) return false;
+  let sum = 0, weight = 3;
+  for (let i = 12; i >= 0; i--) { sum += Number(s[i]) * weight; weight = weight === 3 ? 1 : 3; }
+  return String((10 - (sum % 10)) % 10) === s[13];
+}
 const validComponents = computed(() => form.components.length > 0 && form.components.every((c) => gtinOk(c.gtin) && String(c.name).trim()));
-const canPrint = computed(() => premium.value && form.name.trim() && gtinOk(form.setGtin) && validComponents.value && setCount.value > 0
-  && (form.onlySet || form.components.every((c, i) => codeCount(i) >= requiredFor(c))));
+const validationMessage = computed(() => {
+  if (!premium.value) return '';
+  if (!form.name.trim()) return 'Укажите название набора';
+  if (!gtinOk(form.setGtin)) return 'GTIN набора должен быть 14 цифр с правильной контрольной цифрой';
+  if (!validComponents.value) return 'У каждого товара должны быть GTIN (14 цифр) и название';
+  if (!setCount.value) return 'Вставьте КИН набора — по одному на строку';
+  if (!form.onlySet) {
+    for (const [i, c] of form.components.entries()) {
+      if (codeCount(i) < requiredFor(c)) return `Для «${c.name}» нужно ${requiredFor(c)} кодов, вставлено ${codeCount(i)}`;
+    }
+  }
+  return '';
+});
+const canPrint = computed(() => premium.value && !validationMessage.value);
 
 function syncCodes(count) {
   while (componentTexts.value.length < count) componentTexts.value.push({ codesText: '' });
@@ -185,7 +203,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
       <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="font-display font-bold text-3xl">Наборы</h1>
-          <p class="text-sm text-slate-500 mt-1">КИЗ на набор и этикетки для всего состава.</p>
+          <p class="text-sm text-slate-500 mt-1">КИН набора и этикетки для всего состава.</p>
         </div>
         <button class="btn-ghost !py-2 !px-3 text-sm" @click="newTemplate">+ Новый набор</button>
       </div>
@@ -195,8 +213,8 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
         title="Наборы за 3 шага"
         :steps="[
           'Заполните карточку набора: название, GTIN набора из Национального каталога и состав — GTIN и количество каждого товара.',
-          'Получите в СУЗ коды: один КИЗ на набор и отдельные КИЗ на каждое вложение (если упаковка разборная).',
-          'Вставьте КИЗ набора и коды вложений, затем скачайте PDF: этикетка набора + этикетки всех вложений.'
+          'Получите в СУЗ коды: один КИН набора и отдельные КИЗ на каждое вложение (если упаковка разборная).',
+          'Вставьте КИН набора и КИЗ вложений, затем скачайте PDF: этикетка набора + этикетки всех вложений.'
         ]"
         note="Сервис печатает этикетки, но не заказывает коды в Честном ЗНАКе. Заказ КМ и формирование упаковки — в СУЗ или 1С."
       />
@@ -205,6 +223,19 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
         Печать наборов доступна на тарифе <b class="grad-text">PREMIUM</b>.
         <router-link to="/app/billing" class="text-brand-400 font-medium">Оформить →</router-link>
       </div>
+
+      <details class="glass rounded-2xl p-4 text-sm">
+        <summary class="cursor-pointer font-semibold">Правила «Честного ЗНАКа» для наборов</summary>
+        <ul class="mt-3 space-y-1.5 text-xs text-slate-600 dark:text-slate-300 list-disc list-inside">
+          <li>В Национальном каталоге создаётся карточка типа <b>«Набор»</b>: GTIN набора, GTIN вложений и количество. Состав в ЧЗ должен совпадать с составом в этом шаблоне.</li>
+          <li>В СУЗ заказываются коды: на набор — с типом <b>«Набор»</b> (КИН), на каждое вложение — обычные КИЗ.</li>
+          <li>Если вложения в статусе <b>«Нанесён»</b>, у всех должен быть одинаковый тип эмиссии, а у набора — статус «Нанесён» и тот же тип эмиссии.</li>
+          <li>Если вложения в статусе <b>«В обороте»</b>, набор должен быть «Нанесён» с типом эмиссии <b>«Произведён в РФ»</b>. После формирования он автоматически станет «В обороте».</li>
+          <li>Коды наносятся на набор и на вложения. Исключение — упаковка набора не вскрывается без повреждения: тогда допускается только код набора (режим «Только код набора»).</li>
+          <li>После нанесения подаётся отчёт, затем в ЧЗ создаётся документ <b>«Формирование упаковки» → «Набор»</b>.</li>
+        </ul>
+        <p class="text-xs text-amber-500 mt-3">Сервис не заказывает коды в СУЗ и не подаёт документы в ГИС МТ — только готовит этикетки. Заказ и отчёты делаются в СУЗ/1С или личном кабинете ЧЗ.</p>
+      </details>
 
       <div class="grid md:grid-cols-2 gap-4">
         <div class="glass rounded-2xl p-5 space-y-3">
@@ -255,8 +286,8 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
 
         <div class="glass rounded-2xl p-5 space-y-3">
           <h2 class="font-display font-semibold">Коды набора</h2>
-          <p class="text-xs text-slate-500">Вставьте КИЗ набора — один на строку. Если наборов несколько, коды вложений распределятся по порядку.</p>
-          <textarea v-model="setCodesText" rows="4" class="input font-mono text-xs" placeholder="КИЗ набора, по одному на строку"></textarea>
+          <p class="text-xs text-slate-500">Вставьте КИН набора — один на строку. Если наборов несколько, коды вложений распределятся по порядку.</p>
+          <textarea v-model="setCodesText" rows="4" class="input font-mono text-xs" placeholder="КИН набора, по одному на строку"></textarea>
           <p class="text-xs text-slate-500">Наборов: <b>{{ setCount }}</b></p>
 
           <template v-if="!form.onlySet">
@@ -274,6 +305,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           <p v-else class="text-xs text-amber-500">Включён режим «Только набор» — коды вложений не нужны.</p>
 
           <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !canPrint" @click="downloadPdf">{{ busy ? 'Готовим PDF…' : `⬇ Скачать PDF (${setCount || 0} наборов)` }}</button>
+          <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>
           <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>

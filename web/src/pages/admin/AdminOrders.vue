@@ -87,7 +87,7 @@ function confirmOrder(o) {
 }
 
 function cancelOrder(o) {
-  if (!window.confirm(`Отменить заказ №${o.id}? Если платёж уже создан, он будет отменён в ЮKassa.`)) return;
+  if (!window.confirm(`Отменить заказ №${o.id}?\nЕсли платёж уже в статусе ожидания оплаты, ЮKassa не позволит отменить его через API — заказ будет отменён локально, ссылка перестанет действовать после истечения срока.`)) return;
   run(o, () => api.adminCancelOrder(o.id), (r) => r.warning ? `Заказ отменён. ${r.warning}` : 'Заказ отменён');
 }
 

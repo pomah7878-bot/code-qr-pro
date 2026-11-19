@@ -14,6 +14,7 @@ const links = computed(() => {
     { to: '/app/admin/jobs', label: 'Задания' },
     { to: '/app/admin/storage', label: 'Хранилище', adminOnly: true },
     { to: '/app/admin/marketing', label: 'Маркетинг', adminOnly: true },
+    { to: '/app/admin/ads', label: 'Реклама', adminOnly: true },
     { to: '/app/admin/audit', label: 'Журнал', adminOnly: true },
     { to: '/app/admin/settings', label: 'Настройки', adminOnly: true }
   ];

@@ -281,7 +281,37 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX idx_set_templates_user ON set_templates(user_id);`
+   CREATE INDEX idx_set_templates_user ON set_templates(user_id);`,
+  // v18 — рекламные кампании и статистика
+  `CREATE TABLE ad_campaigns (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     advertiser TEXT NOT NULL DEFAULT '',
+     title TEXT NOT NULL DEFAULT '',
+     text TEXT NOT NULL DEFAULT '',
+     image_key TEXT,
+     target_url TEXT NOT NULL DEFAULT '',
+     placement TEXT NOT NULL DEFAULT 'landing_banner',
+     status TEXT NOT NULL DEFAULT 'draft',
+     price REAL NOT NULL DEFAULT 0,
+     paid INTEGER NOT NULL DEFAULT 0,
+     paid_at TEXT,
+     starts_at TEXT,
+     ends_at TEXT,
+     impression_limit INTEGER NOT NULL DEFAULT 0,
+     click_limit INTEGER NOT NULL DEFAULT 0,
+     impressions INTEGER NOT NULL DEFAULT 0,
+     clicks INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_ads_slot ON ad_campaigns(placement, status, paid);
+   CREATE TABLE ad_daily_stats (
+     ad_id INTEGER NOT NULL REFERENCES ad_campaigns(id) ON DELETE CASCADE,
+     day TEXT NOT NULL,
+     impressions INTEGER NOT NULL DEFAULT 0,
+     clicks INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (ad_id, day)
+   );`
 ];
 
 const version = db.pragma('user_version', { simple: true });

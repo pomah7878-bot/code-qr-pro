@@ -25,6 +25,7 @@ import AdminAudit from './pages/admin/AdminAudit.vue';
 import AdminMarketing from './pages/admin/AdminMarketing.vue';
 import AdminSettings from './pages/admin/AdminSettings.vue';
 import AdminStorage from './pages/admin/AdminStorage.vue';
+import AdminAds from './pages/admin/AdminAds.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -55,6 +56,7 @@ const router = createRouter({
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
         { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
+        { path: 'ads', component: AdminAds, meta: { adminOnly: true } },
         { path: 'storage', component: AdminStorage, meta: { adminOnly: true } },
         { path: 'settings', component: AdminSettings, meta: { adminOnly: true } }
       ]

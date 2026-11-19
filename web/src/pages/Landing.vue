@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { planFeatureRows } from '../lib/planFeatures.js';
+import AdSlot from '../components/AdSlot.vue';
 
 const plans = ref([]);
 const reviews = ref([]);
@@ -133,6 +134,10 @@ const openFaq = ref(null);
         </div>
       </div>
     </section>
+
+    <div class="max-w-6xl mx-auto px-4 pb-6">
+      <AdSlot placement="landing_banner" />
+    </div>
 
     <!-- ДОВЕРИЕ / ВЫГОДЫ -->
     <section class="max-w-6xl mx-auto px-4 py-12">

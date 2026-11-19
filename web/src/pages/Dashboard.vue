@@ -4,6 +4,7 @@ import { store } from '../store.js';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import AdSlot from '../components/AdSlot.vue';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
@@ -47,6 +48,8 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
         ]"
         note="Подсказки можно отключить кнопкой «Помощь» внизу справа и включить обратно там же."
       />
+
+      <AdSlot placement="app_banner" />
 
       <div class="grid md:grid-cols-2 gap-6">
         <div class="glass rounded-2xl p-6">

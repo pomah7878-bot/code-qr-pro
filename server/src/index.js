@@ -29,7 +29,7 @@ import { db } from './db.js';
 import { cleanupExpiredJobs } from './jobs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 8 * 1024 * 1024 });
+const app = Fastify({ logger: true, trustProxy: '127.0.0.1', bodyLimit: 8 * 1024 * 1024 });
 
 app.addHook('onRequest', securityHeaders);
 app.addHook('onRequest', sameOriginGuard);

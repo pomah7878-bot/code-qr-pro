@@ -99,9 +99,11 @@ export async function registerRoutes(app) {
     if (db.prepare('SELECT COUNT(*) c FROM users').get().c === 1) {
       db.prepare("UPDATE users SET role='admin' WHERE id=?").run(info.lastInsertRowid);
     }
-    const { token, expires } = createSession(info.lastInsertRowid, { ip: req.ip, ua: req.headers['user-agent'] });
-    reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+    const { token, expires } = createSession(user.id, {
+      ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
+    });
+    reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     db.prepare('DELETE FROM login_attempts WHERE email=?').run(email.toLowerCase());
     const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
     notifyRegistration(user, totalUsers);

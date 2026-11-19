@@ -7,6 +7,7 @@ import {
 } from './lib/totp.js';
 import { readTicket, countAttempt, clearTicket } from './lib/twofa-ticket.js';
 import { audit } from './lib/audit.js';
+import { encryptSecret, decryptSecret } from './lib/secrets.js';
 
 const COOKIE = 'cq_session';
 const cookieOpts = (expires) => ({
@@ -23,7 +24,7 @@ export async function registerTwoFactorRoutes(app) {
     const user = getUser(req.user.id);
     if (user.totp_enabled) return reply.code(400).send({ error: 'Двухфакторная аутентификация уже включена' });
     const secret = generateSecret();
-    db.prepare('UPDATE users SET totp_secret=? WHERE id=?').run(secret, user.id);
+    db.prepare('UPDATE users SET totp_secret=? WHERE id=?').run(encryptSecret(secret), user.id);
     const otpauth = otpauthUrl(secret, user.email);
     const png = await bwipjs.toBuffer({
       bcid: 'qrcode', text: otpauth, scale: 4, paddingwidth: 8, paddingheight: 8
@@ -40,7 +41,7 @@ export async function registerTwoFactorRoutes(app) {
     const user = getUser(req.user.id);
     if (user.totp_enabled) return reply.code(400).send({ error: 'Двухфакторная аутентификация уже включена' });
     if (!user.totp_secret) return reply.code(400).send({ error: 'Сначала запустите настройку 2FA' });
-    if (!verifyTotp(user.totp_secret, req.body?.code)) {
+    if (!verifyTotp(decryptSecret(user.totp_secret), req.body?.code)) {
       return reply.code(400).send({ error: 'Код не подходит. Проверьте время на устройстве.' });
     }
     const backupCodes = generateBackupCodes(10);
@@ -58,7 +59,7 @@ export async function registerTwoFactorRoutes(app) {
     }
     const code = String(req.body?.code || '').trim();
     const backupLeft = consumeBackupCode(user.totp_backup, code);
-    if (!verifyTotp(user.totp_secret, code) && !backupLeft) {
+    if (!verifyTotp(decryptSecret(user.totp_secret), code) && !backupLeft) {
       return reply.code(400).send({ error: 'Код или резервный код не подходит' });
     }
     db.prepare("UPDATE users SET totp_enabled=0, totp_secret=NULL, totp_backup='[]' WHERE id=?").run(user.id);
@@ -79,7 +80,7 @@ export async function registerTwoFactorRoutes(app) {
       return reply.code(401).send({ error: 'Вход недоступен' });
     }
     const code = String(req.body?.code || '').trim();
-    let ok = verifyTotp(user.totp_secret, code);
+    let ok = verifyTotp(decryptSecret(user.totp_secret), code);
     if (!ok) {
       const left = consumeBackupCode(user.totp_backup, code);
       if (left) {

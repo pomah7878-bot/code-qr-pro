@@ -1,6 +1,6 @@
 import bwipjs from 'bwip-js';
 import { db } from './db.js';
-import { verifyPassword, createSession, publicUser } from './auth.js';
+import { verifyPassword, createSession, publicUser, sessionDaysFor } from './auth.js';
 import { requireAuth } from './routes.js';
 import {
   generateSecret, verifyTotp, otpauthUrl, generateBackupCodes, hashBackupCodes, consumeBackupCode
@@ -92,7 +92,7 @@ export async function registerTwoFactorRoutes(app) {
     clearTicket(ticket.n);
     db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
     const { token, expires } = createSession(user.id, {
-      ip: req.ip, ua: req.headers['user-agent']
+      ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
     });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     req.user = user;

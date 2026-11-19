@@ -2,6 +2,8 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db } from './db.js';
 
 const SESSION_DAYS = 30;
+const ADMIN_SESSION_DAYS = Number(process.env.ADMIN_SESSION_DAYS || 7);
+const ADMIN_IDLE_MINUTES = Number(process.env.ADMIN_IDLE_MINUTES || 120);
 
 export function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
@@ -18,8 +20,9 @@ export function verifyPassword(password, stored) {
 
 export function createSession(userId, meta = {}) {
   const token = randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)')
+  const days = Number(meta.days) || SESSION_DAYS;
+  const expires = new Date(Date.now() + days * 86400_000).toISOString();
+  db.prepare('INSERT INTO sessions (token, user_id, expires_at, ip, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))')
     .run(token, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200));
   return { token, expires };
 }
@@ -27,11 +30,26 @@ export function createSession(userId, meta = {}) {
 export function sessionUser(token) {
   if (!token) return null;
   const row = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.totp_enabled, u.created_at
+    `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.totp_enabled, u.created_at,
+            s.last_used_at, s.created_at AS session_created_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > datetime('now')`
   ).get(token);
-  return row || null;
+  if (!row) return null;
+  if (['admin', 'support'].includes(row.role)) {
+    const last = row.last_used_at || row.session_created_at;
+    const idle = db.prepare("SELECT datetime(?, '+' || ? || ' minutes') <= datetime('now') AS expired").get(last, ADMIN_IDLE_MINUTES);
+    if (idle?.expired) {
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+      return null;
+    }
+  }
+  db.prepare("UPDATE sessions SET last_used_at=datetime('now') WHERE token = ?").run(token);
+  return row;
+}
+
+export function sessionDaysFor(role) {
+  return ['admin', 'support'].includes(role) ? ADMIN_SESSION_DAYS : SESSION_DAYS;
 }
 
 export function destroySession(token) {

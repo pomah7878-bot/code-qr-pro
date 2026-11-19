@@ -228,7 +228,22 @@ const MIGRATIONS = [
     ip TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-  CREATE INDEX idx_password_resets_user ON password_resets(user_id, created_at);`
+  CREATE INDEX idx_password_resets_user ON password_resets(user_id, created_at);`,
+  // v14 — сессии, защита от перебора и постоянный rate-limit
+  `ALTER TABLE sessions ADD COLUMN last_used_at TEXT;
+   CREATE TABLE login_attempts (
+     email TEXT PRIMARY KEY,
+     fails INTEGER NOT NULL DEFAULT 0,
+     window_start TEXT NOT NULL DEFAULT (datetime('now')),
+     locked_until TEXT,
+     last_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE TABLE rate_limits (
+     key TEXT PRIMARY KEY,
+     window_start INTEGER NOT NULL,
+     count INTEGER NOT NULL
+   );
+   CREATE INDEX idx_rate_limits_window ON rate_limits(window_start);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

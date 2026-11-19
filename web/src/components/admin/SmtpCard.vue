@@ -99,7 +99,7 @@ onMounted(load);
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="font-display font-semibold">Почта (SMTP)</h2>
-        <p class="text-xs text-slate-500 mt-1">Через этот сервер уходят рассылки и тестовые письма.</p>
+        <p class="text-xs text-slate-500 mt-1">Через этот сервер уходят рассылки и тестовые письма. Для @mail.ru SPF/DKIM уже настроены; для своего домена добавьте SPF, DKIM и DMARC в DNS.</p>
       </div>
       <span class="chip-soon" :class="state.configured ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : ''">{{ state.configured ? 'настроен' : 'не настроен' }}</span>
     </div>

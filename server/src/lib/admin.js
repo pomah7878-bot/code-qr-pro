@@ -5,6 +5,9 @@ export const requireAdmin = async (req, reply) => {
   await requireAuth(req, reply);
   if (reply.sent) return;
   if (req.user?.role !== 'admin') return reply.code(403).send({ error: 'Только для администратора' });
+  if (!req.user.totp_enabled) {
+    return reply.code(403).send({ error: 'Для доступа к админке включите двухфакторную аутентификацию в разделе «Безопасность»', code: '2fa_required' });
+  }
 };
 
 // support — просмотр клиентов и заданий без денег и настроек
@@ -13,6 +16,9 @@ export const requireStaff = async (req, reply) => {
   if (reply.sent) return;
   if (!['admin', 'support'].includes(req.user?.role)) {
     return reply.code(403).send({ error: 'Раздел доступен администратору и поддержке' });
+  }
+  if (!req.user.totp_enabled) {
+    return reply.code(403).send({ error: 'Для доступа к админке включите двухфакторную аутентификацию в разделе «Безопасность»', code: '2fa_required' });
   }
 };
 

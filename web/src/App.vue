@@ -79,6 +79,7 @@ async function changePassword() {
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')">🏷️ Этикетки</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/reprint')">🖨️ Повторная печать</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')">💳 Подписка</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/security')">🔐 Безопасность</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
           </template>
           <template v-else>

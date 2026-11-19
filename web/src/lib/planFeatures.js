@@ -17,6 +17,7 @@ export function planFeatureRows(plan, { onlyEnabled = false } = {}) {
     { text: `Пакет до ${Number(plan.batchMax || 0).toLocaleString('ru')} строк`, on: true },
     { text: `Форматы ${formatList(plan)}`, on: true },
     { text: 'Редактор этикеток', on: Boolean(plan.labelEditor) },
+    { text: 'Наборы: КИН и этикетки вложений', on: Boolean(plan.labelEditor) },
     { text: 'Печать на термопринтер (Print Bridge)', on: Boolean(plan.printBridge) },
     { text: 'API для 1С и складов', on: Boolean(plan.apiAccess) },
     { text: `История ${Number(plan.historyDays || 0)} дней`, on: true },

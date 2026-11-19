@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { normalizeScanInput } from '../lib/labelData.js';
+import { normalizeScanInput, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import { openPrintWindow } from '../lib/print.js';
@@ -16,6 +16,7 @@ const notice = ref('');
 const pdfUrl = ref('');
 const setCodesText = ref('');
 const componentTexts = ref([{ codesText: '' }]);
+const importBusy = ref(false);
 
 const formats = [
   { id: '58x80', label: '58×80 мм — набор с составом' },
@@ -112,6 +113,66 @@ function removeComponent(i) {
   if (form.components.length <= 1) return;
   form.components.splice(i, 1);
   componentTexts.value.splice(i, 1);
+}
+
+const headerKey = (s) => String(s || '').toLowerCase().replace(/[\s_-]+/g, '').replace(/ё/g, 'е');
+const gtin14 = (v) => {
+  const d = String(v || '').replace(/\D/g, '');
+  return d.length === 13 ? '0' + d : d;
+};
+function pick(row, aliases) {
+  for (const [k, v] of Object.entries(row || {})) {
+    if (aliases.includes(headerKey(k)) && String(v ?? '').trim()) return String(v).trim();
+  }
+  return '';
+}
+
+async function onSetFile(ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  error.value = ''; notice.value = '';
+  importBusy.value = true;
+  try {
+    const part = await readDataFile(file);
+    const rows = part.rows || [];
+    if (!rows.length) throw new Error('В файле нет строк. Нужны колонки set_code, component_gtin, component_code');
+    const onlySet = form.onlySet;
+    const order = [];
+    const groups = new Map();
+    for (const row of rows) {
+      let setCode = pick(row, ['setcode', 'set', 'кин', 'коднабора', 'кодкина', 'набор']);
+      if (!setCode) {
+        const values = Object.values(row).map((v) => String(v ?? '').trim()).filter(Boolean);
+        if (values.length === 1) setCode = values[0];
+      }
+      setCode = normalizeScanInput(setCode);
+      if (!setCode) continue;
+      if (!groups.has(setCode)) { order.push(setCode); groups.set(setCode, new Map()); }
+      if (onlySet) continue;
+      const g = gtin14(pick(row, ['componentgtin', 'gtin', 'гтин', 'компонентgtin']));
+      const code = normalizeScanInput(pick(row, ['componentcode', 'code', 'киз', 'кодвложения', 'код']));
+      if (!g || !code) throw new Error('В строке нет component_gtin или component_code');
+      const match = form.components.findIndex((c) => gtin14(c.gtin) === g);
+      if (match === -1) throw new Error(`В шаблоне нет товара с GTIN ${g}. Добавьте его в состав.`);
+      const byGtin = groups.get(setCode);
+      if (!byGtin.has(g)) byGtin.set(g, []);
+      byGtin.get(g).push(code);
+    }
+    if (!order.length) throw new Error('Не найдены коды набора. Нужна колонка set_code или одна колонка с КИН');
+    setCodesText.value = order.join('\n');
+    componentTexts.value = form.components.map((c) => {
+      const g = gtin14(c.gtin);
+      const codes = [];
+      for (const setCode of order) codes.push(...(groups.get(setCode)?.get(g) || []));
+      return { codesText: codes.join('\n') };
+    });
+    notice.value = `Импортировано наборов: ${order.length}. Проверьте количество кодов по позициям.`;
+  } catch (e) {
+    error.value = 'Импорт: ' + e.message;
+  } finally {
+    importBusy.value = false;
+  }
 }
 
 async function loadTemplates(selectId = null) {
@@ -304,6 +365,13 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
 
         <div class="glass rounded-2xl p-5 space-y-3">
           <h2 class="font-display font-semibold">Коды набора</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <label class="btn-ghost !py-1.5 !px-3 text-xs cursor-pointer">
+              {{ importBusy ? 'Читаем…' : 'Импорт из СУЗ/1С' }}
+              <input type="file" class="hidden" accept=".csv,.txt,.xlsx,.xls" :disabled="importBusy" @change="onSetFile">
+            </label>
+            <span class="text-[11px] text-slate-500">CSV/XLSX: set_code, component_gtin, component_code</span>
+          </div>
           <p class="text-xs text-slate-500">Вставьте КИН набора — один на строку. Если наборов несколько, коды вложений распределятся по порядку.</p>
           <textarea v-model="setCodesText" rows="4" class="input font-mono text-xs" placeholder="КИН набора, по одному на строку"></textarea>
           <p class="text-xs text-slate-500">Наборов: <b>{{ setCount }}</b></p>

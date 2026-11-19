@@ -64,23 +64,28 @@ onMounted(async () => {
 onUnmounted(() => { if (io) io.disconnect(); });
 
 const features = [
-  { icon: '▦', title: 'GS1 DataMatrix engine', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.' },
-  { icon: '📥', title: 'Импорт CSV, XLSX, PDF', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически, из PDF извлекаются только коды маркировки.' },
-  { icon: '🛡️', title: 'Валидация данных', text: 'Проверка длины GTIN, контрольных цифр и структуры кода до генерации.' },
-  { icon: '🏷️', title: 'Редактор этикеток', text: 'Шаблоны, размеры, штрихкоды и текст. Экспорт PDF под лист или рулон.' },
-  { icon: '🖨️', title: 'Термопринтеры', text: 'Windows Print Bridge: печать напрямую на TSC, Zebra, Xprinter и другие.' },
-  { icon: '🔌', title: 'API для 1С и складов', text: 'Генерация кодов из ваших учётных систем по REST API.' }
+  { icon: '▦', title: 'GS1 DataMatrix', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.' },
+  { icon: '📥', title: 'Импорт CSV, XLSX, PDF', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически, из PDF извлекаются только коды.' },
+  { icon: '🛡️', title: 'Проверка перед печатью', text: 'GTIN, контрольные цифры, серийник, дубли, криптохвост и соответствие товару — до выхода на печать.' },
+  { icon: '🏷️', title: 'Этикетки и все штрихкоды', text: 'DataMatrix, EAN-13, EAN-8, UPC-A, Code128, Code39, ITF-14, GS1-128, QR и PDF417 в одном редакторе.' },
+  { icon: '🎁', title: 'Наборы: КИН + вложения', text: 'Загрузите коды набора и состава — сервис сам распределит КИЗ по вложениям и соберёт PDF: набор плюс все позиции.' },
+  { icon: '🖨️', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
+  { icon: '🕘', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
+  { icon: '🔌', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
+  { icon: '🔐', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
 ];
 const steps = [
-  { n: '01', t: 'Загрузите данные', d: 'CSV, XLSX, PDF или вставка списка кодов маркировки.' },
-  { n: '02', t: 'Проверьте и сгенерируйте', d: 'Валидация GS1, пакетная генерация DataMatrix с прогрессом.' },
-  { n: '03', t: 'Печатайте или выгружайте', d: 'PNG/SVG/PDF/ZIP, этикетки и прямая печать на термопринтер.' }
+  { n: '01', t: 'Загрузите данные', d: 'CSV, XLSX, PDF, вставка кодов или готовый набор с составом.' },
+  { n: '02', t: 'Проверьте коды', d: 'GTIN, серийники, криптохвосты, дубли и соответствие товару — до печати.' },
+  { n: '03', t: 'Печатайте сразу', d: 'PDF, печать из браузера или Print Bridge на термопринтер.' }
 ];
 const faq = [
-  { q: 'Что такое GS1 DataMatrix и зачем он нужен?', a: 'Это двумерный код маркировки товаров для системы «Честный ЗНАК». Без него нельзя легально продавать обувь, одежду, парфюм, шины и многие другие товары в РФ.' },
-  { q: 'Подойдёт ли для моего принтера?', a: 'Да. Windows Print Bridge печатает через драйвер любого термопринтера: TSC, Zebra, Xprinter, Godex и других. Размер этикетки задаётся в миллиметрах.' },
-  { q: 'Можно ли интегрировать с 1С?', a: 'Да, на тарифе PREMIUM доступен REST API: генерация кодов и получение результатов прямо из вашей учётной системы.' },
-  { q: 'Что если код не пройдёт проверку?', a: 'Валидатор проверяет GTIN, контрольные цифры, серийник и криптохвост до генерации — вы сразу видите ошибки и исправляете их.' }
+  { q: 'Что такое GS1 DataMatrix и зачем он нужен?', a: 'Это двумерный код маркировки товаров для системы «Честный ЗНАК». Без него нельзя легально продавать обувь, одежду, парфюм, косметику, шины и многие другие товары в РФ.' },
+  { q: 'Подойдёт ли для моего принтера?', a: 'Да. Windows Print Bridge печатает через драйвер любого термопринтера: TSC, Zebra, Xprinter, Godex и других. Можно скачать PDF по размеру этикетки или печатать прямо из браузера.' },
+  { q: 'Можно ли печатать наборы?', a: 'Да. Загрузите КИН набора и КИЗ вложений — сервис распределит коды по составу и подготовит этикетку набора и этикетки каждого вложения. Для неразборной упаковки есть режим «Только набор».' },
+  { q: 'Можно ли печатать без скачивания PDF?', a: 'Да. Кнопка «Печать» открывает готовый макет и системное окно печати. В окне печати выберите принтер этикеток и нужный размер бумаги.' },
+  { q: 'Можно ли интегрировать с 1С?', a: 'Да, на тарифе PREMIUM доступен REST API: генерация кодов, проверка и получение результатов прямо из вашей учётной системы.' },
+  { q: 'Что если код не пройдёт проверку?', a: 'Валидатор проверит GTIN, контрольные цифры, серийник, криптохвост и дубли до генерации. Вы сразу увидите ошибку и сможете исправить файл.' }
 ];
 const openFaq = ref(null);
 </script>
@@ -95,14 +100,14 @@ const openFaq = ref(null);
     <section class="relative max-w-6xl mx-auto px-4 pt-12 pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
       <div>
         <div class="reveal inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-full px-4 py-1.5 mb-6">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Для маркировки «Честный ЗНАК»
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Маркировка, наборы и печать
         </div>
         <h1 class="reveal reveal-d1 font-display font-extrabold text-[2rem] leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05] mb-6">
           Коды маркировки<br><span class="grad-text grad-animated">за минуты,</span><br>а не за дни
         </h1>
         <p class="reveal reveal-d2 text-lg text-slate-600 dark:text-slate-300 mb-8 max-w-lg leading-relaxed">
-          CODE QR PRO генерирует GS1 DataMatrix из ваших файлов, проверяет каждый код
-          и печатает этикетки на термопринтере. Без ручных настроек и испорченных криптохвостов.
+          CODE QR PRO генерирует GS1 DataMatrix из ваших файлов, проверяет каждый код,
+          собирает наборы с КИН и печатает этикетки — PDF, из браузера или сразу на термопринтере.
         </p>
         <div class="reveal reveal-d3 flex flex-wrap gap-4 items-center">
           <router-link to="/register" class="btn-glow">Начать бесплатно →</router-link>
@@ -131,10 +136,11 @@ const openFaq = ref(null);
 
     <!-- ДОВЕРИЕ / ВЫГОДЫ -->
     <section class="max-w-6xl mx-auto px-4 py-12">
-      <div class="reveal grid md:grid-cols-3 gap-5">
+      <div class="reveal grid md:grid-cols-2 lg:grid-cols-4 gap-5">
         <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">⚡</div><div class="font-display font-bold text-lg mb-1">В 10 раз быстрее</div><p class="text-sm text-slate-500">Пакетная генерация тысяч кодов вместо ручной работы</p></div>
         <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🎯</div><div class="font-display font-bold text-lg mb-1">Без ошибок</div><p class="text-sm text-slate-500">Валидация GS1 до генерации — коды проходят проверку</p></div>
-        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🖨️</div><div class="font-display font-bold text-lg mb-1">Сразу на печать</div><p class="text-sm text-slate-500">Этикетки на ваш термопринтер в один клик</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🎁</div><div class="font-display font-bold text-lg mb-1">Наборы под ключ</div><p class="text-sm text-slate-500">КИН набора и этикетки для каждого вложения</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🖨️</div><div class="font-display font-bold text-lg mb-1">Сразу на печать</div><p class="text-sm text-slate-500">PDF, браузер или термопринтер в один клик</p></div>
       </div>
     </section>
 

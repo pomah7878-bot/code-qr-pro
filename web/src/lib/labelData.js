@@ -125,7 +125,7 @@ export function tableToRows(table) {
     return { rows: [], columns: [] };
   }
   const first = table[0];
-  const looksHeader = first.some((c) => /^(code|код|киз|gtin|serial|серий|наимен|name|крипто|crypto|дата|date|цена|price|баркод|штрихкод|barcode|sku|артикул)$/i.test(String(c).trim()));
+  const looksHeader = first.some((c) => /^(code|код|киз|gtin|serial|серий|наимен|name|крипто|crypto|дата|date|цена|price|баркод|штрихкод|barcode|sku|артикул|set|setcode|component|componentcode|componentgtin|набор|кин|компонент)$/i.test(String(c).trim().replace(/[\s_-]+/g, '')));
   const header = looksHeader ? first : first.map((_, i) => `col${i + 1}`);
   const body = looksHeader ? table.slice(1) : table;
   const columns = [];

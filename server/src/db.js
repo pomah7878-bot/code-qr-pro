@@ -216,7 +216,19 @@ const MIGRATIONS = [
   );
   CREATE INDEX idx_outbox_status ON email_outbox(status);`,
   // v12 — отписка от рассылок
-  `ALTER TABLE users ADD COLUMN email_opt_out INTEGER NOT NULL DEFAULT 0;`
+  `ALTER TABLE users ADD COLUMN email_opt_out INTEGER NOT NULL DEFAULT 0;`,
+  // v13 — сброс пароля по коду из email
+  `CREATE TABLE password_resets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    used_at TEXT,
+    ip TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_password_resets_user ON password_resets(user_id, created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

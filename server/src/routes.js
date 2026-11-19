@@ -1,8 +1,10 @@
+import { randomInt, createHash, timingSafeEqual } from 'node:crypto';
 import { db, usageToday } from './db.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser } from './auth.js';
 import { PLANS, planOf, publicPlans } from './plans.js';
 import { notifyRegistration } from './notify.js';
 import { issueTicket } from './lib/twofa-ticket.js';
+import { sendMail, smtpConfigured } from './lib/mailer.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const attempts = new Map(); // ip -> { n, reset }
@@ -16,6 +18,8 @@ function rateLimit(ip, max = 10, windowMs = 60_000) {
 }
 
 const COOKIE = 'cq_session';
+const RESET_SECRET = process.env.PASSWORD_RESET_SECRET || process.env.APP_SECRET || 'code-qr-pro-password-reset';
+const resetCodeHash = (userId, code) => createHash('sha256').update(`${userId}:${code}:${RESET_SECRET}`).digest('hex');
 // Пока стоит флаг must_change_password, работать можно только с этими маршрутами
 const PASSWORD_EXEMPT = new Set(['/api/auth/password', '/api/auth/logout', '/api/me']);
 
@@ -76,6 +80,75 @@ export async function registerRoutes(app) {
     const { token, expires } = createSession(user.id, { ip: req.ip, ua: req.headers['user-agent'] });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     return { user: publicUser(user) };
+  });
+
+  app.post('/api/auth/forgot', async (req, reply) => {
+    if (!rateLimit(req.ip, 5, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
+    if (!smtpConfigured()) return reply.code(503).send({ error: 'Отправка почты не настроена. Обратитесь в поддержку.' });
+
+    const generic = { ok: true, message: 'Если такой email зарегистрирован, мы отправили код. Проверьте почту и папку «Спам».' };
+    const user = db.prepare('SELECT id, email, status FROM users WHERE email=?').get(email);
+    if (!user || user.status === 'blocked') return generic;
+
+    const recent = db.prepare("SELECT COUNT(*) c FROM password_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").get(user.id).c;
+    if (recent >= 5) return generic;
+
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const expires = db.prepare("SELECT datetime('now','+15 minutes') t").get().t;
+    db.prepare("UPDATE password_resets SET used_at=datetime('now') WHERE user_id=? AND used_at IS NULL").run(user.id);
+    db.prepare('INSERT INTO password_resets (user_id, code_hash, expires_at, ip) VALUES (?,?,?,?)')
+      .run(user.id, resetCodeHash(user.id, code), expires, String(req.ip || '').slice(0, 60));
+
+    try {
+      await sendMail({
+        to: user.email,
+        subject: 'Восстановление пароля CODE QR PRO',
+        text: `Здравствуйте!\n\nКод для восстановления пароля: ${code}\nКод действует 15 минут.\n\nЕсли вы не запрашивали восстановление — просто проигнорируйте это письмо.`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+          <h2 style="margin:0 0 12px">Восстановление пароля</h2>
+          <p>Код для смены пароля:</p>
+          <p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0">${code}</p>
+          <p>Код действует <b>15 минут</b>.</p>
+          <p style="color:#64748b;font-size:13px">Если вы не запрашивали восстановление — просто проигнорируйте это письмо.</p>
+        </div>`
+      });
+    } catch (e) {
+      console.error('password reset email failed:', e?.message || e);
+      return reply.code(502).send({ error: 'Не удалось отправить письмо. Попробуйте позже.' });
+    }
+    return generic;
+  });
+
+  app.post('/api/auth/reset', async (req, reply) => {
+    if (!rateLimit(req.ip, 10, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const code = String(req.body?.code || '').trim();
+    const password = req.body?.password;
+    if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) return reply.code(400).send({ error: 'Неверный код или email' });
+    if (typeof password !== 'string' || password.length < 8) return reply.code(400).send({ error: 'Новый пароль минимум 8 символов' });
+    if (password.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
+
+    const user = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+    if (!user) return reply.code(400).send({ error: 'Неверный код или email' });
+    const row = db.prepare("SELECT * FROM password_resets WHERE user_id=? AND used_at IS NULL AND expires_at > datetime('now') ORDER BY id DESC LIMIT 1").get(user.id);
+    if (!row || row.attempts >= 5) return reply.code(400).send({ error: 'Код истёк или неверен. Запросите новый.' });
+
+    const hash = resetCodeHash(user.id, code);
+    const ok = row.code_hash.length === hash.length && timingSafeEqual(Buffer.from(row.code_hash), Buffer.from(hash));
+    if (!ok) {
+      db.prepare('UPDATE password_resets SET attempts=attempts+1 WHERE id=?').run(row.id);
+      return reply.code(400).send({ error: 'Неверный код или email' });
+    }
+
+    db.transaction(() => {
+      db.prepare('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?').run(hashPassword(password), user.id);
+      db.prepare("UPDATE password_resets SET used_at=datetime('now') WHERE id=?").run(row.id);
+      db.prepare("UPDATE password_resets SET used_at=datetime('now') WHERE user_id=? AND used_at IS NULL").run(user.id);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    })();
+    return { ok: true };
   });
 
   app.post('/api/auth/password', { preHandler: requireAuth }, async (req, reply) => {

@@ -118,11 +118,10 @@ export async function registerAdminOrderRoutes(app) {
         if (payment.status === 'waiting_for_capture') {
           await cancelPayment(order.external_id);
         } else if (payment.status === 'pending') {
-          try {
-            await cancelPayment(order.external_id);
-          } catch (e) {
-            warning = 'Платёж в ЮKassa не удалось отменить автоматически: ' + String(e?.message || e) + '. Заказ отменён локально, но старая ссылка на оплату может оставаться активной.';
-          }
+          // ЮKassa разрешает API-отмену только для waiting_for_capture.
+          // Платёж до оплаты отменить нельзя — отменяем заказ локально,
+          // ссылка перестанет действовать после истечения срока платежа.
+          warning = 'Платёж ещё не оплачен (pending). ЮKassa не отменяет такие платежи через API — заказ отменён локально, ссылка на оплату станет недействительной после истечения её срока.';
         }
       } catch (e) {
         warning = 'ЮKassa не подтвердила платёж (' + String(e?.message || e) + '). Заказ отменён локально; проверьте платёж в личном кабинете ЮKassa.';

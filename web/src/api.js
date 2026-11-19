@@ -90,6 +90,7 @@ export const api = {
   adminPromoRedemptions: (id) => req('GET', `/api/admin/promo/${id}/redemptions`),
   adminSmtp: () => req('GET', '/api/admin/settings/smtp'),
   adminStorage: () => req('GET', '/api/admin/settings/storage'),
+  adminStorageAnalytics: () => req('GET', '/api/admin/storage'),
   adminSaveStorage: (b) => req('PUT', '/api/admin/settings/storage', b),
   adminTestStorage: () => req('POST', '/api/admin/settings/storage/test'),
   adminSaveSmtp: (b) => req('PUT', '/api/admin/settings/smtp', b),

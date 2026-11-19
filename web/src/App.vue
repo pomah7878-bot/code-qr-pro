@@ -70,6 +70,13 @@ async function changePassword() {
         </div>
       </div>
 
+      <div v-if="store.user && ['admin', 'support'].includes(store.user.role) && !store.user.twoFactorEnabled" class="border-t border-amber-500/30 bg-amber-500/10">
+        <div class="max-w-6xl mx-auto px-4 py-2 text-xs text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-2">
+          <span>Для доступа к админке включите двухфакторную аутентификацию.</span>
+          <router-link to="/app/security" class="font-semibold underline" @click="menuOpen = false">Настроить 2FA →</router-link>
+        </div>
+      </div>
+
       <!-- mobile dropdown menu -->
       <transition name="menu">
         <div v-if="menuOpen" class="md:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white/95 dark:bg-ink-950/95 backdrop-blur-xl">

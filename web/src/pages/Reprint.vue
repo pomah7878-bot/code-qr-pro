@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
+import ValidHint from '../components/ValidHint.vue';
 
 const MAX = 100;
 const categories = [
@@ -700,6 +701,7 @@ async function downloadPdf() {
 
           <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !result || !result.valid.length" @click="downloadPdf">⬇ Скачать PDF ({{ result ? result.valid.length : 0 }})</button>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>
+          <ValidHint v-if="result" class="mt-1" />
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="!premium" class="text-xs text-amber-500">PDF-печать доступна на тарифе PREMIUM.</p>
         </div>

@@ -6,6 +6,7 @@ import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
 import { buildCznCsv, downloadCznCsv } from '../lib/cznCsv.js';
 import SideNav from '../components/SideNav.vue';
+import ValidHint from '../components/ValidHint.vue';
 
 const mode = ref('cz');
 const modes = [
@@ -258,6 +259,7 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
             <div><div class="text-3xl font-extrabold text-red-500">{{ preview.total - preview.valid }}</div><div class="text-xs text-slate-500">с ошибками</div></div>
             <div class="text-sm text-slate-500">Лимит пакета: {{ store.plan?.batchMax }} · осталось сегодня: {{ Math.max(0, (store.usage?.codesPerDay ?? 0) - (store.usage?.codesToday ?? 0)) }}</div>
           </div>
+          <ValidHint class="mt-3" />
         </div>
         <div class="glass rounded-2xl p-6 overflow-x-auto">
           <table class="w-full text-sm">

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
+import ValidHint from '../components/ValidHint.vue';
 
 const CHUNK = 1000;
 const MAX = 30000;
@@ -85,6 +86,7 @@ async function verify() {
 
         <div class="glass rounded-2xl p-4 text-sm" :class="result.configured ? 'border-emerald-500/40' : 'border-amber-500/40'">
           {{ result.message }}
+          <ValidHint class="mt-2" />
         </div>
 
         <div class="glass rounded-2xl p-6 overflow-x-auto">

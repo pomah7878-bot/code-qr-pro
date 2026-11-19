@@ -103,11 +103,11 @@ The script:
 3. removes stale unencrypted `.gz` files;
 4. keeps the latest 14 encrypted backups.
 
-Manual verification:
+Manual verification (run as root; encrypted backups are `root:root 600`):
 
 ```bash
 cd /opt/code-qr/server
-sudo -u codeqr /usr/bin/node scripts/verify-backup.mjs
+sudo /usr/bin/node scripts/verify-backup.mjs
 ```
 
 Restore procedure:
@@ -121,9 +121,11 @@ Restore procedure:
 
 ```bash
 cd /opt/code-qr/server
-sudo -u codeqr /usr/bin/node scripts/restore-backup.mjs \
+sudo /usr/bin/node scripts/restore-backup.mjs \
   /opt/backups/code-qr/app-YYYYMMDD-HHMMSS.db.enc \
   /opt/code-qr/server/data/app.db.restored
+sudo chown codeqr:codeqr /opt/code-qr/server/data/app.db.restored
+sudo chmod 600 /opt/code-qr/server/data/app.db.restored
 ```
 
 Store an encrypted copy off-site (another host or S3) and keep the encryption key in a

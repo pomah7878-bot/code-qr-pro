@@ -2,5 +2,8 @@ User-agent: *
 Allow: /
 Disallow: /app/
 Disallow: /api/
+Disallow: /login
+Disallow: /register
 
+Host: https://code-qr.stockcity.ru
 Sitemap: https://code-qr.stockcity.ru/sitemap.xml

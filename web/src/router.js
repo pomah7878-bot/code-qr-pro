@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { store } from './store.js';
+import { applySeo } from './lib/seo.js';
 import Landing from './pages/Landing.vue';
 import Login from './pages/Login.vue';
 import Register from './pages/Register.vue';
@@ -70,5 +71,7 @@ router.beforeEach(async (to) => {
   if (to.meta.adminOnly && store.user?.role !== 'admin') return '/app/admin/users';
   if ((to.path === '/login' || to.path === '/register') && store.user) return '/app';
 });
+
+router.afterEach((to) => applySeo(to.path));
 
 export default router;

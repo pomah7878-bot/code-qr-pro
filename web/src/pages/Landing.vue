@@ -159,6 +159,39 @@ const openFaq = ref(null);
       </div>
     </section>
 
+    <!-- SEO / ПОЛЕЗНАЯ ИНФОРМАЦИЯ -->
+    <section class="max-w-6xl mx-auto px-4 py-16">
+      <div class="reveal max-w-3xl mb-8">
+        <h2 class="font-display font-bold text-3xl md:text-4xl mb-4">Маркировка «Честного ЗНАКа»: что умеет CODE QR PRO</h2>
+        <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+          Сервис помогает производителям, импортёрам, оптовикам и рознице работать с маркировкой без ручной сборки кодов:
+          от файла с GTIN и серийниками до готовой этикетки на термопринтере.
+        </p>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6 text-sm text-slate-600 dark:text-slate-300">
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-display font-semibold text-lg text-slate-900 dark:text-white mb-2">Генерация GS1 DataMatrix</h3>
+          <p>Загрузите CSV, XLSX, PDF или вставьте коды списком. Сервис проверит GTIN, контрольную цифру, серийный номер и криптохвост, соберёт DataMatrix с FNC1 и ECC200 и покажет ошибки до печати.</p>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-display font-semibold text-lg text-slate-900 dark:text-white mb-2">Этикетки и печать</h3>
+          <p>Соберите макет с DataMatrix, EAN-13, QR, PDF417 или Code128, добавьте название и состав. Скачайте PDF по размеру этикетки, распечатайте прямо из браузера или отправьте на TSC, Zebra, Xprinter через Windows Print Bridge.</p>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-display font-semibold text-lg text-slate-900 dark:text-white mb-2">Наборы: КИН и вложения</h3>
+          <p>Для набора укажите GTIN набора и состав. Загрузите КИН и КИЗ вложений — сервис распределит коды по позициям и подготовит этикетку набора и каждую этикетку вложения. Для неразборной упаковки есть режим «Только набор».</p>
+        </div>
+        <div class="glass rounded-2xl p-6">
+          <h3 class="font-display font-semibold text-lg text-slate-900 dark:text-white mb-2">API для 1С и склада</h3>
+          <p>На тарифе PREMIUM доступен REST API: создание пакета, проверка кодов и получение результата. Подходит для 1С, WMS и складских систем, где маркировка должна запускаться автоматически.</p>
+        </div>
+      </div>
+      <p class="reveal text-sm text-slate-500 mt-6">
+        Начните с <router-link to="/register" class="text-brand-400 font-medium">бесплатной регистрации</router-link>
+        или посмотрите <a href="#pricing" class="text-brand-400 font-medium">тарифы и лимиты</a>.
+      </p>
+    </section>
+
     <!-- STEPS -->
     <section class="max-w-6xl mx-auto px-4 py-16">
       <div class="reveal text-center mb-12"><h2 class="font-display font-bold text-3xl md:text-4xl">Как это работает</h2></div>

@@ -60,7 +60,7 @@ ssh 2.27.86.180 "cd /opt/code-qr/server && npm install --omit=dev && systemctl r
 ```
 
 Первичная установка: deploy/deploy.sh (systemd + nginx + certbot).
-Бэкапы: deploy/backup.sh (cron 03:30, /opt/backups/code-qr, хранение 14 дней).
+Бэкапы: deploy/backup.sh (cron 03:30, /opt/backups/code-qr, AES-256-GCM `.enc`, проверка восстановлением, хранение 14 дней). Ключ шифрования `.app-key` храните отдельно от бэкапов.
 
 ## Переменные окружения (server/.env)
 

@@ -117,6 +117,7 @@ onMounted(load);
               <div class="text-xs text-slate-500 mt-1">
                 {{ fmtDate(j.created_at) }} · {{ j.done }}/{{ j.valid }} кодов
                 <span v-if="j.artifact_size"> · архив {{ fmtBytes(j.artifact_size) }}</span>
+                <span v-if="j.artifact_backend === 's3'"> · S3</span>
                 <span v-if="j.expires_at"> · хранится до {{ fmtDate(j.expires_at) }}</span>
               </div>
             </div>

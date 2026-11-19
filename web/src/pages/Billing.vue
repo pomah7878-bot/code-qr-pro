@@ -162,7 +162,7 @@ onMounted(async () => {
             </button>
           </div>
         </div>
-        <p class="text-xs text-slate-500 mt-3">Разовая оплата, доступ продлевается. Для архива используется объектное хранилище S3/R2.</p>
+        <p class="text-xs text-slate-500 mt-3">Разовая оплата, доступ продлевается. Для длительного хранения можно подключить S3/R2 в настройках.</p>
       </div>
 
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

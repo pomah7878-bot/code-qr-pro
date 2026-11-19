@@ -1,5 +1,5 @@
 import { db } from './db.js';
-import { activatePremium, checkOrder, providerConfigured, cancelPayment, refundPayment } from './billing.js';
+import { activatePremium, checkOrder, providerConfigured, getPayment, cancelPayment, refundPayment } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
 import { audit } from './lib/audit.js';
@@ -108,16 +108,29 @@ export async function registerAdminOrderRoutes(app) {
     if (order.status !== 'pending') {
       return reply.code(400).send({ error: 'Отменить можно только заказ в статусе «ожидает оплаты»' });
     }
+    let warning = '';
     if (order.external_id && providerConfigured()) {
       try {
-        await cancelPayment(order.external_id);
+        const payment = await getPayment(order.external_id);
+        if (payment.status === 'succeeded') {
+          return reply.code(409).send({ error: 'Платёж уже оплачен — отмена невозможна. Оформите возврат или подтвердите заказ.' });
+        }
+        if (payment.status === 'waiting_for_capture') {
+          await cancelPayment(order.external_id);
+        } else if (payment.status === 'pending') {
+          try {
+            await cancelPayment(order.external_id);
+          } catch (e) {
+            warning = 'Платёж в ЮKassa не удалось отменить автоматически: ' + String(e?.message || e) + '. Заказ отменён локально, но старая ссылка на оплату может оставаться активной.';
+          }
+        }
       } catch (e) {
-        return reply.code(502).send({ error: 'ЮKassa не отменила платёж: ' + String(e?.message || e) });
+        warning = 'ЮKassa не подтвердила платёж (' + String(e?.message || e) + '). Заказ отменён локально; проверьте платёж в личном кабинете ЮKassa.';
       }
     }
     db.prepare("UPDATE orders SET status='canceled' WHERE id=?").run(order.id);
     audit(req, 'order.cancel', 'order', order.id, { amount: order.amount });
-    return { ok: true, order: getOrder(order.id) };
+    return { ok: true, warning, order: getOrder(order.id) };
   });
 
   // Возврат: только через ЮKassa, опционально снимаем доступ

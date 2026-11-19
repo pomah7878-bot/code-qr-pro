@@ -88,7 +88,7 @@ function confirmOrder(o) {
 
 function cancelOrder(o) {
   if (!window.confirm(`Отменить заказ №${o.id}? Если платёж уже создан, он будет отменён в ЮKassa.`)) return;
-  run(o, () => api.adminCancelOrder(o.id), 'Заказ отменён');
+  run(o, () => api.adminCancelOrder(o.id), (r) => r.warning ? `Заказ отменён. ${r.warning}` : 'Заказ отменён');
 }
 
 function recheck(o) {

@@ -178,6 +178,10 @@ export async function checkOrder(order) {
 }
 
 // Отмена ещё не оплаченного платежа в ЮKassa (best-effort для админки)
+export async function getPayment(paymentId) {
+  return yk('GET', '/payments/' + encodeURIComponent(paymentId));
+}
+
 export async function cancelPayment(paymentId) {
   return yk('POST', '/payments/' + encodeURIComponent(paymentId) + '/cancel', {});
 }

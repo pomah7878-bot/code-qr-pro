@@ -111,7 +111,8 @@ export function planOf(user) {
       return {
         ...base,
         historyDays: Math.max(Number(base.historyDays) || 0, 1095),
-        archiveMb: Math.max(Number(base.archiveMb) || 0, Number(addon.archive_mb) || 10240)
+        archiveMb: Math.max(Number(base.archiveMb) || 0, Number(addon.archive_mb) || 10240),
+        formats: [...new Set([...(base.formats || []), 'zip'])]
       };
     }
   } catch { /* ignore */ }

@@ -58,6 +58,13 @@ export function activateArchive(userId, provider, externalId, orderId, days = 10
   db.transaction(() => {
     db.prepare('UPDATE users SET archive_until=?, archive_mb=MAX(archive_mb, ?) WHERE id=?')
       .run(until, termMb, userId);
+    // продлеваем хранение уже существующих работ, если они ещё не удалены
+    db.prepare(
+      "UPDATE generation_jobs SET expires_at=datetime('now','+' || ? || ' days') WHERE user_id=? AND (expires_at IS NULL OR expires_at < datetime('now','+' || ? || ' days'))"
+    ).run(termDays, userId, termDays);
+    db.prepare(
+      "UPDATE activity_log SET expires_at=datetime('now','+' || ? || ' days') WHERE user_id=? AND (expires_at IS NULL OR expires_at < datetime('now','+' || ? || ' days'))"
+    ).run(termDays, userId, termDays);
     if (orderId) db.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE id=?").run(orderId);
   })();
   return { until, mb: termMb, provider, externalId };

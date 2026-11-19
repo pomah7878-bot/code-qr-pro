@@ -6,7 +6,7 @@ import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 
-const MAX = 100;
+const MAX = 1000;
 const categories = [
   { id: 'lp', title: 'Легпром', icon: '👕', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
   { id: 'shoes', title: 'Обувь', icon: '👟', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },

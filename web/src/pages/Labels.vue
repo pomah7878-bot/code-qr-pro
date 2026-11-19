@@ -50,6 +50,57 @@ const bridge = reactive({
 const previewPng = ref('');
 
 const currentItem = computed(() => dataRows.value[Number(row.value)] || null);
+const previewQuery = ref('');
+const fieldLabels = {
+  code: 'КИЗ', gtin: 'GTIN', serial: 'Серийник', barcode: 'Штрихкод', name: 'Название',
+  article: 'Артикул', size: 'Размер', color: 'Цвет', date: 'Дата', composition: 'Состав',
+  sku: 'Артикул (SKU)', price: 'Цена', batch: 'Партия', row: '№', dosage: 'Дозировка',
+  form: 'Форма выпуска', series: 'Серия', expiry: 'Срок годности', manufacturer: 'Производитель'
+};
+const sourceLabel = computed(() => ({
+  'kiz+bartender': 'КИЗ + данные',
+  kiz: 'КИЗ',
+  bartender: 'Штрихкоды / данные',
+  job: 'Пакет'
+}[dataSource.value] || ''));
+const currentFields = computed(() => Object.entries(currentItem.value || {})
+  .filter(([k, v]) => !['row_index', 'short'].includes(k) && String(v ?? '').trim() !== '')
+  .slice(0, 12)
+  .map(([key, value]) => ({ key, label: fieldLabels[key] || key, value: String(value) })));
+const previewMatches = computed(() => {
+  const q = previewQuery.value.trim().toLowerCase();
+  if (!q) return [];
+  return dataRows.value
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => ['code', 'gtin', 'serial', 'barcode', 'name', 'article'].some((k) => String(r[k] || '').toLowerCase().includes(q)))
+    .slice(0, 50);
+});
+function stepRow(delta) {
+  row.value = Math.max(0, Math.min(dataRows.value.length - 1, Number(row.value) + delta));
+}
+function findRow() {
+  if (!previewMatches.value.length) { error.value = 'Ничего не найдено по этому запросу'; return; }
+  error.value = '';
+  row.value = previewMatches.value[0].i;
+  notice.value = `Найдена строка ${row.value + 1}`;
+}
+async function copyCode() {
+  try {
+    await navigator.clipboard.writeText(currentItem.value?.code || '');
+    notice.value = 'Код скопирован';
+  } catch { error.value = 'Не удалось скопировать код'; }
+}
+function clearData() {
+  if (!dataRows.value.length && jobId.value == null) return;
+  if (!confirm('Очистить загруженные данные и выбранный пакет?')) return;
+  kizData.value = []; productData.value = []; barcodeData.value = [];
+  kizLabel.value = ''; btLabel.value = ''; barcodeLabel.value = '';
+  kizStatus.value = ''; btStatus.value = ''; barcodeStatus.value = ''; btWarning.value = '';
+  dataRows.value = []; dataSource.value = ''; dataLabel.value = ''; jobId.value = null;
+  duplicateCount.value = 0; row.value = 0; itemImg = null; selectedId.value = null; previewPng.value = '';
+  previewQuery.value = '';
+  error.value = ''; notice.value = 'Загруженные данные очищены'; draw();
+}
 const rowNumber = computed({
   get: () => Number(row.value) + 1,
   set: (v) => {
@@ -331,6 +382,7 @@ function draw() {
 }
 
 watch(() => [tpl.widthMm, tpl.heightMm, tpl.elements, selectedId.value, currentItem.value], () => nextTick(draw), { deep: true });
+watch(row, () => { if (jobId.value != null) loadImage(); });
 
 function addElement(type, field) {
   const id = 'el' + (uid++) + '_' + Date.now();
@@ -722,27 +774,58 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">
-            <h2 class="font-display font-semibold text-sm">Данные для предпросмотра</h2>
-            <select v-model="jobId" class="input !py-2 text-sm" @change="onJobChange">
-              <option :value="null">Пакет не выбран</option>
-              <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.name }} ({{ j.done }} кодов)</option>
-            </select>
-            <div v-if="dataRows.length" class="text-xs text-slate-500">
-              Источник: <b class="text-slate-700 dark:text-slate-200">{{ dataSource === 'kiz+bartender' ? 'КИЗ + BarTender' : dataSource === 'kiz' ? 'КИЗ' : dataSource === 'bartender' ? 'BarTender' : 'пакет' }}</b>
-              · {{ dataRows.length }} строк
-              <span v-if="dataLabel"> · {{ dataLabel }}</span>
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="font-display font-semibold text-sm">Данные для предпросмотра</h2>
+              <span v-if="dataRows.length" class="chip-soon !text-slate-500">{{ dataRows.length }} строк</span>
             </div>
-            <p v-if="mergeNote" class="text-xs text-amber-500">{{ mergeNote }}</p>
-            <p v-if="duplicateCount" class="text-xs text-amber-500">Повторных КИЗ: {{ duplicateCount }} — проверьте перед печатью.</p>
-            <div v-if="dataRows.length" class="flex items-center gap-2">
-              <label class="label !text-xs !mb-0">Строка</label>
-              <input v-model.number="rowNumber" type="number" min="1" :max="dataRows.length" class="input !py-1.5 text-sm w-24">
-              <span class="text-xs text-slate-500">из {{ dataRows.length }}</span>
+
+            <div v-if="dataRows.length" class="rounded-xl bg-slate-50 dark:bg-white/5 p-3 text-xs space-y-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-slate-700 dark:text-slate-200">{{ sourceLabel }}</span>
+                <span v-if="dataLabel" class="text-slate-500 truncate max-w-[220px]" :title="dataLabel">{{ dataLabel }}</span>
+                <button class="ml-auto text-slate-400 hover:text-red-500" @click="clearData">Очистить</button>
+              </div>
+              <p v-if="mergeNote" class="text-amber-500">{{ mergeNote }}</p>
+              <p v-if="duplicateCount" class="text-amber-500">Повторных КИЗ: {{ duplicateCount }} — проверьте перед печатью.</p>
             </div>
-            <div v-if="currentItem" class="text-xs text-slate-500 space-y-0.5">
-              <div>GTIN: <span class="font-mono">{{ currentItem.gtin || '—' }}</span></div>
-              <div>Серийник: <span class="font-mono">{{ currentItem.serial || '—' }}</span></div>
+            <p v-else class="text-xs text-slate-500">Загрузите файлы выше или выберите готовый пакет ниже.</p>
+
+            <div>
+              <label class="label !text-xs" for="preview-job">Или взять из пакета</label>
+              <select id="preview-job" v-model="jobId" class="input !py-2 text-sm" @change="onJobChange">
+                <option :value="null">Пакет не выбран</option>
+                <option v-for="j in jobs" :key="j.id" :value="j.id">{{ j.name }} ({{ j.done }} кодов)</option>
+              </select>
             </div>
+
+            <template v-if="dataRows.length">
+              <div class="flex gap-2">
+                <input v-model="previewQuery" class="input !py-2 text-sm" placeholder="Поиск: КИЗ, GTIN, серийник…" @keyup.enter="findRow">
+                <button class="btn-ghost !py-2 !px-3 text-sm" @click="findRow">Найти</button>
+              </div>
+              <div v-if="previewQuery" class="text-xs text-slate-500">
+                Найдено: {{ previewMatches.length }}
+                <button v-for="m in previewMatches.slice(0, 5)" :key="m.i" class="ml-2 text-brand-400 hover:underline" @click="row = m.i">Строка {{ m.i + 1 }}</button>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button class="btn-ghost !py-1.5 !px-2.5 text-sm" :disabled="Number(row) <= 0" aria-label="Предыдущая строка" @click="stepRow(-1)">←</button>
+                <input v-model.number="rowNumber" type="number" min="1" :max="dataRows.length" class="input !py-1.5 text-sm w-20 text-center">
+                <button class="btn-ghost !py-1.5 !px-2.5 text-sm" :disabled="Number(row) >= dataRows.length - 1" aria-label="Следующая строка" @click="stepRow(1)">→</button>
+                <button class="btn-ghost !py-1.5 !px-2.5 text-xs ml-1" @click="row = 0">⏮</button>
+                <button class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="row = dataRows.length - 1">⏭</button>
+                <span class="text-xs text-slate-500 ml-auto">из {{ dataRows.length }}</span>
+              </div>
+
+              <div v-if="currentItem" class="rounded-xl border border-slate-200 dark:border-white/10 p-3 text-xs space-y-1">
+                <div v-for="f in currentFields" :key="f.key" class="flex gap-2">
+                  <span class="w-24 shrink-0 text-slate-500">{{ f.label }}</span>
+                  <span class="font-mono break-all">{{ f.value }}</span>
+                </div>
+                <button class="btn-ghost !py-1.5 !px-3 text-xs mt-1" @click="copyCode">Копировать КИЗ</button>
+              </div>
+            </template>
+
             <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf">⬇ PDF-лист А4 ({{ dataRows.length || 0 }})</button>
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle">⬇ PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>

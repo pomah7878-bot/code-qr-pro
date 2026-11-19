@@ -41,6 +41,12 @@ const notice = ref('');
 const premium = computed(() => !!store.plan?.labelEditor);
 let itemImg = null;
 let uid = 1;
+const renderImages = new Map();
+const renderBusy = ref(false);
+const renderError = ref('');
+let renderTimer = 0;
+let renderSeq = 0;
+const BARCODE_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode'];
 
 const bridge = reactive({
   url: 'http://127.0.0.1:9101',
@@ -349,7 +355,10 @@ function draw() {
   for (const el of tpl.elements) {
     const x = el.x * S + 1, y = el.y * S + 1, w = el.w * S, h = el.h * S;
     if (['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode'].includes(el.type)) {
-      if (el.type === 'datamatrix' && itemImg) {
+      const rendered = renderImages.get(el.id);
+      if (rendered) {
+        ctx.drawImage(rendered, x, y, w, h);
+      } else if (el.type === 'datamatrix' && itemImg) {
         ctx.drawImage(itemImg, x, y, w, h);
       } else {
         ctx.fillStyle = '#e2e8f0';
@@ -381,8 +390,48 @@ function draw() {
   }
 }
 
-watch(() => [tpl.widthMm, tpl.heightMm, tpl.elements, selectedId.value, currentItem.value], () => nextTick(draw), { deep: true });
-watch(row, () => { if (jobId.value != null) loadImage(); });
+function scheduleRender(delay = 250) {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => {
+    if (drag) { scheduleRender(350); return; }
+    refreshRender();
+  }, delay);
+}
+
+async function refreshRender() {
+  if (!premium.value || !currentItem.value || !tpl.elements.some((e) => BARCODE_TYPES.includes(e.type))) {
+    renderImages.clear();
+    renderBusy.value = false;
+    draw();
+    return;
+  }
+  const seq = ++renderSeq;
+  renderBusy.value = true;
+  renderError.value = '';
+  try {
+    const prepared = await api.prepareLabel({ template: tpl, data: currentItem.value, row: Number(row.value) });
+    if (seq !== renderSeq) return;
+    const images = new Map();
+    await Promise.all((prepared.elements || []).map(async (el) => {
+      if (!el.pngBase64) return;
+      const img = new Image();
+      img.src = 'data:image/png;base64,' + el.pngBase64;
+      try { await img.decode(); images.set(el.id, img); } catch { /* пропускаем битый штрихкод */ }
+    }));
+    if (seq !== renderSeq) return;
+    renderImages.clear();
+    for (const [id, img] of images) renderImages.set(id, img);
+  } catch (e) {
+    if (seq === renderSeq) { renderError.value = e.message; renderImages.clear(); }
+  } finally {
+    if (seq === renderSeq) renderBusy.value = false;
+    draw();
+  }
+}
+
+watch(() => [tpl.widthMm, tpl.heightMm, tpl.elements, currentItem.value], () => { nextTick(draw); scheduleRender(); }, { deep: true });
+watch(selectedId, () => nextTick(draw));
+watch(row, () => { if (jobId.value != null) loadImage(); scheduleRender(); });
 
 function addElement(type, field) {
   const id = 'el' + (uid++) + '_' + Date.now();
@@ -527,7 +576,6 @@ function loadImage() {
   img.onload = () => { itemImg = img; draw(); };
   img.src = `/api/jobs/${jobId.value}/item/${it.row_index}.png`;
 }
-watch(row, loadImage);
 
 async function saveTemplate() {
   error.value = ''; notice.value = '';
@@ -711,6 +759,9 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <canvas ref="canvas" class="shadow-xl cursor-move touch-none" @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp"></canvas>
           </div>
           <p class="text-xs text-slate-500 mt-3">Перетаскивайте элементы мышью · размер {{ tpl.widthMm }}×{{ tpl.heightMm }} мм · {{ tpl.dpi }} DPI</p>
+          <p v-if="renderBusy" class="text-xs text-slate-500 mt-1">Обновляем предпросмотр штрихкодов…</p>
+          <p v-else-if="renderError" class="text-xs text-amber-500 mt-1">Предпросмотр: {{ renderError }}</p>
+          <p v-else class="text-xs text-emerald-500 mt-1">Штрихкоды на макете — настоящие, как будут напечатаны.</p>
         </div>
 
         <!-- правая колонка -->

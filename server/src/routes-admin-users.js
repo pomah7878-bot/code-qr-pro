@@ -1,4 +1,4 @@
-﻿import { randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { db, today } from './db.js';
 import { hashPassword } from './auth.js';
 import { activatePremium } from './billing.js';
@@ -8,7 +8,7 @@ import { requireAdmin, requireStaff, paging, sendCsv, like, dateOnly } from './l
 import { audit } from './lib/audit.js';
 
 const ROLES = ['user', 'support', 'admin'];
-const SESSION_RE = /^[a-f0-9]{64}$/;
+const SESSION_RE = /^[a-f0-9]{32}$/;
 const PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 const adminCount = () => db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c;
@@ -122,7 +122,7 @@ export async function registerAdminUserRoutes(app) {
     const orders = db.prepare('SELECT * FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50').all(user.id);
     const jobs = db.prepare('SELECT id,name,mode,format,status,total,valid,done,error,created_at,finished_at FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 50').all(user.id);
     const apiKeys = db.prepare('SELECT id,name,prefix,created_at,last_used_at FROM api_keys WHERE user_id=? ORDER BY id DESC').all(user.id);
-    const sessions = db.prepare("SELECT token, created_at, expires_at, ip, user_agent FROM sessions WHERE user_id=? AND expires_at > datetime('now') ORDER BY created_at DESC").all(user.id);
+    const sessions = db.prepare("SELECT public_id, created_at, expires_at, ip, user_agent FROM sessions WHERE user_id=? AND expires_at > datetime('now') ORDER BY created_at DESC").all(user.id);
     const review = db.prepare('SELECT id,rating,text,status,created_at FROM reviews WHERE user_id=?').get(user.id) || null;
     return {
       user: publicAdminUser(user),
@@ -262,13 +262,13 @@ export async function registerAdminUserRoutes(app) {
   });
 
   // Р—Р°РІРµСЂС€РёС‚СЊ РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
-  app.delete('/api/admin/sessions/:token', { preHandler: requireAdmin }, async (req, reply) => {
-    const token = String(req.params.token || '');
-    if (!SESSION_RE.test(token)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ СЃРµСЃСЃРёРё' });
-    const session = db.prepare('SELECT user_id FROM sessions WHERE token=?').get(token);
-    const r = db.prepare('DELETE FROM sessions WHERE token=?').run(token);
+  app.delete('/api/admin/sessions/:publicId', { preHandler: requireAdmin }, async (req, reply) => {
+    const publicId = String(req.params.publicId || '');
+    if (!SESSION_RE.test(publicId)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ СЃРµСЃСЃРёРё' });
+    const session = db.prepare('SELECT user_id FROM sessions WHERE public_id=?').get(publicId);
+    const r = db.prepare('DELETE FROM sessions WHERE public_id=?').run(publicId);
     if (!r.changes) return reply.code(404).send({ error: 'РЎРµСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР°' });
-    audit(req, 'session.kill', 'user', session?.user_id || '', { prefix: token.slice(0, 8) });
+    audit(req, 'session.kill', 'user', session?.user_id || '', { id: publicId.slice(0, 8) });
     return { ok: true };
   });
 }

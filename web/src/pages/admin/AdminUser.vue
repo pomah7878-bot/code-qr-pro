@@ -153,11 +153,11 @@ async function doDelete() {
   finally { modal.busy = false; }
 }
 
-async function killSession(token) {
+async function killSession(publicId) {
   if (!window.confirm('Завершить эту сессию? Клиенту придётся войти заново.')) return;
   error.value = '';
   try {
-    await api.adminKillSession(token);
+    await api.adminKillSession(publicId);
     await load();
   } catch (e) { error.value = e.message; }
 }
@@ -355,13 +355,13 @@ onMounted(load);
           <div>
             <h4 class="font-semibold text-sm mb-2">Сессии <span class="text-slate-500 font-normal">({{ data.sessions.length }})</span></h4>
             <p v-if="!data.sessions.length" class="text-sm text-slate-500">Активных сессий нет.</p>
-            <div v-for="s in data.sessions" :key="s.token" class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 dark:border-white/5 last:border-0 text-sm">
+            <div v-for="s in data.sessions" :key="s.public_id" class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 dark:border-white/5 last:border-0 text-sm">
               <div>
-                <div class="font-mono text-xs">{{ s.token.slice(0, 10) }}…</div>
+                <div class="font-mono text-xs">{{ s.public_id.slice(0, 10) }}…</div>
                 <div class="text-xs text-slate-500">создана {{ fmtDateTime(s.created_at) }} · до {{ fmtDateTime(s.expires_at) }}</div>
                 <div v-if="s.ip || s.user_agent" class="text-[11px] text-slate-500 truncate max-w-[360px]">{{ s.ip || '—' }} · {{ s.user_agent || '' }}</div>
               </div>
-              <button v-if="isAdmin" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" @click="killSession(s.token)">Завершить</button>
+              <button v-if="isAdmin" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" @click="killSession(s.public_id)">Завершить</button>
             </div>
           </div>
           <div>

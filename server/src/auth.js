@@ -20,11 +20,12 @@ export function verifyPassword(password, stored) {
 
 export function createSession(userId, meta = {}) {
   const token = randomBytes(32).toString('hex');
+  const publicId = randomBytes(16).toString('hex');
   const days = Number(meta.days) || SESSION_DAYS;
   const expires = new Date(Date.now() + days * 86400_000).toISOString();
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at, ip, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))')
-    .run(token, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200));
-  return { token, expires };
+  db.prepare('INSERT INTO sessions (token, public_id, user_id, expires_at, ip, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))')
+    .run(token, publicId, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200));
+  return { token, publicId, expires };
 }
 
 export function sessionUser(token) {

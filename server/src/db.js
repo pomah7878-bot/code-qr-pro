@@ -311,7 +311,11 @@ const MIGRATIONS = [
      impressions INTEGER NOT NULL DEFAULT 0,
      clicks INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (ad_id, day)
-   );`
+   );`,
+  // v19 — публичный идентификатор сессии вместо выдачи raw-токена в админке
+  `ALTER TABLE sessions ADD COLUMN public_id TEXT;
+   UPDATE sessions SET public_id = lower(hex(randomblob(16))) WHERE public_id IS NULL;
+   CREATE UNIQUE INDEX idx_sessions_public_id ON sessions(public_id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

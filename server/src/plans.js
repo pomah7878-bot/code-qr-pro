@@ -9,7 +9,8 @@ export const PLANS = {
     labelEditor: false,
     printBridge: false,
     apiAccess: false,
-    historyDays: 7
+    historyDays: 7,
+    archiveMb: 50
   },
   premium: {
     id: 'premium',
@@ -21,7 +22,8 @@ export const PLANS = {
     labelEditor: true,
     printBridge: true,
     apiAccess: true,
-    historyDays: 365
+    historyDays: 365,
+    archiveMb: 2048
   },
   // Тестовый тариф: 1 ₽ за 30 дней полного PREMIUM-доступа.
   // Нужен для боевой проверки платежа через YooKassa без траты 1990 ₽.
@@ -36,7 +38,8 @@ export const PLANS = {
     labelEditor: true,
     printBridge: true,
     apiAccess: true,
-    historyDays: 365
+    historyDays: 365,
+    archiveMb: 2048
   }
 };
 
@@ -44,7 +47,7 @@ export const PLANS = {
 export const PURCHASABLE = ['premium'];
 
 // Лимиты можно менять из админки: переопределения хранятся в app_settings.plan_limits
-const LIMIT_RANGES = { codesPerDay: [1, 1000000], batchMax: [1, 100000], historyDays: [1, 3650] };
+const LIMIT_RANGES = { codesPerDay: [1, 1000000], batchMax: [1, 100000], historyDays: [1, 3650], archiveMb: [10, 102400] };
 const BOOLEAN_LIMITS = ['apiAccess', 'labelEditor', 'printBridge'];
 const FORMATS = ['png', 'svg', 'pdf', 'zip'];
 

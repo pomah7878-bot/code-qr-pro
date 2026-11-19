@@ -69,7 +69,11 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
 
       <div class="glass rounded-2xl p-6">
         <h2 class="font-display font-semibold mb-4">Что дальше</h2>
-        <div class="grid md:grid-cols-3 gap-4 text-sm">
+        <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
+          <router-link to="/app/history" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
+            <div class="font-semibold mb-1">🕘 История →</div>
+            <p class="text-slate-500">Пакеты, архивы, проверки и печать — с автоматическим сроком хранения.</p>
+          </router-link>
           <router-link to="/app/generate" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
             <div class="font-semibold mb-1">▦ Генерация →</div>
             <p class="text-slate-500">Импорт CSV/XLSX, валидация GS1, пакетная генерация и экспорт.</p>

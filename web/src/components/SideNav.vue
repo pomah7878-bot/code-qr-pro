@@ -3,6 +3,7 @@ import { store } from '../store.js';
 defineProps({ active: String });
 const items = [
   { icon: '📊', t: 'Обзор', to: '/app' },
+  { icon: '🕘', t: 'История', to: '/app/history' },
   { icon: '▦', t: 'Генерация', to: '/app/generate' },
   { icon: '🏷️', t: 'Этикетки', to: '/app/labels' },
   { icon: '🖨️', t: 'Повторная печать', to: '/app/reprint' },

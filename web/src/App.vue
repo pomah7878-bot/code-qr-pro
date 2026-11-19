@@ -82,6 +82,7 @@ async function changePassword() {
         <div v-if="menuOpen" class="md:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white/95 dark:bg-ink-950/95 backdrop-blur-xl">
           <template v-if="store.user">
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')">📊 Кабинет</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/history')">🕘 История</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/generate')">▦ Генерация</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/labels')">🏷️ Этикетки</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/reprint')">🖨️ Повторная печать</button>

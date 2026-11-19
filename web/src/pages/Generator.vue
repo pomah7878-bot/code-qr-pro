@@ -351,7 +351,10 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
 
       <!-- история -->
       <div v-if="history.length" class="glass rounded-2xl p-6">
-        <h2 class="font-display font-semibold mb-4">История пакетов</h2>
+        <div class="flex items-center justify-between gap-2 mb-4">
+          <h2 class="font-display font-semibold">История пакетов</h2>
+          <router-link to="/app/history" class="text-xs text-brand-400 font-medium">Вся история →</router-link>
+        </div>
         <div class="space-y-2">
           <div v-for="h in history" :key="h.id" class="flex items-center gap-3 text-sm rounded-xl border border-slate-200 dark:border-white/10 px-4 py-2.5">
             <button class="font-medium hover:text-brand-400 truncate" @click="openJob(h.id)">{{ h.name }}</button>

@@ -198,7 +198,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     try { removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
     db.transaction(() => {
       db.prepare("UPDATE job_items SET status='ok', error=NULL WHERE job_id=? AND status='generated'").run(job.id);
-      db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL WHERE id=?").run(job.id);
+      db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL, artifact_key=NULL, artifact_size=0, artifact_sha=NULL, archived_at=NULL, expires_at=NULL WHERE id=?").run(job.id);
     })();
     enqueue(job.id);
     audit(req, 'job.retry', 'job', job.id, {});

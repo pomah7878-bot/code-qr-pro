@@ -23,6 +23,7 @@ import { startMailQueue } from './lib/mail-queue.js';
 import { notifyConfigured } from './notify.js';
 import { rateLimitHook, securityHeaders, sameOriginGuard } from './security.js';
 import { db } from './db.js';
+import { cleanupExpiredJobs } from './jobs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 8 * 1024 * 1024 });
@@ -34,6 +35,8 @@ setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime(
 setInterval(() => db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now','-365 days')").run(), 86400000).unref();
 setInterval(() => db.prepare("DELETE FROM login_attempts WHERE last_at < datetime('now','-30 days')").run(), 86400000).unref();
 setInterval(() => db.prepare("DELETE FROM password_resets WHERE created_at < datetime('now','-7 days')").run(), 86400000).unref();
+setInterval(cleanupExpiredJobs, 3600000).unref();
+cleanupExpiredJobs();
 
 await app.register(cookie);
 await registerRoutes(app);

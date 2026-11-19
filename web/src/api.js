@@ -39,6 +39,7 @@ export const api = {
   validate: (b) => req('POST', '/api/jobs/validate', b),
   createJob: (b) => req('POST', '/api/jobs', b),
   jobs: () => req('GET', '/api/jobs'),
+  history: () => req('GET', '/api/history'),
   job: (id) => req('GET', '/api/jobs/' + id),
   retryJob: (id) => req('POST', `/api/jobs/${id}/retry`),
   deleteJob: (id) => req('DELETE', '/api/jobs/' + id),

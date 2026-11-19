@@ -604,7 +604,7 @@ async function downloadPdf() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template, rows, single: true })
+      body: JSON.stringify({ template, rows, single: true, source: 'reprint' })
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

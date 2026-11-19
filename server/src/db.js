@@ -243,7 +243,29 @@ const MIGRATIONS = [
      window_start INTEGER NOT NULL,
      count INTEGER NOT NULL
    );
-   CREATE INDEX idx_rate_limits_window ON rate_limits(window_start);`
+   CREATE INDEX idx_rate_limits_window ON rate_limits(window_start);`,
+  // v15 — история работ и архивы результатов
+  `ALTER TABLE generation_jobs ADD COLUMN artifact_key TEXT;
+   ALTER TABLE generation_jobs ADD COLUMN artifact_size INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE generation_jobs ADD COLUMN artifact_sha TEXT;
+   ALTER TABLE generation_jobs ADD COLUMN archived_at TEXT;
+   ALTER TABLE generation_jobs ADD COLUMN expires_at TEXT;
+   CREATE INDEX idx_jobs_expires ON generation_jobs(expires_at);
+   CREATE TABLE activity_log (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     kind TEXT NOT NULL,
+     title TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'ok',
+     total INTEGER NOT NULL DEFAULT 0,
+     ok_count INTEGER NOT NULL DEFAULT 0,
+     fail_count INTEGER NOT NULL DEFAULT 0,
+     meta TEXT NOT NULL DEFAULT '{}',
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     expires_at TEXT
+   );
+   CREATE INDEX idx_activity_user ON activity_log(user_id, created_at);
+   UPDATE generation_jobs SET expires_at = datetime('now', '+30 days') WHERE expires_at IS NULL;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

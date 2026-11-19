@@ -5,6 +5,7 @@ import { planOf } from './plans.js';
 import { createJobForUser } from './routes-jobs.js';
 import { verifyCodes } from './cz.js';
 import { getSetting } from './settings.js';
+import { logActivity } from './lib/activity.js';
 
 const hashKey = (k) => createHash('sha256').update(k).digest('hex');
 
@@ -85,7 +86,13 @@ export async function registerApiRoutes(app) {
     const codes = req.body?.codes;
     if (!Array.isArray(codes) || !codes.length || codes.length > 1000) return reply.code(400).send({ error: 'Передайте до 1000 кодов' });
     const mode = req.body?.mode === 'gs1' ? 'gs1' : 'cz';
-    return verifyCodes(codes, mode);
+    const result = await verifyCodes(codes, mode);
+    const ok = (result.results || []).filter((r) => r.ok).length;
+    logActivity(req.user, 'cz_verify', 'Проверка кодов «Честный ЗНАК»', {
+      total: codes.length, ok, fail: codes.length - ok,
+      meta: { mode, configured: Boolean(result.configured), online: Boolean(result.online) }
+    });
+    return result;
   });
 
   // Информация о товаре из «Честного ЗНАКа» по коду (True API, если настроен токен)

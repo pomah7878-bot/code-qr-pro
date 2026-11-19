@@ -3,6 +3,7 @@ import { planOf } from './plans.js';
 import { requireAuth } from './routes.js';
 import { resolveElements, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
+import { logActivity } from './lib/activity.js';
 
 const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode', 'text', 'field'];
 
@@ -126,6 +127,11 @@ export async function registerLabelRoutes(app) {
     doc.pipe(reply.raw);
     await renderLabelsPdf(doc, template, dataRows, { single: singlePage });
     doc.end();
+    logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
+      total: dataRows.length,
+      ok: dataRows.length,
+      meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: jobId ?? null }
+    });
     return reply;
   });
 }

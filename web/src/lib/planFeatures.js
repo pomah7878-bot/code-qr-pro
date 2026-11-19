@@ -10,7 +10,8 @@ export function planFeatureRows(plan, { onlyEnabled = false } = {}) {
     { text: 'Редактор этикеток', on: Boolean(plan.labelEditor) },
     { text: 'Печать на термопринтер (Print Bridge)', on: Boolean(plan.printBridge) },
     { text: 'API для 1С и складов', on: Boolean(plan.apiAccess) },
-    { text: `История ${Number(plan.historyDays || 0)} дней`, on: true }
+    { text: `История ${Number(plan.historyDays || 0)} дней`, on: true },
+    { text: `Архив ${Number(plan.archiveMb || 0)} МБ`, on: true }
   ];
   return onlyEnabled ? rows.filter((r) => r.on) : rows;
 }

@@ -623,8 +623,8 @@ async function exportPdf() {
   }
   try {
     const body = jobId.value != null
-      ? { template: tpl, jobId: jobId.value }
-      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r) };
+      ? { template: tpl, jobId: jobId.value, source: 'labels' }
+      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
     await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`);
   } catch (e) { error.value = e.message; }
 }
@@ -638,8 +638,8 @@ async function exportPdfSingle() {
   }
   try {
     const body = jobId.value != null
-      ? { template: tpl, jobId: jobId.value, single: true }
-      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true };
+      ? { template: tpl, jobId: jobId.value, single: true, source: 'labels' }
+      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true, source: 'labels' };
     await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`);
   } catch (e) { error.value = e.message; }
 }

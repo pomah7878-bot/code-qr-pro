@@ -167,6 +167,29 @@ export async function registerAdRoutes(app) {
     return { ok: true };
   });
 
+  app.get('/api/admin/ads/:id/stats', { preHandler: requireAdmin }, async (req, reply) => {
+    const ad = db.prepare('SELECT * FROM ad_campaigns WHERE id=?').get(req.params.id);
+    if (!ad) return reply.code(404).send({ error: 'Кампания не найдена' });
+    const days = Math.max(7, Math.min(90, Math.round(Number(req.query?.days) || 30)));
+    const rows = db.prepare(`SELECT day, impressions, clicks FROM ad_daily_stats
+      WHERE ad_id=? AND day >= date('now', ?) ORDER BY day`).all(ad.id, `-${days - 1} days`);
+    const byDay = new Map(rows.map((r) => [r.day, r]));
+    const list = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      const r = byDay.get(day);
+      list.push({ day, impressions: r?.impressions || 0, clicks: r?.clicks || 0 });
+    }
+    const impressions = list.reduce((s, r) => s + r.impressions, 0);
+    const clicks = list.reduce((s, r) => s + r.clicks, 0);
+    return {
+      ad: adRow(ad),
+      days,
+      daily: list,
+      totals: { impressions, clicks, ctr: impressions ? (clicks / impressions) * 100 : 0 }
+    };
+  });
+
   // Публичная выдача объявления для конкретного места
   app.get('/api/ads/slot', async (req, reply) => {
     const placement = PLACEMENTS.has(req.query?.placement) ? req.query.placement : 'landing_banner';

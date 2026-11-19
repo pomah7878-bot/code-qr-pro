@@ -46,6 +46,28 @@ const fmtDate = (s) => {
 const money = (n) => Number(n || 0).toLocaleString('ru');
 const ctr = (a) => a.impressions ? `${(a.clicks / a.impressions * 100).toFixed(1)}%` : '—';
 const preview = computed(() => imageData.value || (!removeImage.value && editing.value?.imageUrl) || '');
+const placementLabel = computed(() => placements.find((p) => p.id === form.placement)?.label || form.placement);
+const statsOpen = ref(false);
+const statsAd = ref(null);
+const stats = ref(null);
+const statsLoading = ref(false);
+const statsDays = ref(30);
+
+async function openStats(ad) {
+  statsAd.value = ad; statsOpen.value = true; stats.value = null; statsLoading.value = true; error.value = '';
+  try { stats.value = await api.adminAdStats(ad.id, statsDays.value); }
+  catch (e) { error.value = e.message; }
+  finally { statsLoading.value = false; }
+}
+async function reloadStats() {
+  if (!statsAd.value) return;
+  statsLoading.value = true;
+  try { stats.value = await api.adminAdStats(statsAd.value.id, statsDays.value); }
+  catch (e) { error.value = e.message; }
+  finally { statsLoading.value = false; }
+}
+const maxStat = computed(() => Math.max(1, ...(stats.value?.daily || []).map((d) => Math.max(d.impressions, d.clicks))));
+const barPct = (n) => `${Math.max(0, Math.round((n / maxStat.value) * 100))}%`;
 
 async function load() {
   loading.value = true; error.value = '';
@@ -176,6 +198,7 @@ onMounted(load);
             <td class="p-3">{{ ctr(a) }}</td>
             <td class="p-3 text-right whitespace-nowrap">
               <button class="btn-ghost !py-1 !px-2 text-xs" @click="openEdit(a)">Изменить</button>
+              <button class="btn-ghost !py-1 !px-2 text-xs" @click="openStats(a)">Статистика</button>
               <button class="btn-ghost !py-1 !px-2 text-xs" :disabled="busy" @click="toggle(a)">{{ a.status === 'active' ? 'Пауза' : 'Запустить' }}</button>
               <button class="btn-ghost !py-1 !px-2 text-xs text-red-500" :disabled="busy" @click="remove(a)">Удалить</button>
             </td>
@@ -213,12 +236,65 @@ onMounted(load);
               </div>
               <img v-if="preview" :src="preview" alt="Предпросмотр" class="mt-2 max-h-28 rounded-lg border border-slate-200 dark:border-white/10">
             </div>
+            <div class="md:col-span-2 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3">
+              <div class="text-[10px] uppercase tracking-widest text-amber-600/80 mb-2">Предпросмотр · {{ placementLabel }}</div>
+              <div class="flex items-center gap-3">
+                <img v-if="preview" :src="preview" alt="" class="h-14 w-24 rounded-lg object-cover border border-slate-200 dark:border-white/10">
+                <div class="min-w-0">
+                  <div class="font-semibold text-sm truncate">{{ form.title || 'Заголовок объявления' }}</div>
+                  <div class="text-xs text-slate-500 line-clamp-2">{{ form.text || 'Текст объявления' }}</div>
+                  <div class="text-[11px] text-slate-400 mt-1">{{ form.advertiser || 'Рекламодатель' }} · Реклама</div>
+                </div>
+              </div>
+            </div>
           </div>
           <p v-if="error" class="text-sm text-red-500 mt-3">{{ error }}</p>
           <div class="flex justify-end gap-2 mt-4">
             <button class="btn-ghost !py-2 text-sm" @click="open = false">Отмена</button>
             <button class="btn-primary !py-2 text-sm" :disabled="busy" @click="save">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button>
           </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="statsOpen" class="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm p-4 overflow-y-auto" @click.self="statsOpen = false">
+        <div class="mx-auto mt-8 w-full max-w-3xl rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 p-5 shadow-2xl">
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-display font-bold text-xl">Статистика</h3>
+              <p class="text-xs text-slate-500 mt-1">{{ statsAd?.title }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select v-model.number="statsDays" class="input !py-1.5 !px-2 text-xs" @change="reloadStats">
+                <option :value="7">7 дней</option>
+                <option :value="14">14 дней</option>
+                <option :value="30">30 дней</option>
+                <option :value="90">90 дней</option>
+              </select>
+              <button class="text-slate-400 text-xl" @click="statsOpen = false">✕</button>
+            </div>
+          </div>
+          <p v-if="error" class="text-sm text-red-500 mb-3">{{ error }}</p>
+          <p v-if="statsLoading" class="text-sm text-slate-500">Загружаем статистику…</p>
+          <template v-else-if="stats">
+            <div class="grid grid-cols-3 gap-3 mb-5">
+              <div class="rounded-xl bg-slate-50 dark:bg-white/[0.04] p-3"><div class="text-2xl font-extrabold">{{ stats.totals.impressions.toLocaleString('ru') }}</div><div class="text-xs text-slate-500">показов</div></div>
+              <div class="rounded-xl bg-slate-50 dark:bg-white/[0.04] p-3"><div class="text-2xl font-extrabold">{{ stats.totals.clicks.toLocaleString('ru') }}</div><div class="text-xs text-slate-500">кликов</div></div>
+              <div class="rounded-xl bg-slate-50 dark:bg-white/[0.04] p-3"><div class="text-2xl font-extrabold">{{ stats.totals.ctr.toFixed(1) }}%</div><div class="text-xs text-slate-500">CTR</div></div>
+            </div>
+            <div class="flex items-end gap-1 h-44 border-b border-slate-200 dark:border-white/10 pb-1">
+              <div v-for="(d, i) in stats.daily" :key="d.day" class="flex-1 min-w-0 flex items-end justify-center gap-[1px] h-full" :title="`${d.day}: ${d.impressions} показов, ${d.clicks} кликов`">
+                <div class="w-1/2 rounded-t bg-brand-500/80" :style="{ height: barPct(d.impressions) }"></div>
+                <div class="w-1/2 rounded-t bg-emerald-500/80" :style="{ height: barPct(d.clicks) }"></div>
+              </div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>{{ stats.daily[0]?.day.slice(5) }}</span>
+              <span class="flex items-center gap-2"><i class="inline-block w-2 h-2 rounded bg-brand-500"></i> показы <i class="inline-block w-2 h-2 rounded bg-emerald-500"></i> клики</span>
+              <span>{{ stats.daily[stats.daily.length - 1]?.day.slice(5) }}</span>
+            </div>
+          </template>
         </div>
       </div>
     </Teleport>

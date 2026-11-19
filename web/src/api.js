@@ -99,6 +99,7 @@ export const api = {
   adminCreateAd: (b) => req('POST', '/api/admin/ads', b),
   adminUpdateAd: (id, b) => req('PUT', `/api/admin/ads/${id}`, b),
   adminDeleteAd: (id) => req('DELETE', `/api/admin/ads/${id}`),
+  adminAdStats: (id, days = 30) => req('GET', `/api/admin/ads/${id}/stats?days=${days}`),
   adminSaveStorage: (b) => req('PUT', '/api/admin/settings/storage', b),
   adminTestStorage: () => req('POST', '/api/admin/settings/storage/test'),
   adminSaveSmtp: (b) => req('PUT', '/api/admin/settings/smtp', b),

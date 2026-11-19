@@ -703,21 +703,9 @@ async function downloadPdf() {
           </div>
           <p v-if="cameraError" class="text-xs text-red-500">{{ cameraError }}</p>
           <p v-if="serialError" class="text-xs text-amber-500">{{ serialError }}</p>
-          <button class="btn-primary !py-2 text-sm" :disabled="busy" @click="checkCodes">{{ busy ? 'Проверяем…' : 'Проверить коды' }}</button>
+          <button class="btn-ghost !py-2 text-sm" :disabled="busy" @click="checkCodes">{{ busy ? 'Проверяем…' : 'Проверить коды' }}</button>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
           <p v-if="shortWarning" class="text-xs text-amber-500">{{ shortWarning }}</p>
-
-          <div class="pt-3 border-t border-slate-200 dark:border-white/10">
-            <h3 class="font-semibold text-sm mb-2">Данные товара</h3>
-            <p class="text-xs text-slate-500 mb-2">Применяются ко всем кодам в этой печати.</p>
-            <div class="grid grid-cols-2 gap-2">
-              <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
-              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (цифры или текст)">
-              <select v-model="barcodeFormat" class="input !py-1.5 text-sm col-span-2">
-                <option v-for="f in barcodeFormats" :key="f.id" :value="f.id">Формат: {{ f.label }}</option>
-              </select>
-            </div>
-          </div>
 
           <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
             {{ busy ? 'Готовим PDF…' : `⬇ Скачать PDF (${result?.valid?.length || codesCount})` }}
@@ -728,6 +716,18 @@ async function downloadPdf() {
           <ValidHint v-if="result" class="mt-1" />
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="!premium" class="text-xs text-amber-500">PDF-печать доступна на тарифе PREMIUM. <router-link to="/app/billing" class="underline font-medium">Оформить →</router-link></p>
+
+          <div class="pt-3 border-t border-slate-200 dark:border-white/10">
+            <h3 class="font-semibold text-sm mb-2">Данные товара</h3>
+            <p class="text-xs text-slate-500 mb-2">Необязательно. Применяются ко всем кодам в этой печати.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
+              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (цифры или текст)">
+              <select v-model="barcodeFormat" class="input !py-1.5 text-sm col-span-2">
+                <option v-for="f in barcodeFormats" :key="f.id" :value="f.id">Формат: {{ f.label }}</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { importPdf } from '../lib/pdfImport.js';
 import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import { openPrintWindow } from '../lib/print.js';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -645,6 +646,18 @@ async function exportPdfSingle() {
   } catch (e) { error.value = e.message; }
 }
 
+async function printLabels() {
+  error.value = '';
+  if (!dataRows.value.length) { error.value = 'Загрузите коды КИЗ или данные BarTender'; return; }
+  if (dataRows.value.length > 1000) { error.value = 'Для печати из браузера — до 1000 этикеток'; return; }
+  try {
+    const body = jobId.value != null
+      ? { template: tpl, jobId: jobId.value, source: 'labels' }
+      : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
+    await openPrintWindow('/api/labels/print', body);
+  } catch (e) { error.value = e.message; }
+}
+
 function saveToken() { localStorage.setItem('cq_bridge_token', bridge.token); }
 async function bridgePing() {
   bridge.status = 'checking';
@@ -891,6 +904,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
 
             <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf">⬇ PDF-лист А4 ({{ dataRows.length || 0 }})</button>
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle">⬇ PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
+            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels">🖨 Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
           </div>
 

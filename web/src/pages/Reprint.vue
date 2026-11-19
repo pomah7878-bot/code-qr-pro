@@ -6,6 +6,7 @@ import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
+import { openPrintWindow } from '../lib/print.js';
 
 const MAX = 1000;
 const categories = [
@@ -643,6 +644,43 @@ async function downloadPdf() {
     busy.value = false;
   }
 }
+
+async function printLabels() {
+  error.value = ''; notice.value = '';
+  if (!premium.value) { error.value = 'Печать доступна на тарифе PREMIUM'; return; }
+  if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
+  const win = window.open('', '_blank');
+  if (!win) { error.value = 'Разрешите всплывающие окна, чтобы открыть печать'; return; }
+  busy.value = true;
+  try {
+    if (!result.value?.valid.length) {
+      await checkCodes();
+      busy.value = true;
+      if (!result.value?.valid.length) { win.close(); return; }
+    }
+    const barcode = String(product.barcode || '').trim();
+    const numericFormats = ['ean13', 'ean8', 'upca', 'itf14'];
+    if (!qrOnly.value && fields.ean13 && barcode && numericFormats.includes(barcodeFormat.value) && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
+      throw new Error('Для выбранного формата штрихкод должен содержать цифры');
+    }
+    const template = buildTemplate();
+    if (!template.elements.length) throw new Error('Нечего печатать');
+    const rows = result.value.valid.map((c) => ({
+      code: c.code, gtin: c.gtin, serial: c.serial,
+      barcode: String(product.barcode || '').trim(), name: String(product.name || '').trim(),
+      article: String(product.article || '').trim(), dosage: String(product.dosage || '').trim(),
+      form: String(product.form || '').trim(), size: String(product.size || '').trim(),
+      color: String(product.color || '').trim(), series: String(product.series || '').trim(),
+      expiry: String(product.expiry || '').trim(), date: String(product.date || '').trim(),
+      composition: String(product.composition || '').trim(), manufacturer: String(product.manufacturer || '').trim()
+    }));
+    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' }, win);
+    notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
+  } catch (e) {
+    try { win.close(); } catch { /* ignore */ }
+    error.value = e.message;
+  } finally { busy.value = false; }
+}
 </script>
 
 <template>
@@ -719,9 +757,12 @@ async function downloadPdf() {
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
           <p v-if="shortWarning" class="text-xs text-amber-500">{{ shortWarning }}</p>
 
-          <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
-            {{ busy ? 'Готовим PDF…' : `⬇ Скачать PDF (${result?.valid?.length || codesCount})` }}
-          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
+              {{ busy ? 'Готовим…' : `⬇ PDF (${result?.valid?.length || codesCount})` }}
+            </button>
+            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels">🖨 Печать</button>
+          </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
           <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>

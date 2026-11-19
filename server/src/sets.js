@@ -113,7 +113,7 @@ export function validateSetPayload(p) {
   return '';
 }
 
-async function dataMatrixPng(code) {
+export async function dataMatrixPng(code) {
   const raw = toRawGs1(code || '');
   const text = gs1BarcodeText(raw);
   return bwipjs.toBuffer({

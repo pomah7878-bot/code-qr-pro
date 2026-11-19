@@ -5,6 +5,7 @@ import { store } from '../store.js';
 import { normalizeScanInput } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import { openPrintWindow } from '../lib/print.js';
 
 const plan = computed(() => store.plan || {});
 const premium = computed(() => Boolean(plan.value.labelEditor));
@@ -192,6 +193,23 @@ async function downloadPdf() {
   }
 }
 
+async function printSets() {
+  error.value = ''; notice.value = '';
+  if (!premium.value) { error.value = 'Печать наборов доступна на тарифе PREMIUM'; return; }
+  if (!canPrint.value) { error.value = 'Заполните карточку набора и вставьте нужное количество кодов'; return; }
+  try {
+    const payload = {
+      template: { ...templateBody(), showComposition: form.showComposition, onlySet: form.onlySet },
+      setCodes: lines(setCodesText.value),
+      componentCodes: form.onlySet ? [] : form.components.map((c, i) => ({
+        gtin: c.gtin, name: c.name, qty: c.qty, codes: lines(componentTexts.value[i]?.codesText || '')
+      }))
+    };
+    await openPrintWindow('/api/sets/print', payload);
+    notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
+  } catch (e) { error.value = e.message; }
+}
+
 onMounted(() => loadTemplates());
 onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
 </script>
@@ -304,7 +322,10 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           </template>
           <p v-else class="text-xs text-amber-500">Включён режим «Только набор» — коды вложений не нужны.</p>
 
-          <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !canPrint" @click="downloadPdf">{{ busy ? 'Готовим PDF…' : `⬇ Скачать PDF (${setCount || 0} наборов)` }}</button>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !canPrint" @click="downloadPdf">{{ busy ? 'Готовим…' : `⬇ PDF (${setCount || 0})` }}</button>
+            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !canPrint" @click="printSets">🖨 Печать</button>
+          </div>
           <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>
           <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>

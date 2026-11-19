@@ -1,8 +1,9 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { planOf } from './plans.js';
-import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin } from './sets.js';
+import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin, dataMatrixPng } from './sets.js';
 import { logActivity } from './lib/activity.js';
+import { labelHtml, printDocument } from './lib/print-html.js';
 
 const rowToTemplate = (r) => ({
   id: r.id,
@@ -76,5 +77,52 @@ export async function registerSetRoutes(app) {
     } catch (e) {
       return reply.code(e.statusCode || 502).send({ error: String(e?.message || e) });
     }
+  });
+
+  app.post('/api/sets/print', { preHandler: requireAuth }, async (req, reply) => {
+    const plan = planOf(req.user);
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать наборов доступна на тарифе PREMIUM' });
+    const p = normalizeSetPayload(req.body);
+    const error = validateSetPayload(p);
+    if (error) return reply.code(400).send({ error });
+    const [wMm, hMm] = p.format === '58x40' ? [58, 40] : p.format === '40x58' ? [40, 58] : p.format === '43x25' ? [43, 25] : [58, 80];
+    const m = 2;
+    const labels = [];
+    for (let s = 0; s < p.setCodes.length; s++) {
+      const png = (await dataMatrixPng(p.setCodes[s])).toString('base64');
+      const qrSize = Math.min(wMm - m * 2, hMm * 0.52);
+      const elements = [
+        { x: (wMm - qrSize) / 2, y: m, w: qrSize, h: qrSize, pngBase64: png, type: 'datamatrix' },
+        { x: m, y: m + qrSize + 1.5, w: wMm - m * 2, h: 7, text: p.name, fontSize: 8, align: 'left' },
+        { x: m, y: m + qrSize + 8.5, w: wMm - m * 2, h: 4, text: `GTIN набора: ${p.setGtin}`, fontSize: 5.5, align: 'left' }
+      ];
+      if (p.showComposition) {
+        elements.push({ x: m, y: m + qrSize + 13, w: wMm - m * 2, h: Math.max(4, hMm - (m + qrSize + 13) - 5), text: `Состав: ${p.components.map((c) => `${c.name} ×${c.qty}`).join(', ')}`, fontSize: 5.5, align: 'left' });
+      }
+      elements.push({ x: m, y: hMm - m - 3.5, w: wMm - m * 2, h: 4, text: `КИН набора: ${p.setCodes[s].slice(0, 44)}`, fontSize: 4.5, align: 'left' });
+      labels.push(labelHtml(elements, wMm, hMm));
+
+      if (!p.onlySet) {
+        for (let c = 0; c < p.components.length; c++) {
+          const comp = p.components[c];
+          for (let q = 0; q < comp.qty; q++) {
+            const code = p.componentCodes[c]?.codes?.[s * comp.qty + q];
+            if (!code) continue;
+            const cpng = (await dataMatrixPng(code)).toString('base64');
+            const cs = Math.min(wMm - m * 2, hMm * 0.55);
+            labels.push(labelHtml([
+              { x: (wMm - cs) / 2, y: m, w: cs, h: cs, pngBase64: cpng, type: 'datamatrix' },
+              { x: m, y: m + cs + 2, w: wMm - m * 2, h: 7, text: comp.name, fontSize: 8, align: 'left' },
+              { x: m, y: m + cs + 9, w: wMm - m * 2, h: 4, text: `GTIN: ${comp.gtin}`, fontSize: 5.5, align: 'left' }
+            ], wMm, hMm));
+          }
+        }
+      }
+    }
+    logActivity(req.user, 'sets_print', 'Печать наборов из браузера', {
+      total: p.setCodes.length, ok: p.setCodes.length,
+      meta: { setGtin: p.setGtin, components: p.components.length, onlySet: p.onlySet }
+    });
+    return reply.type('text/html; charset=utf-8').send(printDocument({ labels, widthMm: wMm, heightMm: hMm, title: 'Печать наборов' }));
   });
 }

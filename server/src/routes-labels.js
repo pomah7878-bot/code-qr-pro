@@ -4,6 +4,7 @@ import { requireAuth } from './routes.js';
 import { resolveElements, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
 import { logActivity } from './lib/activity.js';
+import { labelHtml, printDocument } from './lib/print-html.js';
 
 const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode', 'text', 'field'];
 
@@ -133,5 +134,39 @@ export async function registerLabelRoutes(app) {
       meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: jobId ?? null }
     });
     return reply;
+  });
+
+  // HTML-версия для печати прямо из браузера (без скачивания PDF)
+  app.post('/api/labels/print', { preHandler: requireAuth }, async (req, reply) => {
+    const plan = planOf(req.user);
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать этикеток доступна на тарифе PREMIUM' });
+    const { template, jobId, rows } = req.body || {};
+    const err = validateTemplate(template);
+    if (err) return reply.code(400).send({ error: err });
+    let dataRows;
+    if (Array.isArray(rows)) {
+      dataRows = cleanDataRows(rows);
+      if (!dataRows) return reply.code(400).send({ error: 'Нужны строки данных (до 10 000)' });
+    } else {
+      if (jobId == null) return reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
+      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
+      if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
+      if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
+      const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
+      dataRows = items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
+    }
+    if (dataRows.length > 1000) return reply.code(400).send({ error: 'Для печати из браузера — до 1000 этикеток' });
+    const labels = [];
+    for (const row of dataRows) labels.push(labelHtml(await resolveElements(template, row), Number(template.widthMm), Number(template.heightMm)));
+    logActivity(req.user, 'labels_print', 'Печать этикеток из браузера', {
+      total: dataRows.length, ok: dataRows.length,
+      meta: { widthMm: template.widthMm, heightMm: template.heightMm, jobId: jobId ?? null }
+    });
+    return reply.type('text/html; charset=utf-8').send(printDocument({
+      labels,
+      widthMm: Number(template.widthMm),
+      heightMm: Number(template.heightMm),
+      title: 'Печать этикеток'
+    }));
   });
 }

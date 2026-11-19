@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
-import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice } from './plans.js';
+import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice, archiveAddon } from './plans.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
 
@@ -46,12 +46,33 @@ export function activatePremium(userId, provider, externalId, orderId, days = 30
   })();
 }
 
+export function activateArchive(userId, provider, externalId, orderId, days = 1095, mb = 10240) {
+  const termDays = Number.isFinite(days) && days > 0 ? Math.round(days) : 1095;
+  const termMb = Number.isFinite(mb) && mb > 0 ? Math.round(mb) : 10240;
+  const row = db.prepare('SELECT archive_until, archive_mb FROM users WHERE id=?').get(userId);
+  const now = Date.now();
+  const base = row?.archive_until && new Date(row.archive_until.replace(' ', 'T') + 'Z').getTime() > now
+    ? new Date(row.archive_until.replace(' ', 'T') + 'Z').getTime()
+    : now;
+  const until = sqlNow(new Date(base + termDays * 86400000));
+  db.transaction(() => {
+    db.prepare('UPDATE users SET archive_until=?, archive_mb=MAX(archive_mb, ?) WHERE id=?')
+      .run(until, termMb, userId);
+    if (orderId) db.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE id=?").run(orderId);
+  })();
+  return { until, mb: termMb, provider, externalId };
+}
+
 export async function createCheckout(user, planId = 'premium', days = null, promoCode = '') {
   // валидация тарифа/периода ДО проверки провайдера
   let amount, termDays;
   if (planId === 'test') {
     amount = getTestPrice();
     termDays = 30;
+  } else if (planId === 'archive') {
+    const addon = archiveAddon();
+    amount = addon.price;
+    termDays = addon.days;
   } else if (planId === 'premium') {
     const offers = getPremiumOffers();
     const offer = days != null ? offers.find(o => o.days === Number(days)) : offers[0];
@@ -96,7 +117,9 @@ export async function createCheckout(user, planId = 'premium', days = null, prom
   const orderId = info.lastInsertRowid;
   const description = planId === 'test'
     ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM ' + termDays + ' дней)'
-    : 'PREMIUM подписка CODE QR PRO (' + termDays + ' дней)';
+    : planId === 'archive'
+      ? 'Архив CODE QR PRO: ' + termDays + ' дней, ' + archiveAddon().mb + ' МБ'
+      : 'PREMIUM подписка CODE QR PRO (' + termDays + ' дней)';
   try {
     const data = await yk('POST', '/payments', {
       amount: { value: amount.toFixed(2), currency: 'RUB' },
@@ -129,7 +152,12 @@ export async function checkOrder(order) {
   if (order.status !== 'pending' || !order.external_id) return order;
   const data = await yk('GET', '/payments/' + order.external_id);
   if (data.status === 'succeeded') {
-    activatePremium(order.user_id, 'yookassa', data.id, order.id, order.days || 30);
+    if (order.plan === 'archive') {
+      const addon = archiveAddon();
+      activateArchive(order.user_id, 'yookassa', data.id, order.id, order.days || addon.days, addon.mb);
+    } else {
+      activatePremium(order.user_id, 'yookassa', data.id, order.id, order.days || 30);
+    }
     const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
     redeemPromo(paid);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);

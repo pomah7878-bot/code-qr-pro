@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { createCheckout, checkOrder, providerConfigured } from './billing.js';
-import { PURCHASABLE, getPremiumOffers, offerFinalPrice } from './plans.js';
+import { PURCHASABLE, getPremiumOffers, offerFinalPrice, archiveAddon } from './plans.js';
 import { validatePromo } from './lib/promo.js';
 
 export async function registerBillingRoutes(app) {
@@ -62,4 +62,14 @@ export async function registerBillingRoutes(app) {
     subscription: db.prepare("SELECT * FROM subscriptions WHERE user_id=? AND status='active' ORDER BY expires_at DESC LIMIT 1").get(req.user.id) || null,
     providerConfigured: providerConfigured()
   }));
+
+  app.get('/api/billing/archive', { preHandler: requireAuth }, async (req) => {
+    const row = db.prepare('SELECT archive_until, archive_mb FROM users WHERE id=?').get(req.user.id);
+    return {
+      addon: archiveAddon(),
+      activeUntil: row?.archive_until || null,
+      archiveMb: row?.archive_mb || 0,
+      providerConfigured: providerConfigured()
+    };
+  });
 }

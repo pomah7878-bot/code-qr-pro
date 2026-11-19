@@ -44,7 +44,7 @@ export const PLANS = {
 };
 
 // Тарифы, которые можно купить через checkout
-export const PURCHASABLE = ['premium'];
+export const PURCHASABLE = ['premium', 'archive'];
 
 // Лимиты можно менять из админки: переопределения хранятся в app_settings.plan_limits
 const LIMIT_RANGES = { codesPerDay: [1, 1000000], batchMax: [1, 100000], historyDays: [1, 3650], archiveMb: [10, 102400] };
@@ -101,9 +101,35 @@ export function planDef(id) {
 }
 
 export function planOf(user) {
-  return planDef(user?.plan);
+  const base = planDef(user?.plan);
+  if (!user?.id) return base;
+  try {
+    const addon = db.prepare(
+      "SELECT archive_until, archive_mb FROM users WHERE id=? AND archive_until IS NOT NULL AND archive_until > datetime('now')"
+    ).get(user.id);
+    if (addon) {
+      return {
+        ...base,
+        historyDays: Math.max(Number(base.historyDays) || 0, 1095),
+        archiveMb: Math.max(Number(base.archiveMb) || 0, Number(addon.archive_mb) || 10240)
+      };
+    }
+  } catch { /* ignore */ }
+  return base;
 }
 
+export function archiveAddon() {
+  const price = Number(getSetting('archive_addon_price', '990'));
+  const days = Number(getSetting('archive_addon_days', '1095'));
+  const mb = Number(getSetting('archive_addon_mb', '10240'));
+  return {
+    price: Number.isFinite(price) && price > 0 ? price : 990,
+    days: Number.isFinite(days) && days > 0 ? Math.round(days) : 1095,
+    mb: Number.isFinite(mb) && mb > 0 ? Math.round(mb) : 10240
+  };
+}
+
+import { db } from './db.js';
 import { getSetting, setSetting } from './settings.js';
 
 // Округление до копеек

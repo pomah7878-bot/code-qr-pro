@@ -4,6 +4,7 @@ import { requireAuth } from './routes.js';
 import { validateRow } from './gs1.js';
 import { enqueue, renderSVG, renderPNG, removeJobFiles, archiveJob, JOBS_DIR } from './jobs.js';
 import { artifactExists, artifactStats, openArtifact } from './lib/artifacts.js';
+import { presignArtifact } from './lib/s3.js';
 import archiver from 'archiver';
 import PDFDocument from 'pdfkit';
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,8 +14,8 @@ import { isRowIndex } from './security.js';
 const MODES = ['cz', 'gs1', 'text'];
 
 function validateBatch(rows, mode, plan) {
-  if (!Array.isArray(rows) || rows.length === 0) return { error: 'Нет данных' };
-  if (rows.length > plan.batchMax) return { error: `Пакет больше лимита: максимум ${plan.batchMax} строк на вашем тарифе` };
+  if (!Array.isArray(rows) || rows.length === 0) return { error: 'РќРµС‚ РґР°РЅРЅС‹С…' };
+  if (rows.length > plan.batchMax) return { error: `РџР°РєРµС‚ Р±РѕР»СЊС€Рµ Р»РёРјРёС‚Р°: РјР°РєСЃРёРјСѓРј ${plan.batchMax} СЃС‚СЂРѕРє РЅР° РІР°С€РµРј С‚Р°СЂРёС„Рµ` };
   const items = rows.map((r, i) => {
     const raw = typeof r === 'string' ? r : (r?.data ?? '');
     return { row: i, raw: String(raw).slice(0, 2000), ...validateRow(raw, mode) };
@@ -24,20 +25,20 @@ function validateBatch(rows, mode, plan) {
 
 export function createJobForUser(user, body) {
   const { name, mode = 'cz', format = 'png', rows = [] } = body || {};
-  if (!MODES.includes(mode)) return { status: 400, error: 'Неизвестный режим' };
-  if (!['png', 'svg'].includes(format)) return { status: 400, error: 'Формат генерации: png или svg' };
+  if (!MODES.includes(mode)) return { status: 400, error: 'РќРµРёР·РІРµСЃС‚РЅС‹Р№ СЂРµР¶РёРј' };
+  if (!['png', 'svg'].includes(format)) return { status: 400, error: 'Р¤РѕСЂРјР°С‚ РіРµРЅРµСЂР°С†РёРё: png РёР»Рё svg' };
   const plan = planOf(user);
   const { error, items } = validateBatch(rows, mode, plan);
   if (error) return { status: 400, error };
   const valid = items.filter(x => x.ok).length;
-  if (valid === 0) return { status: 400, error: 'Нет валидных кодов — исправьте данные' };
+  if (valid === 0) return { status: 400, error: 'РќРµС‚ РІР°Р»РёРґРЅС‹С… РєРѕРґРѕРІ вЂ” РёСЃРїСЂР°РІСЊС‚Рµ РґР°РЅРЅС‹Рµ' };
   const used = usageToday(user.id);
   if (used + valid > plan.codesPerDay) {
-    return { status: 403, error: `Дневной лимит: осталось ${Math.max(0, plan.codesPerDay - used)} кодов, нужно ${valid}` };
+    return { status: 403, error: `Р”РЅРµРІРЅРѕР№ Р»РёРјРёС‚: РѕСЃС‚Р°Р»РѕСЃСЊ ${Math.max(0, plan.codesPerDay - used)} РєРѕРґРѕРІ, РЅСѓР¶РЅРѕ ${valid}` };
   }
   const jobId = db.transaction(() => {
     const info = db.prepare('INSERT INTO generation_jobs (user_id, name, mode, format, status, total, valid) VALUES (?,?,?,?,?,?,?)')
-      .run(user.id, String(name || 'Без названия').slice(0, 120), mode, format, 'queued', items.length, valid);
+      .run(user.id, String(name || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ').slice(0, 120), mode, format, 'queued', items.length, valid);
     const id = info.lastInsertRowid;
     const ins = db.prepare('INSERT INTO job_items (job_id, row_index, raw, normalized, gtin, serial, status, error) VALUES (?,?,?,?,?,?,?,?)');
     for (const it of items) {
@@ -55,7 +56,7 @@ export function createJobForUser(user, body) {
 export async function registerJobRoutes(app) {
   app.post('/api/jobs/validate', { preHandler: requireAuth }, async (req, reply) => {
     const { mode = 'cz', rows = [] } = req.body || {};
-    if (!MODES.includes(mode)) return reply.code(400).send({ error: 'Неизвестный режим' });
+    if (!MODES.includes(mode)) return reply.code(400).send({ error: 'РќРµРёР·РІРµСЃС‚РЅС‹Р№ СЂРµР¶РёРј' });
     const plan = planOf(req.user);
     const { error, items } = validateBatch(rows, mode, plan);
     if (error) return reply.code(400).send({ error });
@@ -74,7 +75,7 @@ export async function registerJobRoutes(app) {
 
   const ownJob = (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
-    if (!job) { reply.code(404).send({ error: 'Задание не найдено' }); return null; }
+    if (!job) { reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' }); return null; }
     return job;
   };
 
@@ -88,8 +89,8 @@ export async function registerJobRoutes(app) {
   app.post('/api/jobs/:id/retry', { preHandler: requireAuth }, async (req, reply) => {
     const job = ownJob(req, reply);
     if (!job) return;
-    if (!['done', 'error'].includes(job.status)) return reply.code(400).send({ error: 'Перезапустить можно только завершённое или упавшее задание' });
-    try { removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
+    if (!['done', 'error'].includes(job.status)) return reply.code(400).send({ error: 'РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ Р·Р°РІРµСЂС€С‘РЅРЅРѕРµ РёР»Рё СѓРїР°РІС€РµРµ Р·Р°РґР°РЅРёРµ' });
+    try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»РѕРІ РјРѕРіР»Рѕ РЅРµ Р±С‹С‚СЊ */ }
     db.transaction(() => {
       db.prepare("UPDATE job_items SET status='ok', error=NULL WHERE job_id=? AND status='generated'").run(job.id);
       db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL, artifact_key=NULL, artifact_size=0, artifact_sha=NULL, archived_at=NULL, expires_at=NULL WHERE id=?").run(job.id);
@@ -99,22 +100,22 @@ export async function registerJobRoutes(app) {
   });
 
   app.get('/api/jobs/:id/item/:row.png', { preHandler: requireAuth }, async (req, reply) => {
-    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'Некорректный номер строки' });
+    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РЅРѕРјРµСЂ СЃС‚СЂРѕРєРё' });
     const job = ownJob(req, reply);
     if (!job) return;
     const p = join(JOBS_DIR, String(job.id), req.params.row + '.png');
     if (existsSync(p)) return reply.type('image/png').send(readFileSync(p));
     const item = db.prepare("SELECT * FROM job_items WHERE job_id=? AND row_index=? AND status='generated'").get(job.id, Number(req.params.row));
-    if (!item) return reply.code(404).send({ error: 'Файл не найден' });
+    if (!item) return reply.code(404).send({ error: 'Р¤Р°Р№Р» РЅРµ РЅР°Р№РґРµРЅ' });
     return reply.type('image/png').send(await renderPNG(item, job.mode));
   });
 
   app.get('/api/jobs/:id/item/:row.svg', { preHandler: requireAuth }, async (req, reply) => {
-    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'Некорректный номер строки' });
+    if (!isRowIndex(req.params.row)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РЅРѕРјРµСЂ СЃС‚СЂРѕРєРё' });
     const job = ownJob(req, reply);
     if (!job) return;
     const item = db.prepare('SELECT * FROM job_items WHERE job_id=? AND row_index=?').get(job.id, req.params.row);
-    if (!item || !item.normalized) return reply.code(404).send({ error: 'Код не найден' });
+    if (!item || !item.normalized) return reply.code(404).send({ error: 'РљРѕРґ РЅРµ РЅР°Р№РґРµРЅ' });
     return reply.type('image/svg+xml').send(await renderSVG(item, job.mode));
   });
 
@@ -123,13 +124,16 @@ export async function registerJobRoutes(app) {
     if (!job) return;
     const format = req.query.format || 'zip';
     const plan = planOf(req.user);
-    if (!['zip', 'pdf'].includes(format)) return reply.code(400).send({ error: 'Формат экспорта: zip или pdf' });
-    if (!plan.formats.includes(format)) return reply.code(403).send({ error: `Экспорт ${format.toUpperCase()} доступен на тарифе PREMIUM` });
-    if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
+    if (!['zip', 'pdf'].includes(format)) return reply.code(400).send({ error: 'Р¤РѕСЂРјР°С‚ СЌРєСЃРїРѕСЂС‚Р°: zip РёР»Рё pdf' });
+    if (!plan.formats.includes(format)) return reply.code(403).send({ error: `Р­РєСЃРїРѕСЂС‚ ${format.toUpperCase()} РґРѕСЃС‚СѓРїРµРЅ РЅР° С‚Р°СЂРёС„Рµ PREMIUM` });
+    if (job.status !== 'done') return reply.code(409).send({ error: 'Р“РµРЅРµСЂР°С†РёСЏ РµС‰С‘ РЅРµ Р·Р°РІРµСЂС€РµРЅР°' });
     const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
     const fname = `code-qr-job-${job.id}.${format}`;
 
     if (format === 'zip') {
+      if (job.artifact_key && job.artifact_backend === 's3') {
+        return reply.redirect(await presignArtifact(job.artifact_key, fname));
+      }
       if (job.artifact_key && artifactExists(job.artifact_key)) {
         const st = artifactStats(job.artifact_key);
         reply.header('Content-Type', 'application/zip');
@@ -138,6 +142,7 @@ export async function registerJobRoutes(app) {
         return reply.send(openArtifact(job.artifact_key));
       }
       const built = await archiveJob(job.id);
+      if (built?.backend === 's3') return reply.redirect(await presignArtifact(built.key, fname));
       if (built && artifactExists(built.key)) {
         reply.header('Content-Type', 'application/zip');
         reply.header('Content-Disposition', `attachment; filename="${fname}"`);
@@ -186,13 +191,16 @@ export async function registerJobRoutes(app) {
     const job = ownJob(req, reply);
     if (!job) return;
     const plan = planOf(req.user);
-    if (!plan.formats.includes('zip')) return reply.code(403).send({ error: 'Скачивание архива доступно на тарифе PREMIUM' });
+    if (!plan.formats.includes('zip')) return reply.code(403).send({ error: 'РЎРєР°С‡РёРІР°РЅРёРµ Р°СЂС…РёРІР° РґРѕСЃС‚СѓРїРЅРѕ РЅР° С‚Р°СЂРёС„Рµ PREMIUM' });
     let key = job.artifact_key;
-    if (!key || !artifactExists(key)) {
+    let backend = job.artifact_backend || 'local';
+    if (!key || (backend !== 's3' && !artifactExists(key))) {
       const built = await archiveJob(job.id);
       if (!built) return reply.code(404).send({ error: 'Архив ещё не готов' });
       key = built.key;
+      backend = built.backend;
     }
+    if (backend === 's3') return reply.redirect(await presignArtifact(key, `code-qr-job-${job.id}.zip`));
     const st = artifactStats(key);
     reply.header('Content-Type', 'application/zip');
     reply.header('Content-Disposition', `attachment; filename="code-qr-job-${job.id}.zip"`);
@@ -202,7 +210,7 @@ export async function registerJobRoutes(app) {
 
   app.get('/api/history', { preHandler: requireAuth }, async (req) => {
     const jobs = db.prepare(
-      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,archived_at
+      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at
        FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 100`
     ).all(req.user.id);
     const activity = db.prepare(
@@ -229,8 +237,9 @@ export async function registerJobRoutes(app) {
   app.delete('/api/jobs/:id', { preHandler: requireAuth }, async (req, reply) => {
     const job = ownJob(req, reply);
     if (!job) return;
-    removeJobFiles(job.id);
+    await removeJobFiles(job.id);
     db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     return { ok: true };
   });
 }
+

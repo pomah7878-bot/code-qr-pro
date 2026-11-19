@@ -8,6 +8,8 @@ import SideNav from '../components/SideNav.vue';
 
 const route = useRoute();
 const sub = ref(null);
+const archiveInfo = ref(null);
+const archiveBusy = ref(false);
 const providerOk = ref(true);
 const orders = ref([]);
 const offers = ref([{ days: 30, price: 1990 }]);
@@ -44,6 +46,7 @@ async function load() {
     const d = await api.subscription();
     sub.value = d.subscription; providerOk.value = d.providerConfigured;
     orders.value = (await api.orders()).orders;
+    archiveInfo.value = await api.billingArchive();
     const plans = (await api.plans()).plans;
     const prem = plans.find(p => p.id === 'premium');
     if (prem?.offers?.length) { offers.value = prem.offers; selectedDays.value = prem.offers[0].days; }
@@ -61,11 +64,24 @@ async function checkout(plan = 'premium') {
   } catch (e) { error.value = e.message; }
   busy.value = false;
 }
+
+async function checkoutArchive() {
+  error.value = ''; archiveBusy.value = true;
+  try {
+    const d = await api.checkout({ plan: 'archive' });
+    if (d.order.confirmationUrl) window.location.href = d.order.confirmationUrl;
+    else error.value = 'Не получена ссылка на оплату';
+  } catch (e) { error.value = e.message; }
+  finally { archiveBusy.value = false; }
+}
 async function check(orderId) {
   error.value = ''; notice.value = '';
   try {
     const d = await api.checkOrder({ orderId });
-    if (d.order.status === 'paid') { notice.value = 'Оплата подтверждена — PREMIUM активирован!'; store.load(); }
+    if (d.order.status === 'paid') {
+      notice.value = d.order.plan === 'archive' ? 'Оплата подтверждена — архив на 3 года активирован!' : 'Оплата подтверждена — PREMIUM активирован!';
+      store.load();
+    }
     else if (d.order.status === 'canceled') notice.value = 'Заказ отменён';
     else notice.value = 'Платёж ещё не завершён — если вы оплатили, подождите до минуты и проверьте снова';
     load();
@@ -126,6 +142,27 @@ onMounted(async () => {
           </div>
         </div>
         <p class="text-xs text-slate-500 mt-4">Предоплата через YooKassa (карта, СБП). Автопродления нет — продлевайте кнопкой. Чек приходит на email (54-ФЗ).</p>
+      </div>
+
+      <div v-if="archiveInfo" class="glass rounded-2xl p-6">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="text-sm text-slate-500 mb-1">Дополнительно</div>
+            <h2 class="font-display font-bold text-xl">Архив на 3 года</h2>
+            <p class="text-sm text-slate-500 mt-1">
+              История работ {{ archiveInfo.addon.days }} дней и архив до {{ (archiveInfo.addon.mb / 1024).toFixed(0) }} ГБ.
+              Работает вместе с текущим тарифом.
+            </p>
+            <p v-if="archiveInfo.activeUntil" class="text-sm text-emerald-500 mt-1">Архив активен до {{ fmt(archiveInfo.activeUntil) }}</p>
+          </div>
+          <div class="text-right">
+            <div class="text-2xl font-extrabold">{{ archiveInfo.addon.price.toLocaleString('ru') }} ₽</div>
+            <button class="btn-ghost mt-2" :disabled="archiveBusy || !archiveInfo.providerConfigured" @click="checkoutArchive">
+              {{ archiveBusy ? 'Создаём заказ…' : (archiveInfo.activeUntil ? 'Продлить архив' : 'Подключить архив') }}
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">Разовая оплата, доступ продлевается. Для архива используется объектное хранилище S3/R2.</p>
       </div>
 
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

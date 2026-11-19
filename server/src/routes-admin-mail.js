@@ -1,5 +1,6 @@
 import { db } from './db.js';
-import { setSetting } from './settings.js';
+import { setSetting, getSetting } from './settings.js';
+import { s3Config, s3Configured, testS3 } from './lib/s3.js';
 import { requireAdmin, paging } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import {
@@ -153,6 +154,50 @@ export async function registerAdminMailRoutes(app) {
   });
 
   // Публичная отписка по ссылке из письма
+  app.get('/api/admin/settings/storage', { preHandler: requireAdmin }, async () => {
+    const c = s3Config();
+    return {
+      configured: s3Configured(),
+      endpoint: c.endpoint,
+      region: c.region,
+      bucket: c.bucket,
+      prefix: c.prefix,
+      forcePathStyle: c.forcePathStyle,
+      accessKeySet: Boolean(getSetting('s3_access_key', '')),
+      secretKeySet: Boolean(getSetting('s3_secret_key', ''))
+    };
+  });
+
+  app.put('/api/admin/settings/storage', { preHandler: requireAdmin }, async (req, reply) => {
+    const b = req.body || {};
+    if (b.endpoint !== undefined && String(b.endpoint) && !/^https?:\/\//i.test(String(b.endpoint))) {
+      return reply.code(400).send({ error: 'Endpoint должен начинаться с http:// или https://' });
+    }
+    if (b.bucket !== undefined && String(b.bucket) && !/^[A-Za-z0-9._-]{2,100}$/.test(String(b.bucket))) {
+      return reply.code(400).send({ error: 'Некорректное имя bucket' });
+    }
+    const pairs = [
+      ['s3_endpoint', b.endpoint], ['s3_region', b.region], ['s3_bucket', b.bucket],
+      ['s3_prefix', b.prefix], ['s3_access_key', b.accessKey], ['s3_secret_key', b.secretKey],
+      ['s3_force_path', b.forcePathStyle !== undefined ? (b.forcePathStyle ? '1' : '0') : undefined]
+    ];
+    for (const [key, value] of pairs) {
+      if (value === undefined) continue;
+      if ((key === 's3_access_key' || key === 's3_secret_key') && value === '') continue;
+      setSetting(key, String(value).slice(0, 500));
+    }
+    audit(req, 'settings.storage', 'settings', 's3', { bucket: b.bucket, endpoint: b.endpoint });
+    return { ok: true, configured: s3Configured() };
+  });
+
+  app.post('/api/admin/settings/storage/test', { preHandler: requireAdmin }, async (req, reply) => {
+    try {
+      return await testS3();
+    } catch (e) {
+      return reply.code(502).send({ error: String(e?.message || e) });
+    }
+  });
+
   app.get('/api/email/unsubscribe', async (req, reply) => {
     const userId = readUnsubscribeToken(req.query?.t);
     const page = (title, text) => `<!doctype html><html lang="ru"><head><meta charset="utf-8">

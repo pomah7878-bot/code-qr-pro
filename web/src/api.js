@@ -53,6 +53,7 @@ export const api = {
   checkOrder: (b) => req('POST', '/api/billing/check', b),
   orders: () => req('GET', '/api/billing/orders'),
   subscription: () => req('GET', '/api/billing/subscription'),
+  billingArchive: () => req('GET', '/api/billing/archive'),
 
   // Админка
   adminStats: () => req('GET', '/api/admin/stats'),
@@ -88,6 +89,9 @@ export const api = {
   adminDeletePromo: (id) => req('DELETE', '/api/admin/promo/' + id),
   adminPromoRedemptions: (id) => req('GET', `/api/admin/promo/${id}/redemptions`),
   adminSmtp: () => req('GET', '/api/admin/settings/smtp'),
+  adminStorage: () => req('GET', '/api/admin/settings/storage'),
+  adminSaveStorage: (b) => req('PUT', '/api/admin/settings/storage', b),
+  adminTestStorage: () => req('POST', '/api/admin/settings/storage/test'),
   adminSaveSmtp: (b) => req('PUT', '/api/admin/settings/smtp', b),
   adminTestSmtp: (to) => req('POST', '/api/admin/settings/smtp/test', { to }),
   adminEmailCampaigns: () => req('GET', '/api/admin/email/campaigns'),

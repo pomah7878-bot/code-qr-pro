@@ -265,7 +265,11 @@ const MIGRATIONS = [
      expires_at TEXT
    );
    CREATE INDEX idx_activity_user ON activity_log(user_id, created_at);
-   UPDATE generation_jobs SET expires_at = datetime('now', '+30 days') WHERE expires_at IS NULL;`
+   UPDATE generation_jobs SET expires_at = datetime('now', '+30 days') WHERE expires_at IS NULL;`,
+  // v16 — S3-хранилище архивов и платный архивный пакет
+  `ALTER TABLE generation_jobs ADD COLUMN artifact_backend TEXT NOT NULL DEFAULT 'local';
+   ALTER TABLE users ADD COLUMN archive_until TEXT;
+   ALTER TABLE users ADD COLUMN archive_mb INTEGER NOT NULL DEFAULT 0;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

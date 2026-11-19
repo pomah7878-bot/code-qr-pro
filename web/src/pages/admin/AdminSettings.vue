@@ -4,6 +4,7 @@ import { api } from '../../api.js';
 import TwoFactorCard from '../../components/admin/TwoFactorCard.vue';
 import PlanLimitsCard from '../../components/admin/PlanLimitsCard.vue';
 import SmtpCard from '../../components/admin/SmtpCard.vue';
+import StorageCard from '../../components/admin/StorageCard.vue';
 
 const cz = ref({ czEnabled: false, czApiUrl: '', czConfigured: false });
 const czToken = ref('');
@@ -123,6 +124,8 @@ onMounted(load);
     <TwoFactorCard />
 
     <SmtpCard />
+
+    <StorageCard />
 
     <div class="glass rounded-2xl p-6">
       <h2 class="font-display font-semibold mb-1">Честный ЗНАК (ГИС МТ)</h2>

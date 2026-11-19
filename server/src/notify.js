@@ -39,7 +39,7 @@ export function notifyPayment(order, user) {
     '📦 Тариф: <b>' + esc(String(order.plan).toUpperCase()) + '</b>\n' +
     '💵 Сумма: <b>' + order.amount + ' ₽</b>\n' +
     '🧾 Заказ №' + order.id + ' · ' + esc(order.provider) + '\n' +
-    '✅ PREMIUM активирован на 30 дней');
+    (order.plan === 'archive' ? '✅ Архив активирован на ' + (order.days || 1095) + ' дней' : '✅ PREMIUM активирован на 30 дней'));
 }
 
 export function notifyStatusChange(user, change) {

@@ -1,4 +1,4 @@
-import { statSync, readdirSync, statfsSync } from 'node:fs';
+﻿import { statSync, readdirSync, statfsSync } from 'node:fs';
 import { join } from 'node:path';
 import { db, today } from './db.js';
 import { JOBS_DIR, enqueue, removeJobFiles } from './jobs.js';
@@ -19,7 +19,7 @@ function dirSize(dir) {
       const p = join(dir, entry.name);
       total += entry.isDirectory() ? dirSize(p) : statSync(p).size;
     }
-  } catch { /* каталога может не быть */ }
+  } catch { /* РєР°С‚Р°Р»РѕРіР° РјРѕР¶РµС‚ РЅРµ Р±С‹С‚СЊ */ }
   return total;
 }
 function jobsDirSize() {
@@ -46,7 +46,7 @@ function disk() {
 const sum = (sql, ...params) => db.prepare(sql).get(...params)?.v || 0;
 
 export async function registerAdminAnalyticsRoutes(app) {
-  // Сводка с дельтой к прошлому периоду
+  // РЎРІРѕРґРєР° СЃ РґРµР»СЊС‚РѕР№ Рє РїСЂРѕС€Р»РѕРјСѓ РїРµСЂРёРѕРґСѓ
   app.get('/api/admin/overview', { preHandler: requireAdmin }, async (req) => {
     const days = Math.min(365, Math.max(7, int(req.query?.days, 30)));
     const rev = (from) => sum(
@@ -92,7 +92,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     };
   });
 
-  // Ряды для графика: выручка, регистрации, коды
+  // Р СЏРґС‹ РґР»СЏ РіСЂР°С„РёРєР°: РІС‹СЂСѓС‡РєР°, СЂРµРіРёСЃС‚СЂР°С†РёРё, РєРѕРґС‹
   app.get('/api/admin/series', { preHandler: requireAdmin }, async (req) => {
     const days = Math.min(365, Math.max(7, int(req.query?.days, 30)));
     const from = `-${days - 1} days`;
@@ -121,7 +121,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     return { days, points: out };
   });
 
-  // Здоровье сервиса
+  // Р—РґРѕСЂРѕРІСЊРµ СЃРµСЂРІРёСЃР°
   app.get('/api/admin/health', { preHandler: requireAdmin }, async () => {
     const d = disk();
     const jobStats = db.prepare("SELECT status, COUNT(*) c FROM generation_jobs GROUP BY status").all();
@@ -144,7 +144,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     };
   });
 
-  // Все задания сервиса
+  // Р’СЃРµ Р·Р°РґР°РЅРёСЏ СЃРµСЂРІРёСЃР°
   app.get('/api/admin/jobs', { preHandler: requireStaff }, async (req) => {
     const { page, per, offset } = paging(req.query);
     const where = [];
@@ -181,21 +181,21 @@ export async function registerAdminAnalyticsRoutes(app) {
     const job = db.prepare(`
       SELECT j.*, u.email FROM generation_jobs j JOIN users u ON u.id=j.user_id WHERE j.id=?
     `).get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
+    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
     const items = db.prepare(
       'SELECT row_index, raw, gtin, serial, status, error FROM job_items WHERE job_id=? ORDER BY row_index LIMIT 500'
     ).all(job.id);
     return { job, items };
   });
 
-  // Повторный запуск: файлы и прогресс сбрасываются
+  // РџРѕРІС‚РѕСЂРЅС‹Р№ Р·Р°РїСѓСЃРє: С„Р°Р№Р»С‹ Рё РїСЂРѕРіСЂРµСЃСЃ СЃР±СЂР°СЃС‹РІР°СЋС‚СЃСЏ
   app.post('/api/admin/jobs/:id/retry', { preHandler: requireAdmin }, async (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
+    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
     if (!['done', 'error'].includes(job.status)) {
-      return reply.code(400).send({ error: 'Перезапустить можно только завершённое или упавшее задание' });
+      return reply.code(400).send({ error: 'РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ Р·Р°РІРµСЂС€С‘РЅРЅРѕРµ РёР»Рё СѓРїР°РІС€РµРµ Р·Р°РґР°РЅРёРµ' });
     }
-    try { removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
+    try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»РѕРІ РјРѕРіР»Рѕ РЅРµ Р±С‹С‚СЊ */ }
     db.transaction(() => {
       db.prepare("UPDATE job_items SET status='ok', error=NULL WHERE job_id=? AND status='generated'").run(job.id);
       db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL, artifact_key=NULL, artifact_size=0, artifact_sha=NULL, archived_at=NULL, expires_at=NULL WHERE id=?").run(job.id);
@@ -207,10 +207,11 @@ export async function registerAdminAnalyticsRoutes(app) {
 
   app.delete('/api/admin/jobs/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
-    try { removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
+    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
+    try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»РѕРІ РјРѕРіР»Рѕ РЅРµ Р±С‹С‚СЊ */ }
     db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     audit(req, 'job.delete', 'job', job.id, { user_id: job.user_id, total: job.total });
     return { ok: true };
   });
 }
+

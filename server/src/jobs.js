@@ -1,19 +1,20 @@
-import bwipjs from 'bwip-js';
+﻿import bwipjs from 'bwip-js';
 import archiver from 'archiver';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync, rmSync, createWriteStream, createReadStream, existsSync, statSync, renameSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, createWriteStream, createReadStream, existsSync, statSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
-import { planDef } from './plans.js';
+import { planOf } from './plans.js';
 import { artifactKey, ensureArtifactDir, removeArtifact } from './lib/artifacts.js';
+import { s3Configured, uploadArtifact, deleteArtifact } from './lib/s3.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const JOBS_DIR = process.env.JOBS_DIR || join(__dirname, '..', 'data', 'jobs');
 
-// задания, прерванные перезапуском сервера, помечаем ошибкой
-db.prepare("UPDATE generation_jobs SET status='error', error='Прервано перезапуском сервера', finished_at=datetime('now') WHERE status IN ('queued','running')").run();
+// Р·Р°РґР°РЅРёСЏ, РїСЂРµСЂРІР°РЅРЅС‹Рµ РїРµСЂРµР·Р°РїСѓСЃРєРѕРј СЃРµСЂРІРµСЂР°, РїРѕРјРµС‡Р°РµРј РѕС€РёР±РєРѕР№
+db.prepare("UPDATE generation_jobs SET status='error', error='РџСЂРµСЂРІР°РЅРѕ РїРµСЂРµР·Р°РїСѓСЃРєРѕРј СЃРµСЂРІРµСЂР°', finished_at=datetime('now') WHERE status IN ('queued','running')").run();
 
 const queue = [];
 let running = false;
@@ -72,7 +73,7 @@ async function processJob(jobId) {
     }
   }
   const user = db.prepare('SELECT plan FROM users WHERE id=?').get(job.user_id);
-  const days = Math.max(1, Number(planDef(user?.plan).historyDays) || 7);
+  const days = Math.max(1, Number(planOf({ id: job.user_id, plan: user?.plan }).historyDays) || 7);
   db.prepare(
     "UPDATE generation_jobs SET done=?, status='done', finished_at=datetime('now'), expires_at=datetime('now','+' || ? || ' days') WHERE id=?"
   ).run(done, days, jobId);
@@ -93,12 +94,33 @@ async function sha256File(path) {
   });
 }
 
-// Упаковываем результат один раз в ZIP, после чего построчные PNG можно удалить.
+async function trimUserStorage(userId, keepJobId, plan, incomingSize) {
+  const quota = Math.max(0, Number(plan.archiveMb || 0) * 1024 * 1024);
+  let used = Number(db.prepare('SELECT COALESCE(SUM(artifact_size),0) s FROM generation_jobs WHERE user_id=? AND id<>?').get(userId, keepJobId).s || 0);
+  if (used + incomingSize <= quota) return true;
+  const rows = db.prepare(
+    `SELECT id, artifact_key, artifact_size, artifact_backend FROM generation_jobs
+     WHERE user_id=? AND id<>? AND artifact_key IS NOT NULL AND artifact_size > 0
+     ORDER BY created_at ASC`
+  ).all(userId, keepJobId);
+  for (const row of rows) {
+    if (used + incomingSize <= quota) break;
+    if (row.artifact_backend === 's3') await deleteArtifact(row.artifact_key);
+    else removeArtifact(row.artifact_key);
+    db.prepare("UPDATE generation_jobs SET artifact_key=NULL, artifact_size=0, artifact_backend='local' WHERE id=?").run(row.id);
+    used -= Number(row.artifact_size || 0);
+  }
+  return used + incomingSize <= quota;
+}
+
+// РЈРїР°РєРѕРІС‹РІР°РµРј СЂРµР·СѓР»СЊС‚Р°С‚ РѕРґРёРЅ СЂР°Р· РІ ZIP, РїРѕСЃР»Рµ С‡РµРіРѕ РїРѕСЃС‚СЂРѕС‡РЅС‹Рµ PNG РјРѕР¶РЅРѕ СѓРґР°Р»РёС‚СЊ.
 export async function archiveJob(jobId) {
   const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(jobId);
   if (!job || job.status !== 'done') return null;
   const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
   if (!items.length) return null;
+  const user = db.prepare('SELECT plan FROM users WHERE id=?').get(job.user_id);
+  const plan = planOf({ id: job.user_id, plan: user?.plan });
   const key = artifactKey(job.user_id, job.id);
   const path = ensureArtifactDir(key);
   const tmp = `${path}.tmp-${process.pid}`;
@@ -124,37 +146,58 @@ export async function archiveJob(jobId) {
   await finished;
   const size = statSync(tmp).size;
   const sha = await sha256File(tmp);
-  renameSync(tmp, path);
-  const user = db.prepare('SELECT plan FROM users WHERE id=?').get(job.user_id);
-  const days = Math.max(1, Number(planDef(user?.plan).historyDays) || 7);
+  if (size > Number(plan.archiveMb || 0) * 1024 * 1024) {
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+    throw new Error(`РђСЂС…РёРІ ${(size / 1024 / 1024).toFixed(1)} РњР‘ Р±РѕР»СЊС€Рµ Р»РёРјРёС‚Р° ${plan.archiveMb} РњР‘`);
+  }
+  const fits = await trimUserStorage(job.user_id, job.id, plan, size);
+  if (!fits) {
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+    throw new Error(`РќРµ С…РІР°С‚Р°РµС‚ РјРµСЃС‚Р° РІ Р°СЂС…РёРІРµ: РЅСѓР¶РЅРѕ ${(size / 1024 / 1024).toFixed(1)} РњР‘, Р»РёРјРёС‚ ${plan.archiveMb} РњР‘`);
+  }
+  let backend = 'local';
+  if (s3Configured()) {
+    try {
+      await uploadArtifact(key, tmp);
+      backend = 's3';
+      unlinkSync(tmp);
+    } catch (e) {
+      console.error('S3 upload failed, fallback to local:', e?.message || e);
+    }
+  }
+  if (backend === 'local') renameSync(tmp, path);
+  const days = Math.max(1, Number(plan.historyDays) || 7);
   db.prepare(
     `UPDATE generation_jobs
-     SET artifact_key=?, artifact_size=?, artifact_sha=?, archived_at=datetime('now'),
+     SET artifact_key=?, artifact_size=?, artifact_sha=?, artifact_backend=?, archived_at=datetime('now'),
          expires_at=COALESCE(expires_at, datetime('now','+' || ? || ' days'))
      WHERE id=?`
-  ).run(key, size, sha, days, job.id);
-  // построчные файлы больше не нужны: PNG/SVG при необходимости пересоберутся из БД
+  ).run(key, size, sha, backend, days, job.id);
+  // РїРѕСЃС‚СЂРѕС‡РЅС‹Рµ С„Р°Р№Р»С‹ Р±РѕР»СЊС€Рµ РЅРµ РЅСѓР¶РЅС‹: PNG/SVG РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РїРµСЂРµСЃРѕР±РµСЂСѓС‚СЃСЏ РёР· Р‘Р”
   try { rmSync(join(JOBS_DIR, String(job.id)), { recursive: true, force: true }); } catch { /* ignore */ }
-  return { key, size, sha };
+  return { key, size, sha, backend };
 }
 
 export async function renderSVG(item, mode) {
   return bwipjs.toSVG(bwipOpts(item, mode));
 }
 
-export function removeJobFiles(jobId) {
-  const job = db.prepare('SELECT artifact_key FROM generation_jobs WHERE id=?').get(jobId);
-  if (job?.artifact_key) removeArtifact(job.artifact_key);
+export async function removeJobFiles(jobId) {
+  const job = db.prepare('SELECT artifact_key, artifact_backend FROM generation_jobs WHERE id=?').get(jobId);
+  if (job?.artifact_key) {
+    if (job.artifact_backend === 's3') await deleteArtifact(job.artifact_key);
+    else removeArtifact(job.artifact_key);
+  }
   rmSync(join(JOBS_DIR, String(jobId)), { recursive: true, force: true });
 }
 
-export function cleanupExpiredJobs() {
+export async function cleanupExpiredJobs() {
   try {
     const expired = db.prepare(
       "SELECT id FROM generation_jobs WHERE expires_at IS NOT NULL AND expires_at <= datetime('now') AND status IN ('done','error')"
     ).all();
     for (const job of expired) {
-      try { removeJobFiles(job.id); } catch { /* ignore */ }
+      try { await removeJobFiles(job.id); } catch { /* ignore */ }
       db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     }
     db.prepare("DELETE FROM activity_log WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')").run();
@@ -162,3 +205,6 @@ export function cleanupExpiredJobs() {
     console.error('history cleanup failed:', e?.message || e);
   }
 }
+
+
+

@@ -103,6 +103,8 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
           </router-link>
         </div>
       </div>
+
+      <AdSlot placement="app_bottom" />
     </section>
   </div>
 </template>

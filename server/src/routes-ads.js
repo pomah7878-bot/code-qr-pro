@@ -7,7 +7,7 @@ import { audit } from './lib/audit.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ADS_DIR = process.env.ADS_DIR || join(__dirname, '..', 'data', 'ads');
-const PLACEMENTS = new Set(['landing_banner', 'app_banner']);
+const PLACEMENTS = new Set(['landing_banner', 'landing_middle', 'landing_bottom', 'app_banner', 'app_bottom']);
 const STATUSES = new Set(['draft', 'active', 'paused', 'ended']);
 
 function adRow(r) {

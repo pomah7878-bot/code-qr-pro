@@ -164,6 +164,10 @@ const openFaq = ref(null);
       </div>
     </section>
 
+    <div class="max-w-6xl mx-auto px-4 pb-6">
+      <AdSlot placement="landing_middle" />
+    </div>
+
     <!-- SEO / ПОЛЕЗНАЯ ИНФОРМАЦИЯ -->
     <section class="max-w-6xl mx-auto px-4 py-16">
       <div class="reveal max-w-3xl mb-8">
@@ -293,6 +297,10 @@ const openFaq = ref(null);
       </div>
       <div class="reveal text-center mt-8"><router-link to="/app/reviews" class="btn-ghost">Все отзывы и оставить свой →</router-link></div>
     </section>
+
+    <div class="max-w-6xl mx-auto px-4 pb-6">
+      <AdSlot placement="landing_bottom" />
+    </div>
 
     <!-- FAQ -->
     <section class="max-w-3xl mx-auto px-4 py-16">

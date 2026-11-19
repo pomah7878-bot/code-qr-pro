@@ -22,7 +22,10 @@ const form = reactive(empty());
 
 const placements = [
   { id: 'landing_banner', label: 'Главная — под первым экраном' },
-  { id: 'app_banner', label: 'Кабинет — под приветствием' }
+  { id: 'landing_middle', label: 'Главная — после блока возможностей' },
+  { id: 'landing_bottom', label: 'Главная — перед FAQ' },
+  { id: 'app_banner', label: 'Кабинет — под приветствием' },
+  { id: 'app_bottom', label: 'Кабинет — внизу страницы' }
 ];
 const statusLabels = { draft: 'Черновик', active: 'Активна', paused: 'Пауза', ended: 'Завершена' };
 const statusClass = { draft: 'text-slate-500', active: 'text-emerald-500', paused: 'text-amber-500', ended: 'text-slate-400' };

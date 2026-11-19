@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';
 import { registerJobRoutes } from './routes-jobs.js';
@@ -65,7 +65,15 @@ app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyC
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');
 if (existsSync(dist)) {
-  await app.register(fastifyStatic, { root: dist, prefix: '/' });
+  await app.register(fastifyStatic, {
+    root: dist,
+    prefix: '/',
+    setHeaders(res, path) {
+      if (path.includes(`${sep}assets${sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  });
   app.setNotFoundHandler((req, reply) => {
     const path = String(req.raw.url || '/').split('?')[0];
     if (path.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });

@@ -91,7 +91,8 @@ export async function registerRoutes(app) {
     if (!rateLimit(req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const { email, password, name } = req.body || {};
     if (!email || !EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
-    if (!password || password.length < 8) return reply.code(400).send({ error: 'Пароль минимум 8 символов' });
+    if (!password || typeof password !== 'string' || password.length < 8) return reply.code(400).send({ error: 'Пароль минимум 8 символов' });
+    if (password.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
     const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (exists) return reply.code(409).send({ error: 'Email уже зарегистрирован' });
     const info = db.prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
@@ -119,7 +120,8 @@ export async function registerRoutes(app) {
       return reply.code(429).send({ error: 'Слишком много неудачных попыток. Вход заблокирован на 15 минут.' });
     }
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
-    if (!user || !password || !verifyPassword(password, user.password_hash)) {
+    const passwordInput = typeof password === 'string' ? password : '';
+    if (!user || !passwordInput || passwordInput.length > 200 || !verifyPassword(passwordInput, user.password_hash)) {
       const justLocked = recordLoginFail(normalizedEmail);
       if (justLocked) notifyLoginBlocked(user, req.ip);
       return reply.code(401).send({ error: 'Неверный email или пароль' });
@@ -256,5 +258,12 @@ export async function registerRoutes(app) {
 
   app.get('/api/plans', async () => ({ plans: Object.values(publicPlans()) }));
 
-  app.get('/api/health', async () => ({ ok: true, service: 'code-qr-pro', stage: 5 }));
+  app.get('/api/health', async (req, reply) => {
+    try {
+      db.prepare('SELECT 1').get();
+    } catch {
+      return reply.code(503).send({ ok: false, service: 'code-qr-pro', db: 'error' });
+    }
+    return { ok: true, service: 'code-qr-pro', stage: 5, db: 'ok', uptime: Math.round(process.uptime()) };
+  });
 }

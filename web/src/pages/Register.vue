@@ -30,7 +30,7 @@ async function submit() {
       <form @submit.prevent="submit" class="space-y-4">
         <div><label class="label">Имя</label><input v-model="name" class="input" autocomplete="name" placeholder="Как к вам обращаться"></div>
         <div><label class="label">Email</label><input v-model="email" type="email" class="input" required autocomplete="email"></div>
-        <div><label class="label">Пароль</label><input v-model="password" type="password" class="input" required minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов"></div>
+        <div><label class="label">Пароль</label><input v-model="password" type="password" class="input" required minlength="8" maxlength="200" autocomplete="new-password" placeholder="Минимум 8 символов"></div>
         <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
         <button class="btn-primary w-full" :disabled="busy">{{ busy ? 'Создаём…' : 'Создать аккаунт' }}</button>
       </form>

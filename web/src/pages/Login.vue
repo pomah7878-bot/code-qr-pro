@@ -97,7 +97,7 @@ function back() {
         <h1 class="font-display font-bold text-2xl mb-6">Вход</h1>
         <form @submit.prevent="submit" class="space-y-4">
           <div><label class="label" for="login-email">Email</label><input id="login-email" v-model="email" type="email" class="input" required autocomplete="email"></div>
-          <div><label class="label" for="login-password">Пароль</label><input id="login-password" v-model="password" type="password" class="input" required autocomplete="current-password"></div>
+          <div><label class="label" for="login-password">Пароль</label><input id="login-password" v-model="password" type="password" class="input" required maxlength="200" autocomplete="current-password"></div>
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
           <button class="btn-primary w-full" :disabled="busy">{{ busy ? 'Входим…' : 'Войти' }}</button>

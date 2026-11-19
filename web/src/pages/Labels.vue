@@ -376,7 +376,9 @@ function draw() {
       const tx = el.align === 'center' ? x + w / 2 : el.align === 'right' ? x + w : x;
       ctx.save();
       ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-      ctx.fillText(text, tx, y);
+      const lines = String(text).split(/\r?\n/);
+      const lineHeight = px * 1.2;
+      lines.forEach((line, i) => ctx.fillText(line, tx, y + i * lineHeight));
       ctx.restore();
       ctx.textAlign = 'left';
     }
@@ -435,7 +437,7 @@ watch(row, () => { if (jobId.value != null) loadImage(); scheduleRender(); });
 function addElement(type, field) {
   const id = 'el' + (uid++) + '_' + Date.now();
   const base = { id, type, x: 2, y: 2, w: 20, h: 20, fontSize: 8, align: 'left' };
-  if (type === 'text') Object.assign(base, { text: 'Текст', w: 30, h: 6, x: 24 });
+  if (type === 'text') Object.assign(base, { text: 'Текст', w: 30, h: 10, x: 24 });
   if (type === 'field') Object.assign(base, { field: field || 'gtin', w: 32, h: 6, x: 24, y: field === 'serial' ? 10 : 2 });
   if (type === 'code128') Object.assign(base, { w: 40, h: 10, y: 26 });
   if (type === 'ean13') Object.assign(base, { field: field || 'barcode', w: 40, h: 14, x: 26, y: 24 });
@@ -822,7 +824,9 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               <div v-for="k in ['x', 'y', 'w', 'h']" :key="k"><label class="label !text-xs">{{ k.toUpperCase() }}</label><input v-model.number="selected[k]" type="number" step="0.5" min="0" class="input !py-1.5 text-sm"></div>
             </div>
             <template v-if="selected.type === 'text'">
-              <label class="label !text-xs">Текст</label><input v-model="selected.text" class="input !py-2 text-sm">
+              <label class="label !text-xs">Текст</label>
+              <textarea v-model="selected.text" rows="3" class="input !py-2 text-sm" placeholder="Можно писать с новой строки"></textarea>
+              <p class="text-[11px] text-slate-500 mt-1">Enter — новая строка. Высота блока задаётся полем H.</p>
             </template>
             <template v-if="selected.type === 'field'">
               <label class="label !text-xs">Поле данных</label>
@@ -837,6 +841,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
                 <option v-for="f in fieldOptions" :key="f" :value="f">{{ f }}</option>
               </select>
               <input v-if="!selected.field" v-model="selected.text" class="input !py-2 text-sm" placeholder="Текст или число">
+              <p v-if="!selected.field" class="text-[11px] text-slate-500 mt-1">Для поля можно оставить фиксированный текст.</p>
             </template>
             <template v-if="selected.type === 'text' || selected.type === 'field'">
               <div class="grid grid-cols-2 gap-2">

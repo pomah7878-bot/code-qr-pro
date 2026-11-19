@@ -6,6 +6,7 @@ const items = [
   { icon: '🕘', t: 'История', to: '/app/history' },
   { icon: '▦', t: 'Генерация', to: '/app/generate' },
   { icon: '🏷️', t: 'Этикетки', to: '/app/labels' },
+  { icon: '🎁', t: 'Наборы', to: '/app/sets' },
   { icon: '🖨️', t: 'Повторная печать', to: '/app/reprint' },
   { icon: '💳', t: 'Подписка', to: '/app/billing' },
   { icon: '🔌', t: 'API', to: '/app/apikeys' },

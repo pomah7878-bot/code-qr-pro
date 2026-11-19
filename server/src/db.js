@@ -269,7 +269,19 @@ const MIGRATIONS = [
   // v16 — S3-хранилище архивов и платный архивный пакет
   `ALTER TABLE generation_jobs ADD COLUMN artifact_backend TEXT NOT NULL DEFAULT 'local';
    ALTER TABLE users ADD COLUMN archive_until TEXT;
-   ALTER TABLE users ADD COLUMN archive_mb INTEGER NOT NULL DEFAULT 0;`
+   ALTER TABLE users ADD COLUMN archive_mb INTEGER NOT NULL DEFAULT 0;`,
+  // v17 — шаблоны наборов (КИН + состав)
+  `CREATE TABLE set_templates (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     name TEXT NOT NULL DEFAULT '',
+     set_gtin TEXT NOT NULL DEFAULT '',
+     format TEXT NOT NULL DEFAULT '58x80',
+     components TEXT NOT NULL DEFAULT '[]',
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_set_templates_user ON set_templates(user_id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

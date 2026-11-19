@@ -328,6 +328,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           </div>
           <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>
+          <p class="text-xs text-slate-500">При печати выбери бумагу {{ form.format.replace('x', '×') }} мм; Adobe PDF/A4 добавит белые поля.</p>
           <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

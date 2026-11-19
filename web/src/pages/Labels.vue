@@ -260,9 +260,6 @@ function buildAutoTemplate() {
     used.add('name');
     y += 4.4;
   }
-  if (!used.has('row') && y + 3 <= H - m) {
-    e.push({ id: id(), type: 'field', field: 'row', x: m, y, w: Math.min(25, W - 2 * m), h: 3, fontSize: 6.5, align: 'left' });
-  }
   if (!e.length) e.push({ id: id(), type: 'text', x: m, y: m, w: W - 2 * m, h: 5, fontSize: 8, align: 'left', text: 'Текст' });
   tpl.elements = e;
   autoSignature.value = JSON.stringify({ w: W, h: H, e });
@@ -906,6 +903,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle">⬇ PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels">🖨 Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
+            <p class="text-xs text-slate-500">При печати из браузера выбери бумагу {{ tpl.widthMm }}×{{ tpl.heightMm }} мм; Adobe PDF/A4 добавит белые поля.</p>
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">

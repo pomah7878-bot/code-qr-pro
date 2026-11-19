@@ -764,6 +764,7 @@ async function printLabels() {
             <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels">🖨 Печать</button>
           </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
+          <p class="text-xs text-slate-500">При печати выберите принтер этикеток и бумагу {{ currentFormat.w }}×{{ currentFormat.h }} мм. Adobe PDF/A4 добавит белые поля.</p>
           <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>
           <ValidHint v-if="result" class="mt-1" />

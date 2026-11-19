@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { planFeatureRows } from '../lib/planFeatures.js';
 import AdSlot from '../components/AdSlot.vue';
+import BrandIcon from '../components/BrandIcon.vue';
 
 const plans = ref([]);
 const reviews = ref([]);
@@ -65,15 +66,15 @@ onMounted(async () => {
 onUnmounted(() => { if (io) io.disconnect(); });
 
 const features = [
-  { icon: '▦', title: 'GS1 DataMatrix', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.' },
-  { icon: '📥', title: 'Импорт CSV, XLSX, PDF', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически, из PDF извлекаются только коды.' },
-  { icon: '🛡️', title: 'Проверка перед печатью', text: 'GTIN, контрольные цифры, серийник, дубли, криптохвост и соответствие товару — до выхода на печать.' },
-  { icon: '🏷️', title: 'Этикетки и все штрихкоды', text: 'DataMatrix, EAN-13, EAN-8, UPC-A, Code128, Code39, ITF-14, GS1-128, QR и PDF417 в одном редакторе.' },
-  { icon: '🎁', title: 'Наборы: КИН + вложения', text: 'Загрузите коды набора и состава — сервис сам распределит КИЗ по вложениям и соберёт PDF: набор плюс все позиции.' },
-  { icon: '🖨️', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
-  { icon: '🕘', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
-  { icon: '🔌', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
-  { icon: '🔐', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
+  { icon: 'matrix', title: 'GS1 DataMatrix', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.' },
+  { icon: 'import', title: 'Импорт CSV, XLSX, PDF', text: 'Загрузите файл с GTIN, серийниками и криптохвостами — колонки распознаются автоматически, из PDF извлекаются только коды.' },
+  { icon: 'check', title: 'Проверка перед печатью', text: 'GTIN, контрольные цифры, серийник, дубли, криптохвост и соответствие товару — до выхода на печать.' },
+  { icon: 'label', title: 'Этикетки и все штрихкоды', text: 'DataMatrix, EAN-13, EAN-8, UPC-A, Code128, Code39, ITF-14, GS1-128, QR и PDF417 в одном редакторе.' },
+  { icon: 'set', title: 'Наборы: КИН + вложения', text: 'Загрузите коды набора и состава — сервис сам распределит КИЗ по вложениям и соберёт PDF: набор плюс все позиции.' },
+  { icon: 'print', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
+  { icon: 'archive', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
+  { icon: 'api', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
+  { icon: 'lock', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
 ];
 const steps = [
   { n: '01', t: 'Загрузите данные', d: 'CSV, XLSX, PDF, вставка кодов или готовый набор с составом.' },
@@ -142,10 +143,10 @@ const openFaq = ref(null);
     <!-- ДОВЕРИЕ / ВЫГОДЫ -->
     <section class="max-w-6xl mx-auto px-4 py-12">
       <div class="reveal grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">⚡</div><div class="font-display font-bold text-lg mb-1">В 10 раз быстрее</div><p class="text-sm text-slate-500">Пакетная генерация тысяч кодов вместо ручной работы</p></div>
-        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🎯</div><div class="font-display font-bold text-lg mb-1">Без ошибок</div><p class="text-sm text-slate-500">Валидация GS1 до генерации — коды проходят проверку</p></div>
-        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🎁</div><div class="font-display font-bold text-lg mb-1">Наборы под ключ</div><p class="text-sm text-slate-500">КИН набора и этикетки для каждого вложения</p></div>
-        <div class="glass rounded-2xl p-6 text-center"><div class="text-3xl mb-2">🖨️</div><div class="font-display font-bold text-lg mb-1">Сразу на печать</div><p class="text-sm text-slate-500">PDF, браузер или термопринтер в один клик</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="speed" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">В 10 раз быстрее</div><p class="text-sm text-slate-500">Пакетная генерация тысяч кодов вместо ручной работы</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="check" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">Без ошибок</div><p class="text-sm text-slate-500">Валидация GS1 до генерации — коды проходят проверку</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="set" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">Наборы под ключ</div><p class="text-sm text-slate-500">КИН набора и этикетки для каждого вложения</p></div>
+        <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="print" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">Сразу на печать</div><p class="text-sm text-slate-500">PDF, браузер или термопринтер в один клик</p></div>
       </div>
     </section>
 
@@ -157,7 +158,7 @@ const openFaq = ref(null);
       </div>
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div v-for="(f, i) in features" :key="f.title" class="reveal glass rounded-2xl p-6 hover:-translate-y-1 transition-transform" :class="'reveal-d' + ((i % 3) + 1)">
-          <div class="text-3xl mb-3">{{ f.icon }}</div>
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon :name="f.icon" :size="26" /></span></div>
           <h3 class="font-display font-semibold text-lg mb-2">{{ f.title }}</h3>
           <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{{ f.text }}</p>
         </div>

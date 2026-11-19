@@ -17,13 +17,13 @@ function ensureMeta(attr, key) {
 export function applySeo(path = '/') {
   const clean = path.split('?')[0] || '/';
   const isHome = clean === '/';
-  const noindex = clean.startsWith('/app') || clean === '/login' || clean === '/register';
+  const noindex = !isHome;
   const titles = {
     '/login': 'Вход в личный кабинет — CODE QR PRO',
     '/register': 'Регистрация — CODE QR PRO'
   };
-  const title = isHome ? HOME.title : (titles[clean] || 'CODE QR PRO — личный кабинет');
-  const description = isHome ? HOME.description : 'Личный кабинет CODE QR PRO: генерация и печать этикеток «Честного ЗНАКа».';
+  const title = isHome ? HOME.title : (titles[clean] || (clean.startsWith('/app') ? 'CODE QR PRO — личный кабинет' : 'Страница не найдена — CODE QR PRO'));
+  const description = isHome ? HOME.description : (clean.startsWith('/app') ? 'Личный кабинет CODE QR PRO: генерация и печать этикеток «Честного ЗНАКа».' : 'Запрошенная страница не найдена.');
   document.title = title;
   ensureMeta('name', 'description').setAttribute('content', description);
   ensureMeta('name', 'robots').setAttribute('content', noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large');

@@ -26,6 +26,7 @@ import AdminMarketing from './pages/admin/AdminMarketing.vue';
 import AdminSettings from './pages/admin/AdminSettings.vue';
 import AdminStorage from './pages/admin/AdminStorage.vue';
 import AdminAds from './pages/admin/AdminAds.vue';
+import NotFound from './pages/NotFound.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -61,7 +62,7 @@ const router = createRouter({
         { path: 'settings', component: AdminSettings, meta: { adminOnly: true } }
       ]
     },
-    { path: '/:pathMatch(.*)*', redirect: '/' }
+    { path: '/:pathMatch(.*)*', component: NotFound }
   ],
   scrollBehavior: () => ({ top: 0 })
 });

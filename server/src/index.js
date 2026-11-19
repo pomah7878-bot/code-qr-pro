@@ -67,7 +67,16 @@ const dist = join(__dirname, '..', '..', 'web', 'dist');
 if (existsSync(dist)) {
   await app.register(fastifyStatic, { root: dist, prefix: '/' });
   app.setNotFoundHandler((req, reply) => {
-    if (req.raw.url.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });
+    const path = String(req.raw.url || '/').split('?')[0];
+    if (path.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });
+    if (path.startsWith('/assets/')) return reply.code(404).send({ error: 'Not found' });
+    const isPrivate = path === '/login' || path === '/register' || path === '/app' || path.startsWith('/app/');
+    if (isPrivate) {
+      reply.header('X-Robots-Tag', 'noindex, nofollow');
+      return reply.sendFile('index.html');
+    }
+    if (path === '/') return reply.sendFile('index.html');
+    reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');
     return reply.sendFile('index.html');
   });
 }

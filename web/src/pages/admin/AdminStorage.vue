@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../../api.js';
+import { formatArchiveSize } from '../../lib/planFeatures.js';
 
 const data = ref(null);
 const loading = ref(true);
@@ -42,8 +43,8 @@ async function load() {
 }
 
 function exportCsv() {
-  const rows = [['Клиент', 'Email', 'Тариф', 'Заданий', 'Архивов', 'По БД, байт', 'На диске, байт', 'Квота, МБ', 'Последний архив']];
-  for (const u of users.value) rows.push([u.name || '', u.email, u.plan, u.jobs, u.archives, u.dbBytes, u.diskBytes, u.quotaMb, u.lastArchived || '']);
+  const rows = [['Клиент', 'Email', 'Тариф', 'Заданий', 'Архивов', 'По БД, байт', 'На диске, байт', 'Квота', 'Последний архив']];
+  for (const u of users.value) rows.push([u.name || '', u.email, u.plan, u.jobs, u.archives, u.dbBytes, u.diskBytes, formatArchiveSize(u.quotaMb), u.lastArchived || '']);
   const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n');
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -131,7 +132,7 @@ onMounted(load);
               <td class="p-3 font-mono text-xs">{{ fmtBytes(u.dbBytes) }}</td>
               <td class="p-3 min-w-[140px]">
                 <div class="h-1.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden"><div class="h-full rounded-full bg-brand-500" :style="{ width: u.quotaPct + '%' }"></div></div>
-                <div class="text-[11px] text-slate-500 mt-1">{{ u.quotaPct }}% из {{ u.quotaMb }} МБ</div>
+                <div class="text-[11px] text-slate-500 mt-1">{{ u.quotaPct }}% из {{ formatArchiveSize(u.quotaMb) }}</div>
               </td>
               <td class="p-3 text-xs text-slate-500">{{ fmtDate(u.lastArchived) }}</td>
             </tr>

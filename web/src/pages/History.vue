@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api.js';
+import { formatArchiveSize } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
 
 const data = ref(null);
@@ -81,7 +82,7 @@ onMounted(load);
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ stats.jobs }}</div><div class="text-xs text-slate-500 mt-1">пакетов</div></div>
         <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ Number(stats.codes || 0).toLocaleString('ru') }}</div><div class="text-xs text-slate-500 mt-1">кодов</div></div>
-        <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ fmtBytes(stats.storage) }}</div><div class="text-xs text-slate-500 mt-1">из {{ plan.archiveMb }} МБ архива</div></div>
+        <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ fmtBytes(stats.storage) }}</div><div class="text-xs text-slate-500 mt-1">из {{ formatArchiveSize(plan.archiveMb) }} архива</div></div>
         <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ plan.historyDays }} дн.</div><div class="text-xs text-slate-500 mt-1">срок хранения</div></div>
       </div>
 

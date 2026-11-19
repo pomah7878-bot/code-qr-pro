@@ -63,6 +63,10 @@ onMounted(load);
             <label class="label !text-xs" :for="`plan-${id}-history`">История заданий, дней</label>
             <input :id="`plan-${id}-history`" v-model.number="plans[id].historyDays" type="number" min="1" max="3650" class="input !py-2 text-sm">
           </div>
+          <div class="col-span-2">
+            <label class="label !text-xs" :for="`plan-${id}-archive`">Архив результатов, МБ</label>
+            <input :id="`plan-${id}-archive`" v-model.number="plans[id].archiveMb" type="number" min="10" max="102400" class="input !py-2 text-sm">
+          </div>
         </div>
         <div class="mt-3">
           <div class="text-xs text-slate-500 mb-1.5">Форматы экспорта</div>

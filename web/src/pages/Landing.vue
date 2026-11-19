@@ -110,10 +110,10 @@ const openFaq = ref(null);
         </div>
         <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день. Без карты. Регистрация за 30 секунд.</p>
         <!-- счётчики -->
-        <div class="reveal reveal-d5 grid grid-cols-3 gap-3 sm:gap-6 mt-10 max-w-md">
-          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">кодов/день на PREMIUM</div></div>
-          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">{{ counters.uptime }}%</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">аптайм сервиса</div></div>
-          <div><div class="font-display font-extrabold text-2xl sm:text-3xl grad-text">30с</div><div class="text-[11px] sm:text-xs text-slate-500 mt-1">до первого кода</div></div>
+        <div class="reveal reveal-d5 grid grid-cols-3 gap-2 sm:gap-4 mt-10 max-w-xl">
+          <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">кодов/день на PREMIUM</div></div>
+          <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.uptime }}%</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">аптайм сервиса</div></div>
+          <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">30с</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">до первого кода</div></div>
         </div>
       </div>
       <!-- QR-визуал со сканером -->

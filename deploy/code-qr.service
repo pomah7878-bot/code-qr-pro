@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=codeqr
+Group=codeqr
 WorkingDirectory=/opt/code-qr/server
 Environment=NODE_ENV=production
 EnvironmentFile=-/opt/code-qr/server/.env
@@ -12,6 +14,11 @@ Environment=PORT=3100
 ExecStart=/usr/bin/node /opt/code-qr/server/src/index.js
 Restart=always
 RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/code-qr/server/data
 StandardOutput=journal
 StandardError=journal
 

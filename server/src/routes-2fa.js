@@ -7,7 +7,14 @@ import {
 } from './lib/totp.js';
 import { readTicket, countAttempt, clearTicket } from './lib/twofa-ticket.js';
 import { audit } from './lib/audit.js';
-import { encryptSecret, decryptSecret } from './lib/secrets.js';
+import { encryptSecret, decryptSecret, isEncrypted } from './lib/secrets.js';
+
+// Шифруем TOTP-секреты, созданные старой версией в открытом виде.
+for (const u of db.prepare("SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret <> ''").all()) {
+  if (!isEncrypted(u.totp_secret)) {
+    db.prepare('UPDATE users SET totp_secret=? WHERE id=?').run(encryptSecret(u.totp_secret), u.id);
+  }
+}
 
 const COOKIE = 'cq_session';
 const cookieOpts = (expires) => ({

@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import { planFeatureRows } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const route = useRoute();
 const sub = ref(null);
@@ -100,6 +101,17 @@ onMounted(async () => {
     <SideNav active="/app/billing" />
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">Подписка</h1>
+
+      <PageGuide
+        id="billing"
+        title="Оплата за 3 шага"
+        :steps="[
+          'Выберите период подписки. Чем дольше период — тем ниже цена за месяц.',
+          'Нажмите «Оформить PREMIUM» и оплатите картой или через СБП на стороне ЮKassa.',
+          'После оплаты вернитесь на страницу — тариф активируется автоматически. Чек придёт на email.'
+        ]"
+        note="Промокод вводится до оплаты. Автопродления нет — подписку можно продлить вручную."
+      />
 
       <div class="glass rounded-2xl p-6">
         <div class="flex flex-wrap items-center justify-between gap-4">

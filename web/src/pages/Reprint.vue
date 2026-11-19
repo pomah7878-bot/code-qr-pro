@@ -5,6 +5,7 @@ import { store } from '../store.js';
 import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const MAX = 1000;
 const categories = [
@@ -655,6 +656,17 @@ async function downloadPdf() {
         </div>
         <span class="text-xs text-slate-500">Встроенная повторная печать, без внешних сервисов</span>
       </div>
+
+      <PageGuide
+        id="reprint"
+        title="Повторная печать за 3 шага"
+        :steps="[
+          'Вставьте коды в поле «Коды маркировки» — по одному на строку. Можно отсканировать камерой или COM-сканером.',
+          'Выберите формат этикетки. Галочка «Только DataMatrix» подходит для большинства случаев; данные товара заполнять необязательно.',
+          'Нажмите «Скачать PDF». Проверка кодов запустится автоматически — отдельно нажимать «Проверить» не нужно.'
+        ]"
+        note="До 1000 кодов за раз. Если PDF не скачался, под кнопкой появится ссылка «Открыть PDF в новой вкладке»."
+      />
 
       <div class="grid md:grid-cols-2 gap-4">
         <div class="glass rounded-2xl p-5 space-y-3">

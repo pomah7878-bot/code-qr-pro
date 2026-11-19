@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '../api.js';
 import { formatArchiveSize } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const data = ref(null);
 const loading = ref(true);
@@ -78,6 +79,17 @@ onMounted(load);
 
       <div v-if="error" class="text-sm text-red-500">{{ error }}</div>
       <div v-if="notice" class="text-sm text-emerald-500">{{ notice }}</div>
+
+      <PageGuide
+        id="history"
+        title="Как пользоваться историей"
+        :steps="[
+          'Во вкладке «Пакеты» хранятся результаты генерации: название, дата, количество кодов и размер архива.',
+          'Кнопка «Скачать ZIP» отдаёт готовый архив, «PDF» — лист с этикетками. Скачайте нужное до истечения срока хранения.',
+          'Проверки ЧЗ и печать PDF собраны во вкладке «Другие операции».'
+        ]"
+        note="Срок хранения и размер архива зависят от тарифа. Старые архивы удаляются автоматически."
+      />
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="glass rounded-2xl p-4"><div class="text-2xl font-extrabold">{{ stats.jobs }}</div><div class="text-xs text-slate-500 mt-1">пакетов</div></div>

@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import SideNav from '../components/SideNav.vue';
 import TwoFactorCard from '../components/admin/TwoFactorCard.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const router = useRouter();
 const sessions = ref([]);
@@ -45,6 +46,16 @@ onMounted(loadSessions);
         <h1 class="font-display font-bold text-3xl">Безопасность</h1>
         <p class="text-sm text-slate-500 mt-1">Двухфакторная аутентификация и активные сессии.</p>
       </div>
+
+      <PageGuide
+        id="security"
+        title="Защитите аккаунт за 2 минуты"
+        :steps="[
+          'Включите двухфакторную аутентификацию — подойдёт Google Authenticator, Яндекс Ключ или другое приложение с TOTP.',
+          'Сохраните резервные коды в надёжном месте: они нужны, если телефон потеряется.',
+          'Проверьте активные сессии. Если видите чужое устройство — нажмите «Выйти на всех устройствах» и смените пароль.'
+        ]"
+      />
 
       <div v-if="error" class="text-sm text-red-500">{{ error }}</div>
       <div v-if="notice" class="text-sm text-emerald-500">{{ notice }}</div>

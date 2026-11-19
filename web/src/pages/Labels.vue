@@ -5,6 +5,7 @@ import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
 import { codeLinesFromText, kizRows, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -686,6 +687,17 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
     <SideNav active="/app/labels" />
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">Редактор этикеток</h1>
+
+      <PageGuide
+        id="labels"
+        title="Этикетки за 3 шага"
+        :steps="[
+          'Загрузите файл с КИЗ в блок 1 — PDF, CSV или TXT. Коды нужны для DataMatrix и полей этикетки.',
+          'При необходимости добавьте BarTender и отдельный файл штрихкодов — шаблон соберётся автоматически.',
+          'Перетащите элементы на макете, проверьте предпросмотр и скачайте PDF по размеру этикетки.'
+        ]"
+        note="Если что-то не совпало, в блоке «Данные для предпросмотра» можно выбрать строку и посмотреть все поля."
+      />
       <div v-if="!premium" class="glass rounded-2xl p-4 text-sm border-brand-500/40">
         ✏️ Проектируйте шаблоны бесплатно. Рендер, PDF-листы и печать через Bridge — на тарифе <b class="grad-text">PREMIUM</b> (подключение на этапе 4).
       </div>

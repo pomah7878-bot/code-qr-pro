@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { store } from '../store.js';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
+import PageGuide from '../components/PageGuide.vue';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
@@ -35,6 +36,17 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
         <h1 class="font-display font-bold text-3xl mb-1">Обзор</h1>
         <p class="text-slate-500 text-sm">Аккаунт создан {{ fmtDate(store.user?.createdAt) }}</p>
       </div>
+
+      <PageGuide
+        id="dashboard"
+        title="С чего начать"
+        :steps="[
+          'Откройте «Генерацию» и загрузите CSV, XLSX или PDF с кодами — либо вставьте коды текстом.',
+          'Проверьте пакет: сервис покажет, сколько кодов валидны, а где ошибка.',
+          'Скачайте PDF или ZIP. Для готовых этикеток используйте разделы «Этикетки» и «Повторная печать».'
+        ]"
+        note="Подсказки можно отключить кнопкой «Помощь» внизу справа и включить обратно там же."
+      />
 
       <div class="grid md:grid-cols-2 gap-6">
         <div class="glass rounded-2xl p-6">

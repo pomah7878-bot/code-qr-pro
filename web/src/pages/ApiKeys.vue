@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import SideNav from '../components/SideNav.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const keys = ref([]);
 const name = ref('');
@@ -26,6 +27,17 @@ onMounted(load);
     <SideNav active="/app/apikeys" />
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">API для 1С и складов</h1>
+
+      <PageGuide
+        id="api"
+        title="Как подключить API"
+        :steps="[
+          'Создайте ключ ниже. Он показывается один раз — сразу скопируйте и сохраните его.',
+          'В каждом запросе передавайте ключ в заголовке X-API-Key.',
+          'Генерация: POST /api/v1/generate с массивом rows. Проверка статуса: GET /api/v1/jobs/{id}.'
+        ]"
+        note="API работает на PREMIUM. Ключ даёт доступ к вашему аккаунту — не публикуйте его."
+      />
       <div v-if="!premium" class="glass rounded-2xl p-6 text-sm">API доступен на тарифе <b class="grad-text">PREMIUM</b>. <router-link to="/app/billing" class="text-brand-400 font-medium">Оформить →</router-link></div>
       <template v-else>
         <div class="glass rounded-2xl p-6">

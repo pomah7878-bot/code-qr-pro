@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const CHUNK = 1000;
 const MAX = 30000;
@@ -61,6 +62,16 @@ async function verify() {
     <SideNav active="/app/cz" />
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">Проверка кодов «Честный ЗНАК»</h1>
+
+      <PageGuide
+        id="cz"
+        title="Проверка кодов за 2 шага"
+        :steps="[
+          'Вставьте коды в поле ниже — по одному на строку. Можно вставить весь список из отчёта.',
+          'Нажмите «Проверить». Сервис покажет, какие коды валидны, а где ошибка в структуре GS1.'
+        ]"
+        note="«Валидный» означает правильный формат, но не подтверждает подлинность кода в ГИС МТ."
+      />
       <div class="glass rounded-2xl p-6">
         <label class="label" for="cz-codes">Коды маркировки (по одному на строку, до 30 000 — как в отчёте о нанесении)</label>
         <textarea id="cz-codes" v-model="text" rows="8" class="input font-mono text-sm" placeholder="(01)04600000000015(21)5PojkV(91)EE10(92)dGVzdA=="></textarea>

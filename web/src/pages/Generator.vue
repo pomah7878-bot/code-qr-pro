@@ -7,6 +7,7 @@ import { importPdf } from '../lib/pdfImport.js';
 import { buildCznCsv, downloadCznCsv } from '../lib/cznCsv.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
+import PageGuide from '../components/PageGuide.vue';
 
 const mode = ref('cz');
 const modes = [
@@ -205,6 +206,18 @@ const itemStatus = { ok: 'ожидает', generated: '✓ готов', invalid:
       </div>
 
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
+
+      <PageGuide
+        v-if="step === 'input'"
+        id="generator"
+        title="Генерация за 3 шага"
+        :steps="[
+          'Выберите режим: «Честный ЗНАК» для КИЗ, «GS1» для обычных GS1-кодов, «Текст» для произвольного текста.',
+          'Загрузите файл или вставьте коды — по одному на строку. Подойдут CSV, XLSX, TXT и PDF.',
+          'Проверьте пакет и скачайте PDF, ZIP или отдельные PNG/SVG.'
+        ]"
+        note="Если в файле есть ошибки — сервис покажет их до генерации, и вы сможете исправить."
+      />
 
       <!-- шаг 1: ввод -->
       <div v-if="step === 'input'" class="space-y-6">

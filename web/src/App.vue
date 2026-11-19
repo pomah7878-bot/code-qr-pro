@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 import { api } from './api.js';
+import HelpCenter from './components/HelpCenter.vue';
 
 const router = useRouter();
 const menuOpen = ref(false);
@@ -128,6 +129,7 @@ async function changePassword() {
         </div>
       </div>
     </Teleport>
+    <HelpCenter />
   </div>
 </template>
 

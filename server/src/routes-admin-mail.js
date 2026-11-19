@@ -1,4 +1,5 @@
 import { db } from './db.js';
+import { setSetting } from './settings.js';
 import { requireAdmin, paging } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import {
@@ -67,10 +68,9 @@ export async function registerAdminMailRoutes(app) {
       ['smtp_user', b.user], ['smtp_pass', b.pass],
       ['smtp_from_name', b.fromName], ['smtp_from_email', b.fromEmail]
     ];
-    const set = db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
     for (const [key, value] of pairs) {
       if (value === undefined || (key === 'smtp_pass' && value === '')) continue;
-      set.run(key, String(value).slice(0, 200));
+      setSetting(key, String(value).slice(0, 200));
     }
     audit(req, 'settings.smtp', 'settings', 'smtp', {
       host: b.host, port: b.port, fromEmail: b.fromEmail, passwordChanged: Boolean(b.pass)

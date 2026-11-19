@@ -26,7 +26,20 @@ const placements = [
 ];
 const statusLabels = { draft: 'Черновик', active: 'Активна', paused: 'Пауза', ended: 'Завершена' };
 const statusClass = { draft: 'text-slate-500', active: 'text-emerald-500', paused: 'text-amber-500', ended: 'text-slate-400' };
-const fmtDate = (s) => s ? new Date(String(s).replace(' ', 'T') + (String(s).includes('T') ? '' : 'Z')).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const sqlToIso = (s) => s ? new Date(String(s).replace(' ', 'T') + 'Z').toISOString() : '';
+const localInput = (s) => {
+  if (!s) return '';
+  const d = new Date(String(s).replace(' ', 'T') + 'Z');
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const localToIso = (s) => s ? new Date(s).toISOString() : '';
+const fmtDate = (s) => {
+  if (!s) return '—';
+  const d = new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 const money = (n) => Number(n || 0).toLocaleString('ru');
 const ctr = (a) => a.impressions ? `${(a.clicks / a.impressions * 100).toFixed(1)}%` : '—';
 const preview = computed(() => imageData.value || (!removeImage.value && editing.value?.imageUrl) || '');
@@ -52,8 +65,8 @@ function openEdit(ad) {
   Object.assign(form, {
     advertiser: ad.advertiser, title: ad.title, text: ad.text, targetUrl: ad.targetUrl,
     placement: ad.placement, status: ad.status, price: ad.price, paid: ad.paid,
-    startsAt: ad.startsAt ? ad.startsAt.replace(' ', 'T').slice(0, 16) : '',
-    endsAt: ad.endsAt ? ad.endsAt.replace(' ', 'T').slice(0, 16) : '',
+    startsAt: localInput(ad.startsAt),
+    endsAt: localInput(ad.endsAt),
     impressionLimit: ad.impressionLimit, clickLimit: ad.clickLimit
   });
   imageData.value = ''; removeImage.value = false; open.value = true; error.value = '';
@@ -74,7 +87,13 @@ async function save() {
   error.value = ''; notice.value = '';
   busy.value = true;
   try {
-    const body = { ...form, image: imageData.value || undefined, removeImage: removeImage.value };
+    const body = {
+      ...form,
+      startsAt: localToIso(form.startsAt),
+      endsAt: localToIso(form.endsAt),
+      image: imageData.value || undefined,
+      removeImage: removeImage.value
+    };
     if (editing.value) await api.adminUpdateAd(editing.value.id, body);
     else await api.adminCreateAd(body);
     open.value = false;
@@ -90,7 +109,7 @@ async function toggle(ad) {
     await api.adminUpdateAd(ad.id, {
       advertiser: ad.advertiser, title: ad.title, text: ad.text, targetUrl: ad.targetUrl,
       placement: ad.placement, status: ad.status === 'active' ? 'paused' : 'active',
-      price: ad.price, paid: ad.paid, startsAt: ad.startsAt, endsAt: ad.endsAt,
+      price: ad.price, paid: ad.paid, startsAt: sqlToIso(ad.startsAt), endsAt: sqlToIso(ad.endsAt),
       impressionLimit: ad.impressionLimit, clickLimit: ad.clickLimit
     });
     await load();

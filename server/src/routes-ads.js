@@ -43,8 +43,14 @@ function validUrl(value) {
 
 function dateValue(value) {
   if (!value) return null;
-  const s = String(value).trim().replace('T', ' ');
-  return /^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?$/.test(s) ? s.slice(0, 19) : null;
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}T.+?(Z|[+-]\d{2}:\d{2})$/.test(raw)) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19).replace('T', ' ');
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw} 00:00:00`;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(raw)) return raw.replace('T', ' ').slice(0, 19);
+  return null;
 }
 
 function saveImage(id, dataUrl) {

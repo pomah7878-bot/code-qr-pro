@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { parseKiz, readDataFile } from '../lib/labelData.js';
@@ -46,6 +46,7 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const result = ref(null);
+const pdfUrl = ref('');
 const shortWarning = ref('');
 const qrOnly = ref(true);
 const qrMargin = ref(0.5);
@@ -385,6 +386,7 @@ watch(category, (id) => {
 
 const currentFormat = computed(() => formats.find((f) => f.id === format.value) || formats[0]);
 const premium = computed(() => !!store.plan?.labelEditor);
+onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
 const infoRows = computed(() => productInfo.value.map((p) => ({
   ...p,
@@ -571,56 +573,74 @@ function buildTemplate() {
 
 async function downloadPdf() {
   error.value = '';
-  if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
-  if (!result.value?.valid.length) { error.value = 'Сначала проверьте коды'; return; }
-  const barcode = String(product.barcode || '').trim();
-  const numericFormats = ['ean13', 'ean8', 'upca', 'itf14'];
-  if (!qrOnly.value && fields.ean13 && barcode && numericFormats.includes(barcodeFormat.value) && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
-    error.value = 'Для выбранного формата штрихкод должен содержать цифры';
-    return;
-  }
-  const template = buildTemplate();
-  if (!template.elements.length) { error.value = 'Нечего печатать'; return; }
-  const rows = result.value.valid.map((c) => ({
-    code: c.code,
-    gtin: c.gtin,
-    serial: c.serial,
-    barcode: String(product.barcode || '').trim(),
-    name: String(product.name || '').trim(),
-    article: String(product.article || '').trim(),
-    dosage: String(product.dosage || '').trim(),
-    form: String(product.form || '').trim(),
-    size: String(product.size || '').trim(),
-    color: String(product.color || '').trim(),
-    series: String(product.series || '').trim(),
-    expiry: String(product.expiry || '').trim(),
-    date: String(product.date || '').trim(),
-    composition: String(product.composition || '').trim(),
-    manufacturer: String(product.manufacturer || '').trim()
-  }));
+  notice.value = '';
+  if (!premium.value) { error.value = 'PDF-печать доступна на тарифе PREMIUM'; return; }
+  if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
   busy.value = true;
+  let timer = null;
   try {
+    // Один клик: если коды ещё не проверялись — проверяем автоматически.
+    if (!result.value?.valid.length) {
+      await checkCodes();
+      busy.value = true;
+      if (!result.value?.valid.length) return;
+    }
+    const barcode = String(product.barcode || '').trim();
+    const numericFormats = ['ean13', 'ean8', 'upca', 'itf14'];
+    if (!qrOnly.value && fields.ean13 && barcode && numericFormats.includes(barcodeFormat.value) && !/^\d+$/.test(barcode.replace(/\s+/g, ''))) {
+      error.value = 'Для выбранного формата штрихкод должен содержать цифры';
+      return;
+    }
+    const template = buildTemplate();
+    if (!template.elements.length) { error.value = 'Нечего печатать'; return; }
+    const rows = result.value.valid.map((c) => ({
+      code: c.code,
+      gtin: c.gtin,
+      serial: c.serial,
+      barcode: String(product.barcode || '').trim(),
+      name: String(product.name || '').trim(),
+      article: String(product.article || '').trim(),
+      dosage: String(product.dosage || '').trim(),
+      form: String(product.form || '').trim(),
+      size: String(product.size || '').trim(),
+      color: String(product.color || '').trim(),
+      series: String(product.series || '').trim(),
+      expiry: String(product.expiry || '').trim(),
+      date: String(product.date || '').trim(),
+      composition: String(product.composition || '').trim(),
+      manufacturer: String(product.manufacturer || '').trim()
+    }));
+    const controller = new AbortController();
+    timer = setTimeout(() => controller.abort(), 120000);
     const res = await fetch('/api/labels/pdf', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template, rows, single: true, source: 'reprint' })
+      body: JSON.stringify({ template, rows, single: true, source: 'reprint' }),
+      signal: controller.signal
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Не удалось сформировать PDF');
     }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    const head = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
+    if (head !== '%PDF-') throw new Error('Сервер вернул не PDF. Попробуйте ещё раз или уменьшите число кодов.');
+    if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
+    pdfUrl.value = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = pdfUrl.value;
     a.download = `reprint-${rows.length}.pdf`;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) { error.value = e.message; }
-  finally { busy.value = false; }
+    notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
+  } catch (e) {
+    error.value = e.name === 'AbortError' ? 'PDF формируется слишком долго. Уменьшите число кодов и попробуйте снова.' : e.message;
+  } finally {
+    if (timer) clearTimeout(timer);
+    busy.value = false;
+  }
 }
 </script>
 
@@ -699,11 +719,15 @@ async function downloadPdf() {
             </div>
           </div>
 
-          <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !result || !result.valid.length" @click="downloadPdf">⬇ Скачать PDF ({{ result ? result.valid.length : 0 }})</button>
+          <button class="btn-primary w-full !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
+            {{ busy ? 'Готовим PDF…' : `⬇ Скачать PDF (${result?.valid?.length || codesCount})` }}
+          </button>
+          <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
+          <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>
           <ValidHint v-if="result" class="mt-1" />
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
-          <p v-if="!premium" class="text-xs text-amber-500">PDF-печать доступна на тарифе PREMIUM.</p>
+          <p v-if="!premium" class="text-xs text-amber-500">PDF-печать доступна на тарифе PREMIUM. <router-link to="/app/billing" class="underline font-medium">Оформить →</router-link></p>
         </div>
       </div>
 

@@ -1,5 +1,10 @@
 import bwipjs from 'bwip-js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const LABEL_FONT = join(__dirname, '..', 'assets', 'LiberationSans-Regular.ttf');
 
 function eanCheckDigit(base) {
   let sum = 0;
@@ -100,6 +105,8 @@ const K = 72 / 25.4; // мм → пункты PDF
 
 // Рисует лист А4 с сеткой этикеток или PDF по одной этикетке на страницу
 export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
+  // Встроенный шрифт с кириллицей: стандартный Helvetica PDFKit её не поддерживает.
+  try { doc.registerFont('LabelFont', LABEL_FONT); doc.font('LabelFont'); } catch { /* fallback */ }
   const pageW = 595.28, pageH = 841.89, margin = 10 * K;
   const lw = template.widthMm * K, lh = template.heightMm * K;
 

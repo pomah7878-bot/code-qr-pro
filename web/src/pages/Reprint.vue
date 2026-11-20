@@ -11,6 +11,7 @@ import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
 import { fetchCards } from '../lib/cz-public.js';
+import { checkEan13, eanDigits } from '../lib/ean13.js';
 
 const MAX = 5000;
 const categories = [
@@ -64,6 +65,7 @@ const qrOnly = ref(true);
 const qrMargin = ref(0.5);
 const printCode = ref(true);
 const barcodeFormat = ref('ean13');
+const eanInput = ref('');
 const barcodeFormats = [
   { id: 'ean13', label: 'EAN-13' },
   { id: 'ean8', label: 'EAN-8' },
@@ -74,6 +76,20 @@ const barcodeFormats = [
   { id: 'gs1_128', label: 'GS1-128' },
   { id: 'pdf417', label: 'PDF417' }
 ];
+const eanInfo = computed(() => checkEan13(eanInput.value));
+watch(eanInput, () => {
+  const info = checkEan13(eanInput.value);
+  if (!info.valid) return;
+  product.barcode = info.digits;
+  barcodeFormat.value = 'ean13';
+  fields.ean13 = true;
+  if (info.completed && eanInput.value !== info.digits) eanInput.value = info.digits;
+});
+watch(() => product.barcode, (value) => {
+  const digits = eanDigits(value);
+  if (digits && digits !== eanInput.value) eanInput.value = digits;
+});
+
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
@@ -712,14 +728,23 @@ function buildTemplate() {
   };
   if (qrOnly.value) {
     const margin = Math.max(0.5, Math.min(3, Number(qrMargin.value) || 1));
-    const textH = printCode.value ? 6.2 : 0;
+    const eanValue = eanDigits(product.barcode);
+    const withEan = fields.ean13 && eanValue.length === 13;
+    const eanH = withEan ? Math.min(10, Math.max(7, H * 0.22)) : 0;
+    const textH = (printCode.value ? 6.2 : 0) + (withEan ? eanH + 1 : 0);
     const size = Math.max(10, Math.min(W - 2 * margin, H - 2 * margin - textH - 1.6));
     const elements = [];
     const y = Math.max(margin, (H - textH - size) / 2);
     elements.push({ id: 'dm', type: 'datamatrix', x: (W - size) / 2, y, w: size, h: size, fontSize: 8, align: 'left' });
+    let nextY = y + size + 0.8;
     if (printCode.value) {
-      const capY = y + size + 1;
-      if (capY + 6 <= H - 0.3) caption(elements, margin, capY, W - 2 * margin, 6.5);
+      if (nextY + 6 <= H - (withEan ? eanH + 1.2 : 0.3)) {
+        nextY = caption(elements, margin, nextY, W - 2 * margin, 6.5);
+      }
+    }
+    if (withEan) {
+      const eanY = H - margin - eanH;
+      elements.push({ id: 'ean', type: 'ean13', field: 'barcode', x: margin, y: Math.max(nextY, eanY), w: W - 2 * margin, h: eanH, fontSize: 8, align: 'left' });
     }
     return {
       name: `QR · ${f.label}`,
@@ -842,6 +867,84 @@ async function downloadPdf() {
     if (timer) clearTimeout(timer);
     pdfProgress.value = null;
     busy.value = false;
+  }
+}
+
+// --- Этикетка для маркетплейсов (OZON / Wildberries): только EAN-13 и данные товара ---
+function buildMarketplaceTemplate() {
+  const f = currentFormat.value;
+  const W = f.w, H = f.h;
+  const m = Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
+  const eanH = Math.min(16, Math.max(8, H * 0.36));
+  const elements = [{ id: 'mpEan', type: 'ean13', field: 'barcode', x: m, y: m, w: W - 2 * m, h: eanH, fontSize: 8, align: 'left' }];
+  let y = m + eanH + 1.2;
+  const lineH = Math.max(2.8, Math.min(4.2, H * 0.09));
+  for (const key of ['name', 'article', 'size', 'color', 'manufacturer', 'date', 'composition']) {
+    if (!fields[key]) continue;
+    const value = String(product[key] || '').trim();
+    if (!value) continue;
+    if (y + lineH > H - m) break;
+    elements.push({ id: `mp_${key}`, type: 'field', field: key, x: m, y, w: W - 2 * m, h: lineH, fontSize: 7, align: 'left' });
+    y += lineH + 0.6;
+  }
+  return { name: `Маркетплейс EAN-13 · ${f.label}`, widthMm: W, heightMm: H, dpi: 203, elements };
+}
+
+function marketplaceBody() {
+  const digits = eanInfo.value.valid ? eanInfo.value.digits : eanDigits(product.barcode);
+  return {
+    template: buildMarketplaceTemplate(),
+    rows: [{
+      barcode: digits,
+      name: String(product.name || '').trim(),
+      article: String(product.article || '').trim(),
+      size: String(product.size || '').trim(),
+      color: String(product.color || '').trim(),
+      manufacturer: String(product.manufacturer || '').trim(),
+      date: String(product.date || '').trim(),
+      composition: String(product.composition || '').trim(),
+      expiry: String(product.expiry || '').trim()
+    }],
+    single: true,
+    source: 'reprint'
+  };
+}
+
+async function downloadMarketplacePdf() {
+  error.value = '';
+  notice.value = '';
+  if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
+  if (!eanInfo.value.valid) { error.value = 'Введите корректный EAN-13 (12–13 цифр)'; return; }
+  const iosWin = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
+  busy.value = true;
+  try {
+    const body = marketplaceBody();
+    await downloadBlob('/api/labels/pdf', body, `ean13-${eanInfo.value.digits}.pdf`, iosWin);
+    navigated = true;
+    const pdfNotice = mobilePdfNotice();
+    notice.value = pdfNotice || 'PDF с EAN-13 готов';
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
+    busy.value = false;
+  }
+}
+
+async function printMarketplace() {
+  error.value = '';
+  notice.value = '';
+  if (!premium.value) { error.value = 'Печать этикеток доступна на тарифе PREMIUM'; return; }
+  if (!eanInfo.value.valid) { error.value = 'Введите корректный EAN-13 (12–13 цифр)'; return; }
+  if (isIOS()) return downloadMarketplacePdf();
+  const win = openPlaceholderWindow();
+  try {
+    await openPrintWindow('/api/labels/print', marketplaceBody(), win);
+    notice.value = 'Окно печати открыто — нажмите «Напечатать»';
+  } catch (e) {
+    try { win?.close?.(); } catch { /* ignore */ }
+    error.value = e.message;
   }
 }
 
@@ -991,7 +1094,36 @@ async function printLabels() {
             <p class="text-xs text-slate-500 mb-2">Необязательно. Применяются ко всем кодам в этой печати.</p>
             <div class="grid grid-cols-2 gap-2">
               <input v-for="f in fieldList.filter((x) => x.key !== 'ean13')" :key="f.key" v-model="product[f.key]" class="input !py-1.5 text-sm" :placeholder="f.label">
-              <input v-model="product.barcode" class="input !py-1.5 text-sm col-span-2" placeholder="Штрихкод (цифры или текст)">
+              <div class="col-span-2 rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="text-sm font-semibold">EAN-13 для OZON и Wildberries</div>
+                  <span class="text-[10px] uppercase tracking-wider text-slate-500">маркетплейсы</span>
+                </div>
+                <p class="text-xs text-slate-500">
+                  Введите штрихкод товара вручную (12–13 цифр) — он появится на этикетке вместе с DataMatrix.
+                  Можно напечатать и отдельную этикетку только с EAN-13 — для карточек OZON и Wildberries.
+                </p>
+                <input
+                  v-model="eanInput" inputmode="numeric" maxlength="14"
+                  class="input !py-1.5 text-sm font-mono"
+                  placeholder="Например: 4607012345678"
+                  aria-label="EAN-13 для маркетплейса"
+                >
+                <p v-if="eanInfo.error" class="text-xs text-red-500">{{ eanInfo.error }}</p>
+                <p v-else-if="eanInfo.valid" class="text-xs text-emerald-500">
+                  EAN-13 корректен: <span class="font-mono">{{ eanInfo.digits }}</span>
+                  <span v-if="eanInfo.completed"> · контрольная цифра добавлена</span>
+                  · уже в этикетке КИЗ
+                </p>
+                <div class="grid grid-cols-2 gap-2">
+                  <button class="btn-primary !py-2 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="downloadMarketplacePdf">
+                    PDF только EAN-13
+                  </button>
+                  <button class="btn-ghost !py-2 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="printMarketplace">
+                    Печать EAN-13
+                  </button>
+                </div>
+              </div>
               <select v-model="barcodeFormat" class="input !py-1.5 text-sm col-span-2">
                 <option v-for="f in barcodeFormats" :key="f.id" :value="f.id">Формат: {{ f.label }}</option>
               </select>

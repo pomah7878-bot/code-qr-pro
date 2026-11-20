@@ -1,11 +1,11 @@
-import { db } from './db.js';
+import { db, usageToday } from './db.js';
 import { requireAuth } from './routes.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import { logEvent } from './lib/app-log.js';
 import { aiConfig, aiConfigured, askAi } from './lib/ai-client.js';
-import { searchKnowledge, kbContext, markKbCalls, listKbArticles, saveKbArticle, deleteKbArticle } from './lib/kb.js';
 import { planOf } from './plans.js';
+import { searchKnowledge, kbContext, markKbCalls, listKbArticles, saveKbArticle, deleteKbArticle } from './lib/kb.js';
 import { notifySupportTicket } from './notify.js';
 import { publicUrl } from './lib/public-url.js';
 import { buildAiContext, formatAiContext } from './lib/ai-context.js';
@@ -60,15 +60,17 @@ const PAGES = {
   overview: { label: 'Обзор', keywords: 'обзор кабинет лимиты тариф статистика остатки' },
   history: { label: 'История', keywords: 'история заданий скачать выгрузка архив срок хранения' },
   generate: { label: 'Генерация', keywords: 'генерация коды csv xlsx загрузка gtIN datamatrix' },
-  labels: { label: 'Этикетки', keywords: 'этикетки печать pdf размер шаблон макет принтер' },
-  sets: { label: 'Наборы', keywords: 'наборы кин комплект упаковка' },
-  reprint: { label: 'Повторная печать', keywords: 'повторная печать перепечатать этикетки история' },
-  billing: { label: 'Подписка', keywords: 'подписка тариф premium лимиты оплата' },
-  api: { label: 'API', keywords: 'api ключи интеграция лимиты разработчик' },
-  cz: { label: 'Честный ЗНАК', keywords: 'честный знак проверка кодов маркировка киз' },
-  reviews: { label: 'Отзывы', keywords: 'отзывы рейтинг' },
-  security: { label: 'Безопасность', keywords: 'безопасность 2fa пароль сессии вход' },
-  assistant: { label: 'AI-помощник', keywords: '' }
+  labels: { label: 'Этикетки', keywords: 'этикетки редактор шаблон макет размер dpi элементы datamatrix ean-13 штрихкод печать pdf принтер масштаб' },
+  sets: { label: 'Наборы', keywords: 'наборы набор кин комплект компоненты шаблон набора упаковка' },
+  reprint: { label: 'Повторная печать', keywords: 'повторная печать перепечатать ean-13 ean13 штрихкод ozon озон wildberries вайлдберриз карточка товара честный знак фото дата изготовления годен до криптозащита статус результаты проверки' },
+  billing: { label: 'Подписка', keywords: 'подписка тариф premium цены период продление промокод скидка архив 3 года оплата чек возврат тестовый тариф' },
+  api: { label: 'API', keywords: 'api ключ x-api-key интеграция лимиты разработчик генерация jobs me 401 403 429 документация' },
+  apikeys: { label: 'API', keywords: 'api ключ x-api-key интеграция лимиты разработчик генерация jobs me 401 403 429 документация' },
+  cz: { label: 'Честный ЗНАК', keywords: 'честный знак проверка кодов маркировка киз 91 92 93 криптозащита криптохвост статус в обороте не найден токен true api' },
+  reviews: { label: 'Отзывы', keywords: 'отзывы отзыв рейтинг оценка мнение' },
+  security: { label: 'Безопасность', keywords: 'безопасность 2fa двухфакторная пароль сессии вход восстановление фишинг данные' },
+  assistant: { label: 'AI-помощник', keywords: 'ai помощник ии как пользоваться лимит вопросов передать в поддержку' },
+  help: { label: 'Помощь', keywords: 'помощь справка инструкции подсказки печать с телефона' }
 };
 
 const safeParse = (value) => {
@@ -93,6 +95,7 @@ function cleanAnswer(text) {
 
 const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток). Помогаешь клиентам прямо в личном кабинете.
 Клиент находится в разделе кабинета: {{PAGE}}.
+Данные клиента: {{PLAN}}.
 
 Главное правило: РЕШАЙ проблему, а не переспрашивай. Дай конкретные шаги, что проверить и что сделать.
 Уточняющий вопрос допустим РОВНО ОДИН раз и только если сообщение клиента — одно-два слова без контекста («не работает», «помогите») и в диалоге ещё не было ответов. Если клиент уже что-то уточнил, если это продолжение диалога или вопрос понятен — сразу отвечай по делу, без вопросов. Никогда не задавай второй уточняющий вопрос подряд.
@@ -104,6 +107,9 @@ const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (мар�
 4. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
 5. Не обещай действий от имени администратора: если нужен доступ к аккаунту, сброс 2FA, разблокировка или вопрос про деньги — предложи «Передать в поддержку».
 6. Если не уверен — предложи поддержку, но не спрашивай одно и то же повторно.
+7. Называй точные разделы и кнопки кабинета («Генерация», «Этикетки», «Повторная печать», «Подписка», «История», «API», «Честный ЗНАК», «Безопасность»), чтобы клиент сразу нашёл нужное.
+8. Учитывай новые возможности: карточка товара из «Честного ЗНАКа» и фото товара в «Повторной печати», EAN-13 для OZON и Wildberries, режимы результатов «Основная/Все поля/Компактная», статус кода и криптозащита, печать с телефона (AirPrint/Mopria).
+9. Если вопрос про лимиты — используй данные клиента выше (тариф и остаток на сегодня), не выдумывай цифры.
 
 Верни строго JSON без markdown:
 {"answer":"ответ по шагам или (только один раз) уточняющий вопрос","clarify":true|false,"needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
@@ -123,6 +129,18 @@ export async function registerAiSupportRoutes(app) {
     if (message.length < 3) return reply.code(400).send({ error: 'Опишите вопрос подробнее' });
     const pageKey = Object.prototype.hasOwnProperty.call(PAGES, String(req.body?.page || '')) ? String(req.body.page) : 'overview';
     const page = PAGES[pageKey];
+    const plan = planOf(user);
+    const planLine = [
+      `тариф ${plan.title}`,
+      `коды в день: ${plan.codesPerDay}`,
+      `использовано сегодня: ${usageToday(user.id)}`,
+      `пакет до ${plan.batchMax} строк`,
+      `форматы: ${(plan.formats || []).join('/')}`,
+      `история: ${plan.historyDays} дн.`,
+      `архив: ${Math.round((plan.archiveMb || 0) / 1024 * 10) / 10} ГБ`,
+      `API: ${plan.apiAccess ? 'да' : 'нет'}`,
+      `редактор этикеток: ${plan.labelEditor ? 'да' : 'нет'}`
+    ].join(', ');
     // история диалога: чтобы помощник отвечал на уточнения, а не переспрашивал по кругу
     const history = Array.isArray(req.body?.history)
       ? req.body.history.slice(-8)
@@ -135,8 +153,8 @@ export async function registerAiSupportRoutes(app) {
     if (!limit.ok) return reply.code(429).send({ error: 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.' });
 
     // ищем по вопросу, добавляя ключевые слова текущего раздела — ответ будет про то меню, где клиент
-    const articles = searchKnowledge(`${message} ${page.keywords}`, 4);
-    const context = kbContext(articles);
+    const articles = searchKnowledge(`${message} ${page.keywords}`, 5);
+    const context = kbContext(articles, 3200);
     const started = Date.now();
     let answer = '';
     let clarify = false;
@@ -148,6 +166,7 @@ export async function registerAiSupportRoutes(app) {
     const askPrompt = (extra) => [
       history.length ? `Предыдущий диалог:\n${history.map((h) => `${h.role}: ${h.text}`).join('\n')}` : '',
       `Раздел: ${page.label}`,
+      `Тариф и лимиты клиента: ${planLine}`,
       `Вопрос клиента: ${message}`,
       `База знаний:\n${context || '(подходящих статей не найдено)'}`,
       hadDialogue ? 'Это продолжение диалога: уточняющие вопросы ЗАПРЕЩЕНЫ, отвечай конкретными шагами.' : '',
@@ -156,10 +175,10 @@ export async function registerAiSupportRoutes(app) {
 
     const runAsk = async (extra) => {
       const res = await askAi({
-        system: SYSTEM.replace('{{PAGE}}', page.label),
+        system: SYSTEM.replace('{{PAGE}}', page.label).replace('{{PLAN}}', planLine),
         user: askPrompt(extra),
         cfg,
-        freeMaxTokens: 1100
+        freeMaxTokens: 1300
       });
       const parsed = res.parsed || {};
       return {
@@ -177,6 +196,13 @@ export async function registerAiSupportRoutes(app) {
       if (result.clarify && hadDialogue) {
         result = await runAsk('Ответь без уточняющих вопросов: дай конкретные шаги решения.');
         result.clarify = false;
+      }
+      // Короткий обрыв (модель остановилась на полуслове) — просим полный ответ один раз
+      if (!result.clarify && result.answer.length < 120) {
+        const retry = await runAsk('Ответ был слишком коротким или обрезанным. Дай полный ответ на 3–6 предложений: конкретные шаги и, если вопрос про лимиты, точные цифры тарифа.');
+        if (retry.answer && retry.answer.length > result.answer.length) {
+          result = { ...retry, clarify: false };
+        }
       }
       model = result.model;
       answer = result.answer;

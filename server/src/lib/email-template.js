@@ -50,7 +50,7 @@ function button(label, url) {
 /** Шапка: растровый логотип (по умолчанию) или CSS-марка, если логотип отключён. */
 function brandMark(site) {
   const mode = String(getSetting('email_logo_mode', 'image') || 'image');
-  const logo = getSetting('email_logo_url', '') || `${site}/icon-192.png`;
+  const logo = getSetting('email_logo_url', '') || `${site}/email-logo.png`;
   if (mode !== 'mark') {
     return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="44" style="width:44px">
       <tr>

@@ -61,6 +61,7 @@ const pdfUrl = ref('');
 const shortWarning = ref('');
 const qrOnly = ref(true);
 const qrMargin = ref(0.5);
+const printCode = ref(true);
 const barcodeFormat = ref('ean13');
 const barcodeFormats = [
   { id: 'ean13', label: 'EAN-13' },
@@ -434,6 +435,21 @@ function restoreDraft() {
 onMounted(restoreDraft);
 
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
+// Что можно прочитать прямо из кода (без обращения к ЧЗ)
+const firstCode = computed(() => {
+  const v = result.value?.valid?.[0];
+  if (!v) return null;
+  const s = String(v.code || '');
+  const expiry = (s.match(/(?:^|\u001d)17(\d{6})/) || [])[1] || '';
+  const batch = (s.match(/(?:^|\u001d)10([^\u001d]{1,20})/) || [])[1] || '';
+  return {
+    gtin: v.gtin || '',
+    serial: v.serial || '',
+    kind: v.short ? 'GS1 (код 93)' : 'КИЗ (код 91/92)',
+    expiry: expiry ? `${expiry.slice(4, 6)}.${expiry.slice(2, 4)}.20${expiry.slice(0, 2)}` : '',
+    batch
+  };
+});
 const infoRows = computed(() => productInfo.value.map((p) => ({
   ...p,
   name: p.name || product.name,
@@ -575,21 +591,39 @@ async function loadProductInfo() {
 function buildTemplate() {
   const f = currentFormat.value;
   const W = f.w, H = f.h;
+  // Читаемые значения под DataMatrix: GTIN и серийник — те же данные, что зашиты в коде.
+  const caption = (elements, x, y, width, fontSize = 6.5) => {
+    const lineH = 2.9;
+    elements.push({ id: 'capGtin', type: 'field', field: 'gtin', x, y, w: width, h: lineH, fontSize, align: 'left' });
+    elements.push({ id: 'capSerial', type: 'field', field: 'serial', x, y: y + lineH + 0.3, w: width, h: lineH, fontSize, align: 'left' });
+    return y + lineH * 2 + 0.9;
+  };
   if (qrOnly.value) {
     const margin = Math.max(0.5, Math.min(3, Number(qrMargin.value) || 1));
-    const size = Math.min(W - 2 * margin, H - 2 * margin);
+    const textH = printCode.value ? 6.2 : 0;
+    const size = Math.max(10, Math.min(W - 2 * margin, H - 2 * margin - textH - 1.6));
+    const elements = [];
+    const y = Math.max(margin, (H - textH - size) / 2);
+    elements.push({ id: 'dm', type: 'datamatrix', x: (W - size) / 2, y, w: size, h: size, fontSize: 8, align: 'left' });
+    if (printCode.value) {
+      const capY = y + size + 1;
+      if (capY + 6 <= H - 0.3) caption(elements, margin, capY, W - 2 * margin, 6.5);
+    }
     return {
       name: `QR · ${f.label}`,
       widthMm: W,
       heightMm: H,
       dpi: 203,
-      elements: [{ id: 'dm', type: 'datamatrix', x: (W - size) / 2, y: (H - size) / 2, w: size, h: size, fontSize: 8, align: 'left' }]
+      elements
     };
   }
   const tiny = W <= 22 && H <= 22;
   const m = tiny ? Math.min(W, H) * 0.1 : Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
   const elements = [];
-  const dm = tiny ? Math.min(W - 2 * m, H - 2 * m, 32) : Math.min(W * 0.45, H * 0.5, 35);
+  const dm = tiny ? Math.min(W - 2 * m, H - 2 * m, 32)
+    : printCode.value
+      ? Math.min(W * 0.45, H * 0.36, 32)
+      : Math.min(W * 0.45, H * 0.5, 35);
   elements.push({ id: 'dm', type: 'datamatrix', x: m, y: m, w: dm, h: dm, fontSize: 8, align: 'left' });
   let topH = dm;
   if (!tiny && fields.ean13 && String(product.barcode).trim()) {
@@ -605,6 +639,10 @@ function buildTemplate() {
     }
   }
   let y = m + topH + 1;
+  if (printCode.value) y = Math.max(y, m + dm + 0.9);
+  if (printCode.value && y + 6 <= H - m) {
+    y = caption(elements, m, y, W - 2 * m, 6.5);
+  }
   const lineH = Math.max(2.6, Math.min(4, H * 0.09));
   for (const { key } of fieldList) {
     if (key === 'ean13' || !fields[key]) continue;
@@ -782,6 +820,10 @@ async function printLabels() {
             <input v-model="qrOnly" type="checkbox" class="mt-0.5">
             <span><b>Только DataMatrix — QR на всю этикетку</b><br><span class="text-xs text-slate-500">Квадратный код вписывается по меньшей стороне, по краям остаётся небольшой отступ для печати.</span></span>
           </label>
+          <label class="flex items-start gap-2 text-sm mt-1">
+            <input v-model="printCode" type="checkbox" class="mt-0.5">
+            <span><b>Подписывать код: GTIN + серийник</b><br><span class="text-xs text-slate-500">Печатает под DataMatrix читаемые значения — те же данные, что зашиты в коде (как на этикетке «Честного ЗНАКа»).</span></span>
+          </label>
           <div v-if="qrOnly" class="flex items-center gap-2 text-xs text-slate-500">
             <label for="qr-margin">Отступ, мм</label>
             <input id="qr-margin" v-model.number="qrMargin" type="number" min="0.5" max="3" step="0.5" class="input !py-1 !px-2 text-xs w-20">
@@ -858,6 +900,16 @@ async function printLabels() {
           </div>
         </div>
         <p v-if="catalogStatus" class="text-xs text-emerald-500 mb-1">{{ catalogStatus }}</p>
+        <div v-if="firstCode" class="text-xs text-slate-500 mb-2 space-y-0.5">
+          <div>
+            <b>В коде:</b> GTIN <span class="font-mono">{{ firstCode.gtin }}</span>
+            · серийник <span class="font-mono">{{ firstCode.serial }}</span>
+            · {{ firstCode.kind }}
+            <span v-if="firstCode.expiry"> · срок годности {{ firstCode.expiry }}</span>
+            <span v-if="firstCode.batch"> · партия <span class="font-mono">{{ firstCode.batch }}</span></span>
+          </div>
+          <div>Наименование и производитель подтягиваются из «Честного ЗНАКа», если в настройках подключён токен ЧЗ; иначе видны GTIN и серийник из кода.</div>
+        </div>
         <div class="overflow-auto max-h-64">
           <table class="w-full text-xs min-w-[680px]">
             <thead>

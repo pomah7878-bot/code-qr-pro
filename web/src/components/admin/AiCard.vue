@@ -88,7 +88,29 @@ async function test() {
   }
 }
 
-onMounted(load);
+const usage = ref(null);
+const usageBusy = ref(false);
+const usageError = ref('');
+
+async function loadUsage() {
+  usageBusy.value = true;
+  usageError.value = '';
+  try {
+    usage.value = await api.adminAiUsage();
+  } catch (e) {
+    usageError.value = e.message;
+  } finally {
+    usageBusy.value = false;
+  }
+}
+
+const money = (v, currency) => {
+  const symbol = currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : '';
+  return `${symbol}${Number(v || 0).toFixed(2)}`;
+};
+const fmtNum = (v) => Number(v || 0).toLocaleString('ru-RU');
+
+onMounted(() => { load(); loadUsage(); });
 </script>
 
 <template>
@@ -169,6 +191,60 @@ onMounted(load);
       <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="testing || !state.configured" @click="test">{{ testing ? 'Проверяем…' : 'Проверить подключение' }}</button>
       <span class="text-xs text-slate-500">Лимит: 30 запросов в час на администратора.</span>
       <router-link to="/app/admin/ai" class="text-xs text-brand-400 underline">Открыть AI-помощника →</router-link>
+    </div>
+
+    <div class="mt-5 rounded-xl border border-slate-200 dark:border-white/10 p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="text-sm font-semibold">Использование и остатки</div>
+        <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="usageBusy" @click="loadUsage">
+          {{ usageBusy ? 'Обновляем…' : 'Обновить' }}
+        </button>
+      </div>
+      <p v-if="usageError" class="text-xs text-red-500 mt-2">{{ usageError }}</p>
+      <p v-else-if="!usage" class="text-xs text-slate-500 mt-2">Загрузка…</p>
+
+      <div v-else class="grid md:grid-cols-2 gap-3 mt-3 text-sm">
+        <div class="rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-3">
+          <div class="text-xs text-slate-500">Бесплатные модели Kilo</div>
+          <div class="mt-1">
+            <b>{{ usage.free.models }}</b> доступно
+            <span v-if="usage.free.enabled" class="chip-soon !text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10 ml-1">включены первыми</span>
+            <span v-else class="chip-soon !text-amber-500 !border-amber-500/30 !bg-amber-500/10 ml-1">выключены</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            Сегодня: {{ fmtNum(usage.free.today.requests) }} запросов · {{ fmtNum(usage.free.today.totalTokens) }} токенов
+            <span class="text-emerald-500">(бесплатно)</span>
+          </div>
+          <div v-if="usage.free.sample?.length" class="text-[11px] text-slate-500 mt-1 font-mono truncate">
+            {{ usage.free.sample.slice(0, 3).join(', ') }}
+          </div>
+          <div v-if="!usage.free.available" class="text-[11px] text-amber-500 mt-1">пул недоступен: {{ usage.free.error }}</div>
+        </div>
+
+        <div class="rounded-xl bg-brand-500/5 border border-brand-500/20 p-3">
+          <div class="text-xs text-slate-500">Платный аккаунт ({{ usage.account.backend === 'dsh' ? 'DSH' : 'LLM API' }})</div>
+          <div v-if="usage.account.balance?.available" class="mt-1">
+            Баланс: <b>{{ money(usage.account.balance.total, usage.account.balance.currency) }}</b>
+            <span class="text-xs text-slate-500">(пополнено {{ money(usage.account.balance.toppedUp, usage.account.balance.currency) }})</span>
+          </div>
+          <div v-else class="mt-1 text-xs text-amber-500">
+            Баланс недоступен: {{ usage.account.balance?.error || 'нет ключа' }}
+          </div>
+          <div class="text-xs text-slate-500 mt-1">
+            Сегодня: {{ fmtNum(usage.account.today.requests) }} запросов · {{ fmtNum(usage.account.today.totalTokens) }} токенов
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            Средний разбор: {{ fmtNum(usage.account.avgTokens.prompt) }} вх. / {{ fmtNum(usage.account.avgTokens.completion) }} исх. токенов
+          </div>
+          <div v-if="usage.account.estimatedQueries !== null" class="text-[11px] text-slate-500">
+            Хватит примерно на <b>{{ fmtNum(usage.account.estimatedQueries) }}</b> разборов
+          </div>
+        </div>
+      </div>
+      <p v-if="usage" class="text-[11px] text-slate-500 mt-2">
+        За последний час: {{ fmtNum(usage.lastHour) }} из 30 запросов.
+        <span v-if="usage.account.balance?.available && usage.account.balance.total < 1" class="text-amber-500">Баланс заканчивается — пополните аккаунт.</span>
+      </p>
     </div>
   </div>
 </template>

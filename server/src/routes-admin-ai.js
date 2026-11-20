@@ -25,6 +25,93 @@ const safeParse = (value) => {
   try { return JSON.parse(value); } catch { return null; }
 };
 
+/** Баланс платного аккаунта DeepSeek (кэш 5 минут, запрос не тратит токены). */
+let balanceCache = { at: 0, data: null };
+async function deepseekBalance(cfg) {
+  if (Date.now() - balanceCache.at < 5 * 60 * 1000) return balanceCache.data;
+  const key = (/^sk-/.test(cfg.apiKey) ? cfg.apiKey : '') || process.env.DEEPSEEK_API_KEY || '';
+  if (!key) {
+    balanceCache = { at: Date.now(), data: { available: false, error: 'Ключ DeepSeek не задан' } };
+    return balanceCache.data;
+  }
+  try {
+    const res = await fetch('https://api.deepseek.com/user/balance', {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    const info = Array.isArray(j.balance_infos) ? j.balance_infos[0] : null;
+    balanceCache = {
+      at: Date.now(),
+      data: {
+        available: Boolean(j.is_available),
+        currency: info?.currency || 'USD',
+        total: Number(info?.total_balance) || 0,
+        granted: Number(info?.granted_balance) || 0,
+        toppedUp: Number(info?.topped_up_balance) || 0
+      }
+    };
+  } catch (e) {
+    balanceCache = { at: Date.now(), data: { available: false, error: String(e?.message || e).slice(0, 200) } };
+  }
+  return balanceCache.data;
+}
+
+/** Сколько бесплатных моделей сейчас в пуле Kilo (кэш 10 минут). */
+let kiloCache = { at: 0, data: null };
+async function kiloFreeModels() {
+  if (Date.now() - kiloCache.at < 10 * 60 * 1000) return kiloCache.data;
+  try {
+    const res = await fetch('https://api.kilo.ai/api/gateway/models', { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    const data = Array.isArray(j.data) ? j.data : [];
+    const free = data.filter((m) => m.isFree === true || /free/i.test(String(m.id)));
+    kiloCache = {
+      at: Date.now(),
+      data: {
+        available: true,
+        freeModels: free.length,
+        totalModels: data.length,
+        freeSample: free.map((m) => m.id).filter((id) => id !== 'kilo-auto/free' && id !== 'openrouter/free').slice(0, 6)
+      }
+    };
+  } catch (e) {
+    kiloCache = { at: Date.now(), data: { available: false, error: String(e?.message || e).slice(0, 200) } };
+  }
+  return kiloCache.data;
+}
+
+// Ориентир по цене DeepSeek (deepseek-chat, $/1M токенов) — для оценки «хватит на N разборов».
+const PRICE_INPUT_PER_M = 0.27;
+const PRICE_OUTPUT_PER_M = 1.1;
+
+function aiUsageToday() {
+  const rows = db.prepare(
+    `SELECT COALESCE(NULLIF(via, ''), 'account') AS v, COUNT(*) AS c,
+            COALESCE(SUM(prompt_tokens), 0) AS p, COALESCE(SUM(completion_tokens), 0) AS co
+     FROM ai_queries
+     WHERE status = 'ok' AND created_at >= datetime('now', 'start of day')
+     GROUP BY v`
+  ).all();
+  const out = {
+    free: { requests: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    account: { requests: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  };
+  for (const r of rows) {
+    const key = r.v === 'free' ? 'free' : 'account';
+    out[key].requests += r.c;
+    out[key].promptTokens += r.p;
+    out[key].completionTokens += r.co;
+    out[key].totalTokens += r.p + r.co;
+  }
+  out.lastHour = db.prepare(
+    "SELECT COUNT(*) c FROM ai_queries WHERE created_at > datetime('now','-1 hour')"
+  ).get().c;
+  return out;
+}
+
 const SYSTEM_DRAFT = `Ты — помощник поддержки CODE QR PRO (маркировка «Честный ЗНАК», DataMatrix, печать этикеток).
 Составь готовое письмо клиенту по проблеме, которую описал администратор, и по фактам аккаунта.
 
@@ -115,6 +202,8 @@ export async function registerAdminAiRoutes(app) {
     let content = '';
     let model = cfg.model;
     let actions = [];
+    let via = '';
+    let usage = null;
 
     try {
       const facts = formatAiContext(ctx);
@@ -127,6 +216,8 @@ export async function registerAdminAiRoutes(app) {
       });
       content = String(res.content || '').slice(0, 4000);
       model = String(res.model || cfg.model).slice(0, 120);
+      via = res.via || '';
+      usage = res.usage || null;
       parsed = res.parsed;
       if (!parsed && content) {
         // бесплатная модель ответила текстом — не тратим аккаунт ради переформатирования
@@ -162,13 +253,16 @@ export async function registerAdminAiRoutes(app) {
     };
 
     const info = db.prepare(
-      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms) VALUES (?,?,?,?,?,?,?,?,?,?)'
-    ).run(userId, req.user.id, question, JSON.stringify(answer), JSON.stringify(actions), model, cfg.backend, status, error, durationMs);
+      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms, prompt_tokens, completion_tokens, via) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).run(
+      userId, req.user.id, question, JSON.stringify(answer), JSON.stringify(actions), model, cfg.backend, status, error, durationMs,
+      Number(usage?.prompt_tokens) || 0, Number(usage?.completion_tokens) || 0, via
+    );
 
-    audit(req, 'ai.ask', 'user', userId, { question: question.slice(0, 120), status, actions, durationMs, model });
+    audit(req, 'ai.ask', 'user', userId, { question: question.slice(0, 120), status, actions, durationMs, model, via });
 
     if (status === 'error') return reply.code(502).send({ error, id: info.lastInsertRowid });
-    return { id: info.lastInsertRowid, ...answer, actions, model, backend: cfg.backend, durationMs };
+    return { id: info.lastInsertRowid, ...answer, actions, model, backend: cfg.backend, via, durationMs };
   });
 
   // AI сам пишет письмо клиенту: админ только проверяет и отправляет.
@@ -195,6 +289,8 @@ export async function registerAdminAiRoutes(app) {
     let text = '';
     let model = cfg.model;
     let error = '';
+    let via = '';
+    let usage = null;
     try {
       const facts = formatAiContext(ctx).replace(/[a-z0-9]\*+@[a-z0-9.-]+/gi, 'клиент');
       const res = await askAi({
@@ -211,6 +307,8 @@ export async function registerAdminAiRoutes(app) {
         freeMaxTokens: 900
       });
       model = String(res.model || cfg.model).slice(0, 120);
+      via = res.via || '';
+      usage = res.usage || null;
       const parsed = res.parsed || {};
       subject = String(parsed.subject || '').trim().slice(0, 120);
       text = String(parsed.text || '').trim().slice(0, 5000);
@@ -233,16 +331,55 @@ export async function registerAdminAiRoutes(app) {
 
     const durationMs = Date.now() - started;
     const info = db.prepare(
-      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms) VALUES (?,?,?,?,?,?,?,?,?,?)'
+      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms, prompt_tokens, completion_tokens, via) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
     ).run(
       userId, req.user.id, `Черновик письма: ${note || 'без пояснений'}`.slice(0, 2000),
       JSON.stringify({ diagnosis: '', steps: [], draft: text, subject, confidence: 'medium' }),
-      '[]', model, cfg.backend, error ? 'error' : 'ok', error, durationMs
+      '[]', model, cfg.backend, error ? 'error' : 'ok', error, durationMs,
+      Number(usage?.prompt_tokens) || 0, Number(usage?.completion_tokens) || 0, via
     );
 
-    audit(req, 'ai.draft_message', 'user', userId, { status: error ? 'error' : 'ok', model, durationMs, note: note.slice(0, 120) });
+    audit(req, 'ai.draft_message', 'user', userId, { status: error ? 'error' : 'ok', model, via, durationMs, note: note.slice(0, 120) });
     if (error) return reply.code(502).send({ error, id: info.lastInsertRowid });
-    return { id: info.lastInsertRowid, subject, text, model, backend: cfg.backend, durationMs };
+    return { id: info.lastInsertRowid, subject, text, model, backend: cfg.backend, via, durationMs };
+  });
+
+  // Использование и остатки: бесплатные модели Kilo + баланс платного аккаунта.
+  app.get('/api/admin/ai/usage', { preHandler: requireAdmin }, async () => {
+    const cfg = aiConfig();
+    const [balance, kilo] = await Promise.all([deepseekBalance(cfg), kiloFreeModels()]);
+    const today = aiUsageToday();
+    const acc = today.account;
+    // средний расход на один платный разбор — по фактическим данным, иначе ориентир
+    const avgTokens = acc.promptTokens > 0
+      ? { prompt: Math.round(acc.promptTokens / acc.requests), completion: Math.round(acc.completionTokens / acc.requests) }
+      : { prompt: 1400, completion: 350 };
+    const costPerQuery = (avgTokens.prompt * PRICE_INPUT_PER_M + avgTokens.completion * PRICE_OUTPUT_PER_M) / 1_000_000;
+    const estimatedQueries = balance.available && costPerQuery > 0
+      ? Math.floor(balance.total / costPerQuery)
+      : null;
+    return {
+      free: {
+        enabled: cfg.freeFirst,
+        models: kilo.freeModels || 0,
+        totalModels: kilo.totalModels || 0,
+        available: Boolean(kilo.available),
+        sample: kilo.freeSample || [],
+        error: kilo.error || '',
+        today: today.free
+      },
+      account: {
+        backend: cfg.backend,
+        model: cfg.model,
+        balance,
+        today: acc,
+        avgTokens,
+        costPerQuery: Number(costPerQuery.toFixed(5)),
+        estimatedQueries
+      },
+      lastHour: today.lastHour,
+      updatedAt: new Date().toISOString()
+    };
   });
 
   app.get('/api/admin/ai/history', { preHandler: requireAdmin }, async (req) => {

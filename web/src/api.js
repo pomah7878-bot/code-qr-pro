@@ -110,6 +110,7 @@ export const api = {
   adminAiAsk: (userId, question) => req('POST', '/api/admin/ai/ask', { userId, question }),
   adminAiDraft: (userId, note, hint) => req('POST', '/api/admin/ai/draft-message', { userId, note, hint }),
   adminAiHistory: (userId) => req('GET', '/api/admin/ai/history' + qs({ userId })),
+  adminAiUsage: () => req('GET', '/api/admin/ai/usage'),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),
   adminOverview: (days = 30) => req('GET', '/api/admin/overview?days=' + days),
   adminSeries: (days = 30) => req('GET', '/api/admin/series?days=' + days),

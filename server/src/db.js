@@ -395,7 +395,12 @@ const MIGRATIONS = [
      duration_ms INTEGER NOT NULL DEFAULT 0,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX idx_ai_queries_user ON ai_queries(user_id, created_at);`
+   CREATE INDEX idx_ai_queries_user ON ai_queries(user_id, created_at);`,
+  // v25 — учёт токенов и провайдера (бесплатная модель / аккаунт)
+  `ALTER TABLE ai_queries ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE ai_queries ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE ai_queries ADD COLUMN via TEXT NOT NULL DEFAULT '';
+   CREATE INDEX idx_ai_queries_created ON ai_queries(created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

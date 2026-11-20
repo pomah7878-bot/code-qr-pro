@@ -1,0 +1,72 @@
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const BASE = 'https://code-qr.stockcity.ru';
+const HOST = 'code-qr.stockcity.ru';
+const TOKEN = process.argv[2];
+const PORT = 9801;
+const CODE = '0104638230913287215ZsWrd';
+
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-czdiag-'));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--no-first-run', '--disable-gpu', '--no-sandbox', 'about:blank'], { stdio: 'ignore' });
+let target;
+for (let i = 0; i < 40; i += 1) {
+  try { const r = await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: 'PUT' }); if (r.ok) { target = await r.json(); break; } } catch { /* wait */ }
+  await sleep(250);
+}
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+let seq = 0; const pending = new Map();
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
+await new Promise((r) => { ws.onopen = r; });
+const send = (method, params = {}) => new Promise((r) => { const id = ++seq; pending.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+const evaluate = async (expr) => {
+  const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+  if (r.result?.exceptionDetails) return `EXCEPTION: ${r.result.exceptionDetails.text} ${r.result.exceptionDetails.exception?.description || ''}`;
+  return r.result?.result?.value;
+};
+
+await send('Runtime.enable');
+await send('Page.enable');
+await send('Network.setCookie', { name: 'cq_session', value: TOKEN, domain: HOST, path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
+await send('Page.navigate', { url: `${BASE}/app/reprint` });
+await sleep(3000);
+
+console.log('direct fetch from page:', await evaluate(`(async () => {
+  try {
+    const res = await fetch('https://mobile.api.crpt.ru/mobile/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'code=' + encodeURIComponent(${JSON.stringify(CODE)}),
+      credentials: 'omit'
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch {}
+    const category = data && data.category;
+    const catData = data && category ? data[category + 'Data'] : null;
+    return JSON.stringify({
+      status: res.status,
+      bytes: text.length,
+      codeFounded: data && data.codeFounded,
+      productName: data && data.productName,
+      category,
+      hasCatData: Boolean(catData),
+      statusField: catData && catData.status,
+      nominal: catData && catData.productProperty && catData.productProperty.nominalQuantity,
+      expiry: catData && catData.expirationDate,
+      produced: catData && catData.producedDate,
+      manufacturer: catData && catData.manufacturerName,
+      bodyHead: text.slice(0, 120)
+    });
+  } catch (e) {
+    return JSON.stringify({ error: String(e && e.message || e), name: e && e.name });
+  }
+})()`));
+
+ws.close();
+chrome.kill();
+try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* ignore */ }

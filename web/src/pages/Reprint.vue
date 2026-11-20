@@ -10,6 +10,7 @@ import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
+import { fetchCards } from '../lib/cz-public.js';
 
 const MAX = 5000;
 const categories = [
@@ -524,10 +525,32 @@ async function loadProductCards() {
   if (!valid.length) return;
   cardsLoading.value = true;
   try {
+    // 1) Публичная проверка ЧЗ из браузера клиента: серверы ЦРПТ блокируют IP дата-центров,
+    //    а с обычного IP пользователя карточка приходит полностью (CORS ЧЗ разрешает наш домен).
+    const publicCards = await fetchCards(valid.map((c) => c.code), 5);
+    const publicFound = publicCards.filter((c) => c && c.card).map((c) => ({
+      code: c.code,
+      gtin: c.card.gtin || c.card.ais?.gtin || '',
+      card: c.card,
+      cz: { configured: true, source: 'public' }
+    }));
+    const publicError = publicCards.map((c) => c.error).find(Boolean) || '';
+    if (publicFound.length) {
+      cards.value = publicFound;
+      if (publicError) cardsMessage.value = `Часть кодов не удалось проверить в ЧЗ: ${publicError}`;
+      return;
+    }
+    // 2) Серверный фолбэк: личный токен ЧЗ или открытые базы по GTIN.
     const r = await api.productCards(valid.slice(0, 10).map((c) => ({ code: c.code, gtin: c.gtin })));
     cards.value = (r.cards || []).filter((c) => c && !c.error);
+    if (publicError) {
+      cardsMessage.value = `Публичная проверка ЧЗ недоступна (${publicError}). `;
+    }
+    const czError = cards.value.map((c) => c.cz && c.cz.error).find(Boolean);
     if (!cards.value.some((c) => c.card)) {
-      cardsMessage.value = cards.value[0]?.message || 'Товар не найден в открытых источниках.';
+      cardsMessage.value += cards.value[0]?.message || 'Товар не найден в открытых источниках.';
+    } else if (czError) {
+      cardsMessage.value += `ЧЗ ответил: ${czError}. Показаны данные из открытого источника.`;
     }
   } catch (e) {
     cardsMessage.value = `Не удалось получить карточку товара: ${e.message}`;
@@ -586,7 +609,14 @@ function applyCard(item) {
   if (card.name && !product.name) product.name = card.name;
   if (card.producer && !product.manufacturer) product.manufacturer = card.producer;
   else if (card.brand && !product.manufacturer) product.manufacturer = card.brand;
-  if (card.quantity && !product.size) product.size = card.quantity;
+  if ((card.quantity || card.size) && !product.size) product.size = card.quantity || card.size;
+  if (card.structure && !product.composition) product.composition = card.structure;
+  if (card.material && !product.composition) product.composition = card.material;
+  if (card.productionDate && !product.date) product.date = card.productionDate;
+  if (card.expirationDate && !product.expiry) product.expiry = card.expirationDate;
+  if (card.productKind && !product.form) product.form = card.productKind;
+  if (card.model && !product.article) product.article = card.model;
+  if (card.color && !product.color) product.color = card.color;
   notice.value = 'Данные товара подставлены в этикетку';
 }
 
@@ -1012,17 +1042,25 @@ async function printLabels() {
                 <span v-if="c.card?.quantity"> · {{ c.card.quantity }}</span>
                 <span v-if="c.card?.producer"> · {{ c.card.producer }}</span>
               </div>
-              <div v-if="c.card && (c.card.model || c.card.size || c.card.color || c.card.material || c.card.structure || c.card.expirationDate)" class="text-xs text-slate-500 mt-0.5">
+              <div v-if="c.card && (c.card.model || c.card.size || c.card.color || c.card.material || c.card.structure || c.card.productionDate || c.card.expirationDate || c.card.serviceLife)" class="text-xs text-slate-500 mt-0.5">
                 <span v-if="c.card.model">модель {{ c.card.model }}</span>
                 <span v-if="c.card.size"> · размер {{ c.card.size }}</span>
                 <span v-if="c.card.color"> · цвет {{ c.card.color }}</span>
                 <span v-if="c.card.material"> · материал {{ c.card.material }}</span>
                 <span v-if="c.card.structure"> · состав {{ c.card.structure }}</span>
-                <span v-if="c.card.expirationDate"> · срок годности {{ c.card.expirationDate }}</span>
+                <span v-if="c.card.productionDate"> · изготовлен {{ c.card.productionDate }}</span>
+                <span v-if="c.card.expirationDate"> · годен до {{ c.card.expirationDate }}</span>
+                <span v-if="c.card.serviceLife"> · срок службы {{ c.card.serviceLife }}</span>
               </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 <span v-if="c.card" class="chip-soon !text-[10px] !py-0">{{ c.card.sourceLabel || 'открытые данные' }}</span>
                 <span v-if="c.card?.status" class="chip-soon !text-[10px] !py-0 ml-1">статус: {{ c.card.status }}</span>
+                <span
+                  v-if="c.card?.crypto"
+                  class="chip-soon !text-[10px] !py-0 ml-1"
+                  :class="c.card.crypto.verified ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'"
+                  :title="c.card.crypto.message || ''"
+                >криптоподпись: {{ c.card.crypto.verified ? 'проверена' : 'не проверена' }}</span>
                 <span v-if="c.history" class="chip-soon !text-[10px] !py-0 ml-1">из вашей истории: {{ c.history.jobName }}</span>
                 <span v-if="c.cz?.configured" class="ml-1">ЧЗ подключён</span>
                 <span v-else-if="c.cz?.error" class="ml-1">ЧЗ недоступен: {{ c.cz.error }}</span>

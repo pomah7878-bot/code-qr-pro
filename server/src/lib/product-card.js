@@ -34,7 +34,8 @@ const CZ_STATUS_RU = {
 async function publicMobileCheck(code) {
   if (!code) return null;
   try {
-    const url = `https://mobile.api.crpt.ru/mobile/check?code=${encodeURIComponent(code)}&codeType=datamatrix`;
+    const normalized = normalizeCzCode(code);
+    const url = `https://mobile.api.crpt.ru/mobile/check?code=${encodeURIComponent(normalized)}&codeType=datamatrix`;
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
@@ -83,6 +84,19 @@ export function gtinFromCode(code) {
   const digits = s.replace(/\D/g, '');
   if (digits.length >= 8 && digits.length <= 14) return digits.padStart(14, '0');
   return '';
+}
+
+/** Человекочитаемый код (01)…(21)… → машинный 01…21… (как ждёт ЧЗ). */
+export function normalizeCzCode(code) {
+  const source = String(code || '').trim();
+  if (/\(\d{2,4}\)/.test(source)) {
+    let out = '';
+    for (const m of source.matchAll(/\((\d{2,4})\)([^()]*)/g)) {
+      out += m[1] + String(m[2] || '').replace(/[\s\u001d\u00e8]/g, '');
+    }
+    if (out) return out;
+  }
+  return source.replace(/[\s\u001d\u00e8()]/g, '');
 }
 
 export function normalizeGtin(value) {
@@ -215,7 +229,7 @@ async function czLookup(code, gtin, userToken = '') {
   if (code) {
     try {
       const res = await fetch(`${base}/cises/info`, {
-        method: 'POST', headers: auth, body: JSON.stringify([String(code).trim()]), signal: AbortSignal.timeout(15000)
+        method: 'POST', headers: auth, body: JSON.stringify([normalizeCzCode(code)]), signal: AbortSignal.timeout(15000)
       });
       const data = await res.json().catch(() => ({}));
       const item = Array.isArray(data) ? data[0] : data;

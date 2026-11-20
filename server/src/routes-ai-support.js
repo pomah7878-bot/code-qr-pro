@@ -50,19 +50,21 @@ const PAGES = {
 };
 
 const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток). Помогаешь клиентам прямо в личном кабинете.
-Клиент находится в разделе кабинета: {{PAGE}}. Сначала пойми, что именно не получается в ЭТОМ разделе.
+Клиент находится в разделе кабинета: {{PAGE}}.
+
+Главное правило: РЕШАЙ проблему, а не переспрашивай. Дай конкретные шаги, что проверить и что сделать.
+Уточняющий вопрос допустим РОВНО ОДИН раз и только если сообщение клиента — одно-два слова без контекста («не работает», «помогите») и в диалоге ещё не было ответов. Если клиент уже что-то уточнил, если это продолжение диалога или вопрос понятен — сразу отвечай по делу, без вопросов. Никогда не задавай второй уточняющий вопрос подряд.
 
 Правила:
-1. Если вопрос короткий или непонятный — задай ОДИН короткий уточняющий вопрос и поставь clarify=true, не додумывай.
-2. Отвечай по-русски, по делу, шагами, 3–7 предложений или короткий список. Без markdown-заголовков.
-3. Опирайся ТОЛЬКО на статьи базы знаний ниже. Не выдумывай функции, цены и сроки.
-4. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
-5. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
-6. Не обещай действий от имени администратора. Если нужен доступ к аккаунту, сброс 2FA, разблокировка или вопрос про деньги — предложи «Передать в поддержку».
-7. Если не уверен — так и скажи и предложи поддержку.
+1. Отвечай по-русски, шагами, 3–7 предложений или короткий список. Без markdown-заголовков.
+2. Опирайся на статьи базы знаний ниже. Если в базе нет точного ответа — дай общий безопасный совет и предложи поддержку.
+3. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
+4. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
+5. Не обещай действий от имени администратора: если нужен доступ к аккаунту, сброс 2FA, разблокировка или вопрос про деньги — предложи «Передать в поддержку».
+6. Если не уверен — предложи поддержку, но не спрашивай одно и то же повторно.
 
 Верни строго JSON без markdown:
-{"answer":"ответ или уточняющий вопрос","clarify":true|false,"needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
+{"answer":"ответ по шагам или (только один раз) уточняющий вопрос","clarify":true|false,"needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
 
 export async function registerAiSupportRoutes(app) {
   app.post('/api/assistant/chat', { preHandler: requireAuth }, async (req, reply) => {
@@ -79,6 +81,13 @@ export async function registerAiSupportRoutes(app) {
     if (message.length < 3) return reply.code(400).send({ error: 'Опишите вопрос подробнее' });
     const pageKey = Object.prototype.hasOwnProperty.call(PAGES, String(req.body?.page || '')) ? String(req.body.page) : 'overview';
     const page = PAGES[pageKey];
+    // история диалога: чтобы помощник отвечал на уточнения, а не переспрашивал по кругу
+    const history = Array.isArray(req.body?.history)
+      ? req.body.history.slice(-8)
+        .map((m) => ({ role: m?.role === 'assistant' ? 'ассистент' : 'клиент', text: String(m?.text || '').trim().slice(0, 600) }))
+        .filter((m) => m.text)
+      : [];
+    const hadDialogue = history.some((m) => m.role === 'ассистент');
 
     const limit = bumpLimit(`ai-support:u${user.id}`, LIMIT_CHAT_PER_HOUR);
     if (!limit.ok) return reply.code(429).send({ error: 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.' });
@@ -94,26 +103,51 @@ export async function registerAiSupportRoutes(app) {
     let model = cfg.model;
     let error = '';
 
-    try {
+    const askPrompt = (extra) => [
+      history.length ? `Предыдущий диалог:\n${history.map((h) => `${h.role}: ${h.text}`).join('\n')}` : '',
+      `Раздел: ${page.label}`,
+      `Вопрос клиента: ${message}`,
+      `База знаний:\n${context || '(подходящих статей не найдено)'}`,
+      hadDialogue ? 'Это продолжение диалога: уточняющие вопросы ЗАПРЕЩЕНЫ, отвечай конкретными шагами.' : '',
+      extra || ''
+    ].filter(Boolean).join('\n\n');
+
+    const runAsk = async (extra) => {
       const res = await askAi({
         system: SYSTEM.replace('{{PAGE}}', page.label),
-        user: `Раздел: ${page.label}\nВопрос клиента: ${message}\n\nБаза знаний:\n${context || '(подходящих статей не найдено)'}`,
+        user: askPrompt(extra),
         cfg,
         freeMaxTokens: 900
       });
-      model = String(res.model || cfg.model).slice(0, 120);
       const parsed = res.parsed || {};
-      answer = String(parsed.answer || res.content || '').trim().slice(0, 3000);
-      clarify = Boolean(parsed.clarify);
-      needHuman = Boolean(parsed.needHuman);
-      reason = String(parsed.reason || '').slice(0, 300);
+      return {
+        model: String(res.model || cfg.model).slice(0, 120),
+        answer: String(parsed.answer || res.content || '').trim().slice(0, 3000),
+        clarify: Boolean(parsed.clarify),
+        needHuman: Boolean(parsed.needHuman),
+        reason: String(parsed.reason || '').slice(0, 300)
+      };
+    };
+
+    try {
+      let result = await runAsk();
+      // второй уточняющий вопрос подряд недопустим — просим модель дать решение
+      if (result.clarify && hadDialogue) {
+        result = await runAsk('Ответь без уточняющих вопросов: дай конкретные шаги решения.');
+        result.clarify = false;
+      }
+      model = result.model;
+      answer = result.answer;
+      clarify = result.clarify;
+      needHuman = result.needHuman;
+      reason = result.reason;
       if (!answer) throw new Error('Пустой ответ помощника');
     } catch (e) {
       error = String(e?.message || e).slice(0, 300);
       logEvent({
         level: 'warn', source: 'support', event: 'client_ai_failed',
         message: `Клиентский AI: ${error}`, userId: user.id, ip: req.ip, method: 'USER', url: req.url,
-        meta: { question: message.slice(0, 120) }
+        meta: { question: message.slice(0, 120), history: history.length }
       });
     }
 

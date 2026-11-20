@@ -46,13 +46,18 @@ async function ask() {
   busy.value = true;
   scrollChat();
   try {
-    const r = await api.assistantChat(text, 'assistant');
+    const history = messages.value
+      .filter((m) => m.role === 'q' || m.role === 'a')
+      .slice(-6)
+      .map((m) => ({ role: m.role === 'q' ? 'user' : 'assistant', text: m.text }));
+    const r = await api.assistantChat(text, 'assistant', history);
+    const repeatedClarify = Boolean(r.clarify) && history.length >= 2;
     messages.value.push({
       role: 'a',
       text: r.answer,
       sources: r.sources || [],
-      needHuman: Boolean(r.needHuman),
-      reason: r.reason || '',
+      needHuman: Boolean(r.needHuman) || repeatedClarify,
+      reason: r.reason || (repeatedClarify ? 'Помощник не смог решить — передайте администратору' : ''),
       model: r.model
     });
   } catch (e) {

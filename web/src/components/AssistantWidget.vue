@@ -66,13 +66,19 @@ async function ask() {
   busy.value = true;
   scrollChat();
   try {
-    const r = await api.assistantChat(text, pageKey.value);
+    // передаём историю диалога, чтобы помощник не переспрашивал одно и то же
+    const history = messages.value
+      .filter((m) => m.role === 'q' || m.role === 'a')
+      .slice(-6)
+      .map((m) => ({ role: m.role === 'q' ? 'user' : 'assistant', text: m.text }));
+    const r = await api.assistantChat(text, pageKey.value, history);
+    const repeatedClarify = Boolean(r.clarify) && history.length >= 2;
     messages.value.push({
       role: 'a',
       text: r.answer,
       clarify: Boolean(r.clarify),
-      needHuman: Boolean(r.needHuman),
-      reason: r.reason || '',
+      needHuman: Boolean(r.needHuman) || repeatedClarify,
+      reason: r.reason || (repeatedClarify ? 'Помощник не смог решить — передайте администратору' : ''),
       sources: r.sources || []
     });
   } catch (e) {

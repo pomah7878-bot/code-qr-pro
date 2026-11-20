@@ -7,7 +7,7 @@ import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSprea
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { downloadBlob, openPrintWindow } from '../lib/print.js';
+import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -618,7 +618,10 @@ async function exportPdf() {
       ? { template: tpl, jobId: jobId.value, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
     await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`);
-  } catch (e) { error.value = e.message; }
+    if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы».';
+  } catch (e) {
+    error.value = e.message;
+  }
 }
 
 async function exportPdfSingle() {
@@ -633,19 +636,28 @@ async function exportPdfSingle() {
       ? { template: tpl, jobId: jobId.value, single: true, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true, source: 'labels' };
     await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`);
-  } catch (e) { error.value = e.message; }
+    if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
+  } catch (e) {
+    error.value = e.message;
+  }
 }
 
 async function printLabels() {
   error.value = '';
   if (!dataRows.value.length) { error.value = 'Загрузите коды КИЗ или данные BarTender'; return; }
   if (dataRows.value.length > 1000) { error.value = 'Для печати из браузера — до 1000 этикеток'; return; }
+  // На iPhone/iPad печать идёт через PDF-просмотрщик Safari.
+  if (isIOS()) return exportPdfSingle();
+  const win = openPlaceholderWindow();
   try {
     const body = jobId.value != null
       ? { template: tpl, jobId: jobId.value, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
-    await openPrintWindow('/api/labels/print', body);
-  } catch (e) { error.value = e.message; }
+    await openPrintWindow('/api/labels/print', body, win);
+  } catch (e) {
+    try { win?.close?.(); } catch { /* ignore */ }
+    error.value = e.message;
+  }
 }
 
 function saveToken() { localStorage.setItem('cq_bridge_token', bridge.token); }

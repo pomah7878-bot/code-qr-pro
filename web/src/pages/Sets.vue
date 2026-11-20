@@ -6,7 +6,7 @@ import { normalizeScanInput, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { downloadBlob, openPrintWindow, isMobile } from '../lib/print.js';
+import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
 const plan = computed(() => store.plan || {});
 const premium = computed(() => Boolean(plan.value.labelEditor));
@@ -228,8 +228,8 @@ async function downloadPdf() {
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
     const blobUrl = await downloadBlob('/api/sets/pdf', payload, `nabor-${setCount.value}.pdf`);
-    if (isMobile()) {
-      notice.value = 'PDF открыт в новой вкладке — нажмите «…» → «Скачать файл».';
+    if (isIOS()) {
+      notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
     } else {
       notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     }
@@ -247,6 +247,9 @@ async function printSets() {
   error.value = ''; notice.value = '';
   if (!premium.value) { error.value = 'Печать наборов доступна на тарифе PREMIUM'; return; }
   if (!canPrint.value) { error.value = 'Заполните карточку набора и вставьте нужное количество кодов'; return; }
+  // На iPhone/iPad window.print() в отдельном окне не работает — печатаем через PDF.
+  if (isIOS()) return downloadPdf();
+  const win = openPlaceholderWindow();
   try {
     const payload = {
       template: { ...templateBody(), showComposition: form.showComposition, onlySet: form.onlySet },
@@ -255,9 +258,12 @@ async function printSets() {
         gtin: c.gtin, name: c.name, qty: c.qty, codes: lines(componentTexts.value[i]?.codesText || '')
       }))
     };
-    await openPrintWindow('/api/sets/print', payload);
+    await openPrintWindow('/api/sets/print', payload, win);
     notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
-  } catch (e) { error.value = e.message; }
+  } catch (e) {
+    try { win?.close?.(); } catch { /* ignore */ }
+    error.value = e.message;
+  }
 }
 
 onMounted(() => loadTemplates());
@@ -386,7 +392,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>
           <p class="text-xs text-slate-500">При печати выбери бумагу {{ form.format.replace('x', '×') }} мм; Adobe PDF/A4 добавит белые поля.</p>
-          <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
+          <a v-if="pdfUrl" :href="pdfUrl" download="nabor.pdf" target="_blank" rel="noopener" class="block text-center text-sm py-2 px-3 rounded-xl border border-brand-500/40 text-brand-400 font-medium">Открыть PDF ещё раз</a>
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
         </div>

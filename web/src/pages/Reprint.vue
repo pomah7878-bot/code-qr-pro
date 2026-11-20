@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { parseKiz, readDataFile } from '../lib/labelData.js';
@@ -7,7 +7,7 @@ import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { downloadBlob, openPrintWindow, isMobile } from '../lib/print.js';
+import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
 const MAX = 1000;
 const categories = [
@@ -390,6 +390,41 @@ watch(category, (id) => {
 const currentFormat = computed(() => formats.find((f) => f.id === format.value) || formats[0]);
 const premium = computed(() => !!store.plan?.labelEditor);
 onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
+
+// Черновик: на iOS PDF открывается в той же вкладке, и без этого после
+// возврата «Назад» введённые коды и данные товара пропали бы.
+const DRAFT_KEY = 'cq_reprint_draft';
+function saveDraft() {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+      at: Date.now(),
+      codesText: codesText.value,
+      product: { ...product },
+      format: format.value,
+      qrOnly: qrOnly.value,
+      qrMargin: qrMargin.value,
+      barcodeFormat: barcodeFormat.value,
+      fields: { ...fields }
+    }));
+  } catch { /* приватный режим — не сохраняем */ }
+}
+function restoreDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || Date.now() - Number(d.at || 0) > 30 * 60 * 1000) return;
+    if (typeof d.codesText === 'string') codesText.value = d.codesText;
+    if (d.product && typeof d.product === 'object') Object.assign(product, d.product);
+    if (d.format) format.value = d.format;
+    if (typeof d.qrOnly === 'boolean') qrOnly.value = d.qrOnly;
+    if (d.qrMargin != null) qrMargin.value = d.qrMargin;
+    if (d.barcodeFormat) barcodeFormat.value = d.barcodeFormat;
+    if (d.fields && typeof d.fields === 'object') Object.assign(fields, d.fields);
+  } catch { /* битый черновик — игнорируем */ }
+}
+onMounted(restoreDraft);
+
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
 const infoRows = computed(() => productInfo.value.map((p) => ({
   ...p,
@@ -615,9 +650,10 @@ async function downloadPdf() {
     }));
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
+    if (isIOS()) saveDraft();
     const blobUrl = await downloadBlob('/api/labels/pdf', { template, rows, single: true, source: 'reprint' }, `reprint-${rows.length}.pdf`);
-    if (isMobile()) {
-      notice.value = 'PDF открыт в новой вкладке — нажмите «…» → «Скачать файл».';
+    if (isIOS()) {
+      notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
     } else {
       notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     }
@@ -635,6 +671,10 @@ async function printLabels() {
   error.value = ''; notice.value = '';
   if (!premium.value) { error.value = 'Печать доступна на тарифе PREMIUM'; return; }
   if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
+  // На iPhone/iPad window.print() для отдельного окна не работает:
+  // открываем PDF в просмотрщике Safari, откуда идёт печать.
+  if (isIOS()) return downloadPdf();
+  const win = openPlaceholderWindow();
   busy.value = true;
   try {
     if (!result.value?.valid.length) {
@@ -658,9 +698,10 @@ async function printLabels() {
       expiry: String(product.expiry || '').trim(), date: String(product.date || '').trim(),
       composition: String(product.composition || '').trim(), manufacturer: String(product.manufacturer || '').trim()
     }));
-    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' });
+    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' }, win);
     notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
   } catch (e) {
+    try { win?.close?.(); } catch { /* ignore */ }
     error.value = e.message;
   } finally { busy.value = false; }
 }
@@ -748,7 +789,7 @@ async function printLabels() {
           </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
           <p class="text-xs text-slate-500">При печати выберите принтер этикеток и бумагу {{ currentFormat.w }}×{{ currentFormat.h }} мм. Adobe PDF/A4 добавит белые поля.</p>
-          <a v-if="pdfUrl" :href="pdfUrl" target="_blank" rel="noopener" class="block text-center text-xs text-brand-400 font-medium">Если файл не скачался — открыть PDF в новой вкладке</a>
+          <a v-if="pdfUrl" :href="pdfUrl" download="reprint.pdf" target="_blank" rel="noopener" class="block text-center text-sm py-2 px-3 rounded-xl border border-brand-500/40 text-brand-400 font-medium">Открыть PDF ещё раз</a>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>
           <ValidHint v-if="result" class="mt-1" />
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>

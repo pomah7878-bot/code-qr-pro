@@ -4,6 +4,7 @@ import { planOf } from './plans.js';
 import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin, dataMatrixPng } from './sets.js';
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
+import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
 
 const rowToTemplate = (r) => ({
   id: r.id,
@@ -77,6 +78,39 @@ export async function registerSetRoutes(app) {
     } catch (e) {
       return reply.code(e.statusCode || 502).send({ error: String(e?.message || e) });
     }
+  });
+
+  // Короткоживущая ссылка на PDF — для iOS Safari, который не открывает
+  // PDF из blob: и не сохраняет их через download.
+  app.post('/api/sets/pdf/ticket', { preHandler: requireAuth }, async (req, reply) => {
+    const plan = planOf(req.user);
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать наборов доступна на тарифе PREMIUM' });
+    const p = normalizeSetPayload(req.body);
+    const error = validateSetPayload(p);
+    if (error) return reply.code(400).send({ error });
+    try {
+      const pdf = await renderSetsPdf(p);
+      const id = putPdfTicket(req.user.id, pdf, 'nabor.pdf');
+      if (!id) return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество наборов' });
+      logActivity(req.user, 'sets_pdf', 'PDF наборов', {
+        total: p.setCodes.length,
+        ok: p.setCodes.length,
+        meta: { setGtin: p.setGtin, components: p.components.length, onlySet: p.onlySet }
+      });
+      return { id, url: `/api/sets/pdf/file/${id}`, name: 'nabor.pdf' };
+    } catch (e) {
+      return reply.code(e.statusCode || 502).send({ error: String(e?.message || e) });
+    }
+  });
+
+  app.get('/api/sets/pdf/file/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const item = getPdfTicket(req.params.id, req.user.id);
+    if (!item) return reply.code(404).send({ error: 'Ссылка устарела — сформируйте PDF заново' });
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `inline; filename="${item.name}"`);
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Cache-Control', 'private, no-store');
+    return reply.send(item.buffer);
   });
 
   app.post('/api/sets/print', { preHandler: requireAuth }, async (req, reply) => {

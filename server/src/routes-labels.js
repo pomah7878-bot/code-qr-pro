@@ -5,6 +5,7 @@ import { resolveElements, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
+import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
 
 const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode', 'text', 'field'];
 
@@ -100,26 +101,60 @@ export async function registerLabelRoutes(app) {
     return { widthMm: Number(template.widthMm), heightMm: Number(template.heightMm), dpi: Number(template.dpi), elements };
   });
 
+  // Подготовка набора строк для PDF: либо готовые rows, либо строки задания.
+  function resolvePdfRows(user, body, reply) {
+    const { jobId, rows } = body || {};
+    if (Array.isArray(rows)) {
+      const dataRows = cleanDataRows(rows);
+      if (!dataRows) {
+        reply.code(400).send({ error: 'Нужны строки данных (до 10 000)' });
+        return null;
+      }
+      return dataRows;
+    }
+    if (jobId == null) {
+      reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
+      return null;
+    }
+    const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, user.id);
+    if (!job) {
+      reply.code(404).send({ error: 'Задание не найдено' });
+      return null;
+    }
+    if (job.status !== 'done') {
+      reply.code(409).send({ error: 'Генерация ещё не завершена' });
+      return null;
+    }
+    const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
+    return items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
+  }
+
+  async function buildLabelsPdf(template, dataRows, singlePage) {
+    const K = 72 / 25.4;
+    const pageSize = singlePage ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
+    const doc = new PDFDocument({ size: pageSize, margin: 0 });
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const ended = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+    await renderLabelsPdf(doc, template, dataRows, { single: singlePage });
+    doc.end();
+    await ended;
+    return Buffer.concat(chunks);
+  }
+
   // PDF-лист А4 с сеткой этикеток по всем сгенерированным строкам задания
   app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
     if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
-    const { template, jobId, rows, single } = req.body || {};
+    const { template, single } = req.body || {};
     const err = validateTemplate(template);
     if (err) return reply.code(400).send({ error: err });
     const singlePage = single === true;
-    let dataRows;
-    if (Array.isArray(rows)) {
-      dataRows = cleanDataRows(rows);
-      if (!dataRows) return reply.code(400).send({ error: 'Нужны строки данных (до 10 000)' });
-    } else {
-      if (jobId == null) return reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
-      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
-      if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
-      if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
-      const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
-      dataRows = items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
-    }
+    const dataRows = resolvePdfRows(req.user, req.body, reply);
+    if (!dataRows) return reply;
     const K = 72 / 25.4;
     const pageSize = singlePage ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
     reply.hijack();
@@ -131,9 +166,42 @@ export async function registerLabelRoutes(app) {
     logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
       total: dataRows.length,
       ok: dataRows.length,
-      meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: jobId ?? null }
+      meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: req.body?.jobId ?? null }
     });
     return reply;
+  });
+
+  // PDF через короткоживущую ссылку: нужен для iOS Safari, который не умеет
+  // открывать PDF из blob: и не сохраняет их через download.
+  app.post('/api/labels/pdf/ticket', { preHandler: requireAuth }, async (req, reply) => {
+    const plan = planOf(req.user);
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
+    const { template, single } = req.body || {};
+    const err = validateTemplate(template);
+    if (err) return reply.code(400).send({ error: err });
+    const dataRows = resolvePdfRows(req.user, req.body, reply);
+    if (!dataRows) return reply;
+    const singlePage = single === true;
+    const pdf = await buildLabelsPdf(template, dataRows, singlePage);
+    const name = req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf';
+    const id = putPdfTicket(req.user.id, pdf, name);
+    if (!id) return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество этикеток' });
+    logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
+      total: dataRows.length,
+      ok: dataRows.length,
+      meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: req.body?.jobId ?? null }
+    });
+    return { id, url: `/api/labels/pdf/file/${id}`, name };
+  });
+
+  app.get('/api/labels/pdf/file/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const item = getPdfTicket(req.params.id, req.user.id);
+    if (!item) return reply.code(404).send({ error: 'Ссылка устарела — сформируйте PDF заново' });
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', `inline; filename="${item.name}"`);
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Cache-Control', 'private, no-store');
+    return reply.send(item.buffer);
   });
 
   // HTML-версия для печати прямо из браузера (без скачивания PDF)

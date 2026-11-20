@@ -1,7 +1,7 @@
 import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader';
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
 
-const options = {
+const cameraOptions = {
   formats: ['DataMatrix'],
   textMode: 'Plain',
   tryHarder: true,
@@ -9,6 +9,18 @@ const options = {
   tryInvert: true,
   tryDownscale: true,
   maxNumberOfSymbols: 3
+};
+
+// Разбор целой страницы PDF (импорт старых этикеток): на странице-листе кодов
+// может быть много, поэтому лимит символов выше и без поиска по центру.
+const pageOptions = {
+  formats: ['DataMatrix'],
+  textMode: 'Plain',
+  tryHarder: true,
+  tryRotate: true,
+  tryInvert: true,
+  tryDownscale: true,
+  maxNumberOfSymbols: 200
 };
 
 let readyPromise = null;
@@ -32,15 +44,25 @@ function cropCenter(image, scale) {
   return out;
 }
 
+function validTexts(results) {
+  return (results || []).filter((r) => r.isValid && r.text).map((r) => r.text);
+}
+
 self.onmessage = async ({ data }) => {
-  if (data?.type !== 'decode') return;
   try {
     await prepare();
+    if (data?.type === 'decodePage') {
+      const image = new ImageData(new Uint8ClampedArray(data.buffer), data.width, data.height);
+      const results = await readBarcodes(image, pageOptions);
+      self.postMessage({ id: data.id, texts: validTexts(results) });
+      return;
+    }
+    if (data?.type !== 'decode') return;
     const image = new ImageData(new Uint8ClampedArray(data.buffer), data.width, data.height);
-    let results = await readBarcodes(image, options);
+    let results = await readBarcodes(image, cameraOptions);
     if (!results.some((r) => r.isValid) && performance.now() >= nextFallbackAt) {
       for (const scale of [0.75, 0.5]) {
-        const cropped = await readBarcodes(cropCenter(image, scale), options);
+        const cropped = await readBarcodes(cropCenter(image, scale), cameraOptions);
         if (cropped.some((r) => r.isValid)) { results = cropped; break; }
       }
       nextFallbackAt = performance.now() + 750;

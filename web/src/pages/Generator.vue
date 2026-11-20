@@ -1,6 +1,5 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue';
-import * as XLSX from 'xlsx';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { importPdf } from '../lib/pdfImport.js';
@@ -95,6 +94,8 @@ async function onFile(ev) {
     if (/\.txt$/i.test(file.name)) {
       rows.value = (await file.text()).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     } else {
+      // xlsx грузим только для таблиц, а не при открытии страницы.
+      const XLSX = await import('xlsx');
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       rows.value = extractRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));

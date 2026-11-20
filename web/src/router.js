@@ -1,33 +1,38 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { store } from './store.js';
 import { applySeo } from './lib/seo.js';
-import Landing from './pages/Landing.vue';
-import Login from './pages/Login.vue';
-import Register from './pages/Register.vue';
-import Dashboard from './pages/Dashboard.vue';
-import Generator from './pages/Generator.vue';
-import Labels from './pages/Labels.vue';
-import Reprint from './pages/Reprint.vue';
-import Security from './pages/Security.vue';
-import History from './pages/History.vue';
-import Sets from './pages/Sets.vue';
-import Billing from './pages/Billing.vue';
-import ApiKeys from './pages/ApiKeys.vue';
-import Cz from './pages/Cz.vue';
-import Reviews from './pages/Reviews.vue';
-import AdminLayout from './pages/admin/AdminLayout.vue';
-import AdminOverview from './pages/admin/AdminOverview.vue';
-import AdminUsers from './pages/admin/AdminUsers.vue';
-import AdminUser from './pages/admin/AdminUser.vue';
-import AdminOrders from './pages/admin/AdminOrders.vue';
-import AdminJobs from './pages/admin/AdminJobs.vue';
-import AdminAudit from './pages/admin/AdminAudit.vue';
-import AdminLogs from './pages/admin/AdminLogs.vue';
-import AdminMarketing from './pages/admin/AdminMarketing.vue';
-import AdminSettings from './pages/admin/AdminSettings.vue';
-import AdminStorage from './pages/admin/AdminStorage.vue';
-import AdminAds from './pages/admin/AdminAds.vue';
-import NotFound from './pages/NotFound.vue';
+
+// Лендинг грузим сразу (это первый экран для большинства посетителей),
+// остальные страницы — отдельными чанками по требованию. Раньше весь
+// интерфейс (включая xlsx для импорта и админку) лежал в одном файле
+// ~850 КБ и скачивался даже на /app/reprint и /login.
+const Landing = () => import('./pages/Landing.vue');
+const Login = () => import('./pages/Login.vue');
+const Register = () => import('./pages/Register.vue');
+const Dashboard = () => import('./pages/Dashboard.vue');
+const Generator = () => import('./pages/Generator.vue');
+const Labels = () => import('./pages/Labels.vue');
+const Reprint = () => import('./pages/Reprint.vue');
+const Security = () => import('./pages/Security.vue');
+const History = () => import('./pages/History.vue');
+const Sets = () => import('./pages/Sets.vue');
+const Billing = () => import('./pages/Billing.vue');
+const ApiKeys = () => import('./pages/ApiKeys.vue');
+const Cz = () => import('./pages/Cz.vue');
+const Reviews = () => import('./pages/Reviews.vue');
+const AdminLayout = () => import('./pages/admin/AdminLayout.vue');
+const AdminOverview = () => import('./pages/admin/AdminOverview.vue');
+const AdminUsers = () => import('./pages/admin/AdminUsers.vue');
+const AdminUser = () => import('./pages/admin/AdminUser.vue');
+const AdminOrders = () => import('./pages/admin/AdminOrders.vue');
+const AdminJobs = () => import('./pages/admin/AdminJobs.vue');
+const AdminAudit = () => import('./pages/admin/AdminAudit.vue');
+const AdminLogs = () => import('./pages/admin/AdminLogs.vue');
+const AdminMarketing = () => import('./pages/admin/AdminMarketing.vue');
+const AdminSettings = () => import('./pages/admin/AdminSettings.vue');
+const AdminStorage = () => import('./pages/admin/AdminStorage.vue');
+const AdminAds = () => import('./pages/admin/AdminAds.vue');
+const NotFound = () => import('./pages/NotFound.vue');
 
 const router = createRouter({
   history: createWebHistory(),

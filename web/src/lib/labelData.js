@@ -1,5 +1,12 @@
 // Данные для редактора этикеток: КИЗ из PDF/CSV и таблицы из BarTender.
-import * as XLSX from 'xlsx';
+// xlsx (~400 КБ) грузится только когда пользователь реально выбрал таблицу —
+// раньше он попадал в стартовый бандл и замедлял загрузку любой страницы.
+let xlsxPromise = null;
+
+function loadXlsx() {
+  if (!xlsxPromise) xlsxPromise = import('xlsx');
+  return xlsxPromise;
+}
 
 export function toParen(raw) {
   const s = String(raw || '').trim();
@@ -191,6 +198,7 @@ export async function readDataFile(file) {
     return { ...result, warning: '' };
   }
   if (['xlsx', 'xls'].includes(ext)) {
+    const XLSX = await loadXlsx();
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const table = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
@@ -210,6 +218,7 @@ export async function readDataFile(file) {
 }
 
 export async function readSpreadsheet(file) {
+  const XLSX = await loadXlsx();
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });

@@ -1,5 +1,5 @@
 ﻿#!/usr/bin/env bash
-# E2E: AI-РїРѕРјРѕС‰РЅРёРє С‡РµСЂРµР· DSH headless РЅР° СЃРµСЂРІРµСЂРµ (СЂРµР°Р»СЊРЅС‹Р№ РІС‹Р·РѕРІ РјРѕРґРµР»Рё).
+# E2E: AI-помощник через DSH headless на сервере (реальный вызов модели).
 set -uo pipefail
 cd /opt/code-qr/server
 
@@ -41,9 +41,9 @@ pid=$(systemctl show -p MainPID --value code-qr)
 tr '\0' '\n' < "/proc/$pid/environ" | grep -E '^(DSH_HOME|HOME)=' || true
 tr '\0' '\n' < "/proc/$pid/environ" | awk -F= '/^DEEPSEEK_API_KEY=/ { print "DEEPSEEK_API_KEY length=" length($2) }'
 
-echo "== ask via dsh backend (РјРѕР¶РµС‚ Р·Р°РЅСЏС‚СЊ РґРѕ 90 СЃРµРєСѓРЅРґ) =="
+echo "== ask via dsh backend (может занять до 90 секунд) =="
 time curl -sS -X POST "$BASE/api/admin/ai/ask" -H "Cookie: cq_session=$TOKEN" -H "$ORIGIN" -H 'Content-Type: application/json' \
-  -d "{\"userId\":$CLIENT_ID,\"question\":\"РљР»РёРµРЅС‚ РЅРµ РјРѕР¶РµС‚ РІРѕР№С‚Рё, С‡С‚Рѕ РїСЂРѕРІРµСЂРёС‚СЊ Рё С‡С‚Рѕ СЃРґРµР»Р°С‚СЊ?\"}" -o /tmp/ai-dsh.json -w 'ask: %{http_code}\n'
+  -d "{\"userId\":$CLIENT_ID,\"question\":\"Клиент не может войти, что проверить и что сделать?\"}" -o /tmp/ai-dsh.json -w 'ask: %{http_code}\n'
 node -e "
 const fs = require('node:fs');
 const d = JSON.parse(fs.readFileSync('/tmp/ai-dsh.json', 'utf8'));

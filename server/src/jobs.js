@@ -13,8 +13,8 @@ import { s3Configured, uploadArtifact, deleteArtifact } from './lib/s3.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const JOBS_DIR = process.env.JOBS_DIR || join(__dirname, '..', 'data', 'jobs');
 
-// Р·Р°РґР°РЅРёСЏ, РїСЂРµСЂРІР°РЅРЅС‹Рµ РїРµСЂРµР·Р°РїСѓСЃРєРѕРј СЃРµСЂРІРµСЂР°, РїРѕРјРµС‡Р°РµРј РѕС€РёР±РєРѕР№
-db.prepare("UPDATE generation_jobs SET status='error', error='РџСЂРµСЂРІР°РЅРѕ РїРµСЂРµР·Р°РїСѓСЃРєРѕРј СЃРµСЂРІРµСЂР°', finished_at=datetime('now') WHERE status IN ('queued','running')").run();
+// задания, прерванные перезапуском сервера, помечаем ошибкой
+db.prepare("UPDATE generation_jobs SET status='error', error='Прервано перезапуском сервера', finished_at=datetime('now') WHERE status IN ('queued','running')").run();
 
 const queue = [];
 let running = false;
@@ -128,7 +128,7 @@ async function trimUserStorage(userId, keepJobId, plan, incomingSize) {
   return used + incomingSize <= quota;
 }
 
-// РЈРїР°РєРѕРІС‹РІР°РµРј СЂРµР·СѓР»СЊС‚Р°С‚ РѕРґРёРЅ СЂР°Р· РІ ZIP, РїРѕСЃР»Рµ С‡РµРіРѕ РїРѕСЃС‚СЂРѕС‡РЅС‹Рµ PNG РјРѕР¶РЅРѕ СѓРґР°Р»РёС‚СЊ.
+// Упаковываем результат один раз в ZIP, после чего построчные PNG можно удалить.
 export async function archiveJob(jobId) {
   const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(jobId);
   if (!job || job.status !== 'done') return null;
@@ -172,12 +172,12 @@ export async function archiveJob(jobId) {
   const sha = await sha256File(tmp);
   if (size > Number(plan.archiveMb || 0) * 1024 * 1024) {
     try { unlinkSync(tmp); } catch { /* ignore */ }
-    throw new Error(`РђСЂС…РёРІ ${(size / 1024 / 1024).toFixed(1)} РњР‘ Р±РѕР»СЊС€Рµ Р»РёРјРёС‚Р° ${plan.archiveMb} РњР‘`);
+    throw new Error(`Архив ${(size / 1024 / 1024).toFixed(1)} МБ больше лимита ${plan.archiveMb} МБ`);
   }
   const fits = await trimUserStorage(job.user_id, job.id, plan, size);
   if (!fits) {
     try { unlinkSync(tmp); } catch { /* ignore */ }
-    throw new Error(`РќРµ С…РІР°С‚Р°РµС‚ РјРµСЃС‚Р° РІ Р°СЂС…РёРІРµ: РЅСѓР¶РЅРѕ ${(size / 1024 / 1024).toFixed(1)} РњР‘, Р»РёРјРёС‚ ${plan.archiveMb} РњР‘`);
+    throw new Error(`Не хватает места в архиве: нужно ${(size / 1024 / 1024).toFixed(1)} МБ, лимит ${plan.archiveMb} МБ`);
   }
   let backend = 'local';
   if (s3Configured()) {
@@ -197,7 +197,7 @@ export async function archiveJob(jobId) {
          expires_at=COALESCE(expires_at, datetime('now','+' || ? || ' days'))
      WHERE id=?`
   ).run(key, size, sha, backend, days, job.id);
-  // РїРѕСЃС‚СЂРѕС‡РЅС‹Рµ С„Р°Р№Р»С‹ Р±РѕР»СЊС€Рµ РЅРµ РЅСѓР¶РЅС‹: PNG/SVG РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РїРµСЂРµСЃРѕР±РµСЂСѓС‚СЃСЏ РёР· Р‘Р”
+  // построчные файлы больше не нужны: PNG/SVG при необходимости пересоберутся из БД
   try { rmSync(join(JOBS_DIR, String(job.id)), { recursive: true, force: true }); } catch { /* ignore */ }
   return { key, size, sha, backend };
 }

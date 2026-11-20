@@ -86,7 +86,7 @@ function userFilters(query) {
 }
 
 export async function registerAdminUserRoutes(app) {
-  // РЎРїРёСЃРѕРє РєР»РёРµРЅС‚РѕРІ: РїРѕРёСЃРє, С„РёР»СЊС‚СЂС‹, РїР°РіРёРЅР°С†РёСЏ
+  // Список клиентов: поиск, фильтры, пагинация
   app.get('/api/admin/users', { preHandler: requireStaff }, async (req) => {
     const { page, per, offset } = paging(req.query);
     const { whereSql, params } = userFilters(req.query);
@@ -114,15 +114,15 @@ export async function registerAdminUserRoutes(app) {
       FROM users u ${whereSql} ORDER BY u.id DESC LIMIT 10000
     `).all(...params);
     return sendCsv(reply, 'code-qr-users.csv',
-      ['ID', 'Email', 'РРјСЏ', 'Р РѕР»СЊ', 'РўР°СЂРёС„', 'РЎС‚Р°С‚СѓСЃ', 'Р РµРіРёСЃС‚СЂР°С†РёСЏ', 'РџРѕСЃР»РµРґРЅРёР№ РІС…РѕРґ', 'PREMIUM РґРѕ'],
+      ['ID', 'Email', 'Имя', 'Роль', 'Тариф', 'Статус', 'Регистрация', 'Последний вход', 'PREMIUM до'],
       rows.map((u) => [u.id, u.email, u.name, u.role, u.plan, u.status, u.created_at, u.last_login_at || '', u.premium_until || ''])
     );
   });
 
-  // РљР°СЂС‚РѕС‡РєР° РєР»РёРµРЅС‚Р°: РІСЃС‘, С‡С‚Рѕ РЅСѓР¶РЅРѕ РґР»СЏ СЂРµС€РµРЅРёСЏ РїРѕ РЅРµРјСѓ
+  // Карточка клиента: всё, что нужно для решения по нему
   app.get('/api/admin/users/:id', { preHandler: requireStaff }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const subscription = activeSub(user.id);
     const subscriptions = db.prepare('SELECT * FROM subscriptions WHERE user_id=? ORDER BY id DESC LIMIT 20').all(user.id);
     const orders = db.prepare('SELECT * FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50').all(user.id);
@@ -143,16 +143,16 @@ export async function registerAdminUserRoutes(app) {
     };
   });
 
-  // Р’С‹РґР°С‚СЊ РёР»Рё РїСЂРѕРґР»РёС‚СЊ PREMIUM РЅР° РїСЂРѕРёР·РІРѕР»СЊРЅС‹Р№ СЃСЂРѕРє
+  // Выдать или продлить PREMIUM на произвольный срок
   app.post('/api/admin/users/:id/grant', { preHandler: requireAdmin }, async (req, reply) => {
     const days = Math.round(Number(req.body?.days));
     if (!Number.isFinite(days) || days < 1 || days > 3650) {
-      return reply.code(400).send({ error: 'РЎСЂРѕРє: РѕС‚ 1 РґРѕ 3650 РґРЅРµР№' });
+      return reply.code(400).send({ error: 'Срок: от 1 до 3650 дней' });
     }
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     activatePremium(user.id, 'admin', null, null, days);
-    notifyStatusChange(user, `РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ РІС‹РґР°Р» PREMIUM РЅР° ${days} РґРЅ.`);
+    notifyStatusChange(user, `Администратор выдал PREMIUM на ${days} дн.`);
     audit(req, 'user.grant', 'user', user.id, { days });
     const sub = activeSub(user.id);
     return { ok: true, premiumUntil: sub?.expires_at || null, user: publicAdminUser(getUser(user.id)) };
@@ -160,30 +160,30 @@ export async function registerAdminUserRoutes(app) {
 
   app.post('/api/admin/users/:id/revoke', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     db.transaction(() => {
       db.prepare("UPDATE subscriptions SET status='expired' WHERE user_id=? AND status='active'").run(user.id);
       db.prepare("UPDATE users SET plan='free' WHERE id=?").run(user.id);
     })();
-    notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ СЃРЅСЏР» PREMIUM');
+    notifyStatusChange(user, 'Администратор снял PREMIUM');
     audit(req, 'user.revoke', 'user', user.id, {});
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
-  // Р‘Р»РѕРєРёСЂРѕРІРєР°: СЃРµСЃСЃРёРё СѓРґР°Р»СЏСЋС‚СЃСЏ, РІС…РѕРґ Р·Р°РїСЂРµС‰С‘РЅ
+  // Блокировка: сессии удаляются, вход запрещён
   app.post('/api/admin/users/:id/block', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
-    if (user.id === req.user.id) return reply.code(400).send({ error: 'РЎРµР±СЏ Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ РЅРµР»СЊР·СЏ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Себя блокировать нельзя' });
     if (user.role === 'admin' && adminCount() <= 1) {
-      return reply.code(400).send({ error: 'РќРµР»СЊР·СЏ Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ РїРѕСЃР»РµРґРЅРµРіРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°' });
+      return reply.code(400).send({ error: 'Нельзя блокировать последнего администратора' });
     }
     const reason = String(req.body?.reason || '').trim().slice(0, 200);
     db.transaction(() => {
       db.prepare("UPDATE users SET status='blocked', blocked_at=datetime('now'), blocked_reason=? WHERE id=?").run(reason, user.id);
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     })();
-    notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°Р» Р°РєРєР°СѓРЅС‚' + (reason ? ': ' + reason : ''));
+    notifyStatusChange(user, 'Администратор заблокировал аккаунт' + (reason ? ': ' + reason : ''));
     audit(req, 'user.block', 'user', user.id, { reason });
     const notified = await notifyClient(user, 'account_blocked', { reason });
     return { ok: true, notified, user: publicAdminUser(getUser(user.id)) };
@@ -191,9 +191,9 @@ export async function registerAdminUserRoutes(app) {
 
   app.post('/api/admin/users/:id/unblock', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     db.prepare("UPDATE users SET status='active', blocked_at=NULL, blocked_reason='' WHERE id=?").run(user.id);
-    notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°Р» Р°РєРєР°СѓРЅС‚');
+    notifyStatusChange(user, 'Администратор разблокировал аккаунт');
     audit(req, 'user.unblock', 'user', user.id, {});
     const notified = await notifyClient(user, 'access_restored', {});
     return { ok: true, notified, user: publicAdminUser(getUser(user.id)) };
@@ -201,75 +201,75 @@ export async function registerAdminUserRoutes(app) {
 
   app.post('/api/admin/users/:id/role', { preHandler: requireAdmin }, async (req, reply) => {
     const role = String(req.body?.role || '');
-    if (!ROLES.includes(role)) return reply.code(400).send({ error: 'Р РѕР»СЊ: user, support РёР»Рё admin' });
+    if (!ROLES.includes(role)) return reply.code(400).send({ error: 'Роль: user, support или admin' });
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
-    if (user.id === req.user.id) return reply.code(400).send({ error: 'РЎРІРѕСЋ СЂРѕР»СЊ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Свою роль менять нельзя' });
     if (user.role === 'admin' && role !== 'admin' && adminCount() <= 1) {
-      return reply.code(400).send({ error: 'РќРµР»СЊР·СЏ СЃРЅСЏС‚СЊ РїРѕСЃР»РµРґРЅРµРіРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°' });
+      return reply.code(400).send({ error: 'Нельзя снять последнего администратора' });
     }
     const before = user.role;
     db.prepare('UPDATE users SET role=? WHERE id=?').run(role, user.id);
-    notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ РёР·РјРµРЅРёР» СЂРѕР»СЊ: ' + role);
+    notifyStatusChange(user, 'Администратор изменил роль: ' + role);
     audit(req, 'user.role', 'user', user.id, { from: before, to: role });
     return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
-  // Р’СЂРµРјРµРЅРЅС‹Р№ РїР°СЂРѕР»СЊ: РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РѕРґРёРЅ СЂР°Р·, РїСЂРё РІС…РѕРґРµ С‚СЂРµР±СѓРµС‚СЃСЏ СЃРјРµРЅР°
+  // Временный пароль: показывается один раз, при входе требуется смена
   app.post('/api/admin/users/:id/password-reset', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
-    if (user.id === req.user.id) return reply.code(400).send({ error: 'РЎРІРѕР№ РїР°СЂРѕР»СЊ РјРµРЅСЏРµС‚СЃСЏ РІ РїСЂРѕС„РёР»Рµ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Свой пароль меняется в профиле' });
     const password = tempPassword(12);
     db.transaction(() => {
       db.prepare('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?')
         .run(hashPassword(password), user.id);
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     })();
-    notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ СЃР±СЂРѕСЃРёР» РїР°СЂРѕР»СЊ вЂ” РїРѕС‚СЂРµР±СѓРµС‚СЃСЏ СЃРјРµРЅР° РїСЂРё РІС…РѕРґРµ');
+    notifyStatusChange(user, 'Администратор сбросил пароль — потребуется смена при входе');
     audit(req, 'user.password_reset', 'user', user.id, {});
-    return { ok: true, password, warning: 'РџР°СЂРѕР»СЊ РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РѕРґРёРЅ СЂР°Р· вЂ” РїРµСЂРµРґР°Р№С‚Рµ РµРіРѕ РєР»РёРµРЅС‚Сѓ' };
+    return { ok: true, password, warning: 'Пароль показывается один раз — передайте его клиенту' };
   });
 
   app.post('/api/admin/users/:id/note', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const note = String(req.body?.note || '').trim().slice(0, 1000);
     db.prepare('UPDATE users SET note=? WHERE id=?').run(note, user.id);
     return { ok: true, note };
   });
 
-  // РџРѕР»РЅРѕРµ СѓРґР°Р»РµРЅРёРµ: РєР°СЃРєР°Рґ РёР· СЃС…РµРјС‹ + С„Р°Р№Р»С‹ Р·Р°РґР°РЅРёР№
+  // Полное удаление: каскад из схемы + файлы заданий
   app.delete('/api/admin/users/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
-    if (user.id === req.user.id) return reply.code(400).send({ error: 'РЈРґР°Р»РёС‚СЊ СЃРІРѕР№ Р°РєРєР°СѓРЅС‚ РёР· Р°РґРјРёРЅРєРё РЅРµР»СЊР·СЏ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Удалить свой аккаунт из админки нельзя' });
     if (user.role === 'admin' && adminCount() <= 1) {
-      return reply.code(400).send({ error: 'РќРµР»СЊР·СЏ СѓРґР°Р»РёС‚СЊ РїРѕСЃР»РµРґРЅРµРіРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°' });
+      return reply.code(400).send({ error: 'Нельзя удалить последнего администратора' });
     }
     const confirmEmail = String(req.body?.confirmEmail || '').trim().toLowerCase();
     if (confirmEmail !== user.email.toLowerCase()) {
-      return reply.code(400).send({ error: 'Р’РІРµРґРёС‚Рµ email РєР»РёРµРЅС‚Р° РґР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СѓРґР°Р»РµРЅРёСЏ' });
+      return reply.code(400).send({ error: 'Введите email клиента для подтверждения удаления' });
     }
     const jobs = db.prepare('SELECT id FROM generation_jobs WHERE user_id=?').all(user.id);
     for (const job of jobs) {
-      try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»С‹ РјРѕРіР»Рё Р±С‹С‚СЊ СѓР¶Рµ СѓРґР°Р»РµРЅС‹ */ }
+      try { await removeJobFiles(job.id); } catch { /* файлы могли быть уже удалены */ }
     }
     db.prepare('DELETE FROM users WHERE id=?').run(user.id);
     audit(req, 'user.delete', 'user', user.id, { email: user.email, jobs: jobs.length });
     return { ok: true, deleted: { id: user.id, email: user.email } };
   });
 
-  // Р—Р°РІРµСЂС€РёС‚СЊ РІСЃРµ СЃРµСЃСЃРёРё РєР»РёРµРЅС‚Р°
+  // Завершить все сессии клиента
   app.delete('/api/admin/users/:id/sessions', { preHandler: requireAdmin }, async (req, reply) => {
     const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const r = db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     audit(req, 'session.kill_all', 'user', user.id, { removed: r.changes });
     return { ok: true, removed: r.changes };
   });
 
-  // Р—Р°РІРµСЂС€РёС‚СЊ РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+  // Завершить конкретную сессию
   // ── Быстрая помощь клиенту ─────────────────────────────────────────────
   app.get('/api/admin/users/:id/diagnostics', { preHandler: requireStaff }, async (req, reply) => {
     const user = getUser(req.params.id);
@@ -489,10 +489,10 @@ export async function registerAdminUserRoutes(app) {
   // Завершить конкретную сессию
   app.delete('/api/admin/sessions/:publicId', { preHandler: requireAdmin }, async (req, reply) => {
     const publicId = String(req.params.publicId || '');
-    if (!SESSION_RE.test(publicId)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ СЃРµСЃСЃРёРё' });
+    if (!SESSION_RE.test(publicId)) return reply.code(400).send({ error: 'Некорректный идентификатор сессии' });
     const session = db.prepare('SELECT user_id FROM sessions WHERE public_id=?').get(publicId);
     const r = db.prepare('DELETE FROM sessions WHERE public_id=?').run(publicId);
-    if (!r.changes) return reply.code(404).send({ error: 'РЎРµСЃСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР°' });
+    if (!r.changes) return reply.code(404).send({ error: 'Сессия не найдена' });
     audit(req, 'session.kill', 'user', session?.user_id || '', { id: publicId.slice(0, 8) });
     return { ok: true };
   });

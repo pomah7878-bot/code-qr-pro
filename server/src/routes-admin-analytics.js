@@ -19,7 +19,7 @@ function dirSize(dir) {
       const p = join(dir, entry.name);
       total += entry.isDirectory() ? dirSize(p) : statSync(p).size;
     }
-  } catch { /* РєР°С‚Р°Р»РѕРіР° РјРѕР¶РµС‚ РЅРµ Р±С‹С‚СЊ */ }
+  } catch { /* каталога может не быть */ }
   return total;
 }
 function jobsDirSize() {
@@ -46,7 +46,7 @@ function disk() {
 const sum = (sql, ...params) => db.prepare(sql).get(...params)?.v || 0;
 
 export async function registerAdminAnalyticsRoutes(app) {
-  // РЎРІРѕРґРєР° СЃ РґРµР»СЊС‚РѕР№ Рє РїСЂРѕС€Р»РѕРјСѓ РїРµСЂРёРѕРґСѓ
+  // Сводка с дельтой к прошлому периоду
   app.get('/api/admin/overview', { preHandler: requireAdmin }, async (req) => {
     const days = Math.min(365, Math.max(7, int(req.query?.days, 30)));
     const rev = (from) => sum(
@@ -92,7 +92,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     };
   });
 
-  // Р СЏРґС‹ РґР»СЏ РіСЂР°С„РёРєР°: РІС‹СЂСѓС‡РєР°, СЂРµРіРёСЃС‚СЂР°С†РёРё, РєРѕРґС‹
+  // Ряды для графика: выручка, регистрации, коды
   app.get('/api/admin/series', { preHandler: requireAdmin }, async (req) => {
     const days = Math.min(365, Math.max(7, int(req.query?.days, 30)));
     const from = `-${days - 1} days`;
@@ -121,7 +121,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     return { days, points: out };
   });
 
-  // Р—РґРѕСЂРѕРІСЊРµ СЃРµСЂРІРёСЃР°
+  // Здоровье сервиса
   app.get('/api/admin/health', { preHandler: requireAdmin }, async () => {
     const d = disk();
     const jobStats = db.prepare("SELECT status, COUNT(*) c FROM generation_jobs GROUP BY status").all();
@@ -144,7 +144,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     };
   });
 
-  // Р’СЃРµ Р·Р°РґР°РЅРёСЏ СЃРµСЂРІРёСЃР°
+  // Все задания сервиса
   app.get('/api/admin/jobs', { preHandler: requireStaff }, async (req) => {
     const { page, per, offset } = paging(req.query);
     const where = [];
@@ -181,21 +181,21 @@ export async function registerAdminAnalyticsRoutes(app) {
     const job = db.prepare(`
       SELECT j.*, u.email FROM generation_jobs j JOIN users u ON u.id=j.user_id WHERE j.id=?
     `).get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
+    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
     const items = db.prepare(
       'SELECT row_index, raw, gtin, serial, status, error FROM job_items WHERE job_id=? ORDER BY row_index LIMIT 500'
     ).all(job.id);
     return { job, items };
   });
 
-  // РџРѕРІС‚РѕСЂРЅС‹Р№ Р·Р°РїСѓСЃРє: С„Р°Р№Р»С‹ Рё РїСЂРѕРіСЂРµСЃСЃ СЃР±СЂР°СЃС‹РІР°СЋС‚СЃСЏ
+  // Повторный запуск: файлы и прогресс сбрасываются
   app.post('/api/admin/jobs/:id/retry', { preHandler: requireAdmin }, async (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
+    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
     if (!['done', 'error'].includes(job.status)) {
-      return reply.code(400).send({ error: 'РџРµСЂРµР·Р°РїСѓСЃС‚РёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ Р·Р°РІРµСЂС€С‘РЅРЅРѕРµ РёР»Рё СѓРїР°РІС€РµРµ Р·Р°РґР°РЅРёРµ' });
+      return reply.code(400).send({ error: 'Перезапустить можно только завершённое или упавшее задание' });
     }
-    try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»РѕРІ РјРѕРіР»Рѕ РЅРµ Р±С‹С‚СЊ */ }
+    try { await removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
     db.transaction(() => {
       db.prepare("UPDATE job_items SET status='ok', error=NULL WHERE job_id=? AND status='generated'").run(job.id);
       db.prepare("UPDATE generation_jobs SET status='queued', done=0, error=NULL, finished_at=NULL, artifact_key=NULL, artifact_size=0, artifact_sha=NULL, archived_at=NULL, expires_at=NULL WHERE id=?").run(job.id);
@@ -207,8 +207,8 @@ export async function registerAdminAnalyticsRoutes(app) {
 
   app.delete('/api/admin/jobs/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(req.params.id);
-    if (!job) return reply.code(404).send({ error: 'Р—Р°РґР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
-    try { await removeJobFiles(job.id); } catch { /* С„Р°Р№Р»РѕРІ РјРѕРіР»Рѕ РЅРµ Р±С‹С‚СЊ */ }
+    if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
+    try { await removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
     db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     audit(req, 'job.delete', 'job', job.id, { user_id: job.user_id, total: job.total });
     return { ok: true };

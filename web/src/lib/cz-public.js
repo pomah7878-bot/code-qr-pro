@@ -186,6 +186,14 @@ export async function fetchCatalogCard(gtin) {
   const catalog = Array.isArray(raw.catalogData) ? raw.catalogData[0] : {};
   const attrs = Array.isArray(catalog.good_attrs) ? catalog.good_attrs : [];
   const attr = (name) => String((attrs.find((a) => a.attr_name === name) || {}).attr_value || '');
+  const attrWithUnit = (name) => {
+    const found = attrs.find((a) => a.attr_name === name) || {};
+    const value = String(found.attr_value || '');
+    const unit = String(found.attr_value_type || '').trim();
+    if (!value) return '';
+    if (!unit || unit === '1') return value;
+    return value.includes(unit) ? value : `${value} ${unit}`;
+  };
   const card = {
     found: true,
     catalogOnly: true,
@@ -194,8 +202,8 @@ export async function fetchCatalogCard(gtin) {
     brand: catalog.brand_name || attr('Товарный знак'),
     category: attr('Вид товара'),
     productKind: attr('Вид товара'),
-    quantity: attr('Номинальное количество'),
-    size: attr('Номинальное количество'),
+    quantity: attrWithUnit('Номинальное количество'),
+    size: attrWithUnit('Номинальное количество'),
     producer: catalog.producer_name || '',
     producerInn: catalog.producer_inn || '',
     structure: attr('Состав товара'),

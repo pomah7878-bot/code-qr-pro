@@ -88,6 +88,21 @@ console.log('auto-filled:', await evaluate(`(() => {
   });
 })()`));
 
+console.log('view modes:', await evaluate("(() => {"
+  + "const modeButtons = [...document.querySelectorAll('button')]"
+  + ".map((b) => (b.textContent || '').trim())"
+  + ".filter((t) => ['Основная', 'Все поля', 'Компактная'].includes(t));"
+  + "const before = document.querySelectorAll('table thead th').length;"
+  + "const compact = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === 'Компактная');"
+  + "if (compact) compact.click();"
+  + "return JSON.stringify({ modeButtons, before });"
+  + "})()"));
+await sleep(500);
+console.log('compact columns:', await evaluate("document.querySelectorAll('table thead th').length"));
+await evaluate("(() => { const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === 'Все поля'); if (b) b.click(); return 1; })()");
+await sleep(400);
+console.log('all columns:', await evaluate("document.querySelectorAll('table thead th').length"));
+
 console.log('results table:', await evaluate(`(() => {
   const headers = [...document.querySelectorAll('table thead th')].map((th) => (th.textContent || '').trim());
   const row = [...document.querySelectorAll('table tbody tr')][0];

@@ -61,7 +61,7 @@ const pdfPercent = computed(() => {
 const result = ref(null);
 const pdfUrl = ref('');
 const shortWarning = ref('');
-const qrOnly = ref(true);
+const qrOnly = ref(false);
 const qrMargin = ref(0.5);
 const printCode = ref(true);
 const barcodeFormat = ref('ean13');
@@ -474,6 +474,18 @@ const firstCode = computed(() => {
     batch
   };
 });
+const viewMode = ref('main');
+const VIEW_MODES = [
+  { id: 'main', label: 'Основная' },
+  { id: 'all', label: 'Все поля' },
+  { id: 'compact', label: 'Компактная' }
+];
+const colVisible = (key) => {
+  if (viewMode.value === 'all') return true;
+  if (viewMode.value === 'compact') return ['n', 'code', 'name', 'status'].includes(key);
+  return ['n', 'code', 'status', 'name', 'productKind', 'quantity', 'expirationDate', 'gtin'].includes(key);
+};
+
 const checkRows = computed(() => {
   const valid = result.value?.valid || [];
   return valid.map((c, i) => {
@@ -800,7 +812,7 @@ function buildTemplate() {
   const caption = (elements, x, y, width, fontSize = 6.5) => {
     const lineH = 2.9;
     elements.push({ id: 'capGtin', type: 'field', field: 'gtin', x, y, w: width, h: lineH, fontSize, align: 'left' });
-    elements.push({ id: 'capSerial', type: 'field', field: 'serial', x, y: y + lineH + 0.3, w: width, h: lineH, fontSize, align: 'left' });
+    elements.push({ id: 'capSerial', type: 'field', field: 'serialAi', x, y: y + lineH + 0.3, w: width, h: lineH, fontSize, align: 'left' });
     return y + lineH * 2 + 0.9;
   };
   if (qrOnly.value) {
@@ -838,23 +850,28 @@ function buildTemplate() {
   elements.push({ id: 'dm', type: 'datamatrix', x: m, y: m, w: dm, h: dm, fontSize: 8, align: 'left' });
   const lineH = Math.max(2.8, Math.min(4.2, H * 0.09));
 
-  // Правый столбец — как на карточке проверки: название, вид товара, объём, годен до.
+  // Правый столбец — как на карточке проверки: название, «вид + объём», «Годен до: дата».
   const rightX = m + dm + Math.max(1.2, m * 0.8);
   const rightW = Math.max(0, W - rightX - m);
   let rightY = m;
-  for (const key of ['name', 'form', 'size', 'expiry']) {
-    if (!fields[key]) continue;
-    const value = String(product[key] || '').trim();
-    if (!value) continue;
+  const kindQty = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
+  const expiryLine = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
+  const rightFields = [
+    { key: 'name', value: String(product.name || '').trim(), enabled: fields.name, fontSize: 7.2 },
+    { key: 'kindQty', value: kindQty, enabled: fields.form || fields.size, fontSize: 6.8 },
+    { key: 'expiryLine', value: expiryLine, enabled: fields.expiry, fontSize: 6.8 }
+  ];
+  for (const item of rightFields) {
+    if (!item.enabled || !item.value) continue;
     if (rightW < 8 || rightY + lineH > H - m) break;
     elements.push({
-      id: `right_${key}`, type: 'field', field: key, x: rightX, y: rightY, w: rightW, h: lineH,
-      fontSize: key === 'name' ? 7.2 : 6.8, align: 'left'
+      id: `right_${item.key}`, type: 'field', field: item.key, x: rightX, y: rightY, w: rightW, h: lineH,
+      fontSize: item.fontSize, align: 'left'
     });
     rightY += lineH + 0.6;
   }
 
-  // Подпись под DataMatrix: GTIN и серийник.
+  // Подпись под DataMatrix: GTIN и «21 серийник» (как на этикетке ЧЗ).
   let belowY = m + dm + 1;
   if (printCode.value) {
     belowY = caption(elements, m, belowY, Math.max(dm, W * 0.5), 6);
@@ -887,14 +904,6 @@ function buildTemplate() {
   return { name: `Повторная печать · ${f.label}`, widthMm: W, heightMm: H, dpi: 203, elements };
 }
 
-function applyGsdmxPreset() {
-  qrOnly.value = false;
-  printCode.value = true;
-  for (const key of ['name', 'form', 'size', 'expiry', 'date', 'manufacturer', 'composition']) fields[key] = true;
-  fields.ean13 = true;
-  notice.value = 'Шаблон как в сервисах проверки: название, вид, объём, даты, состав, производитель и EAN-13';
-}
-
 async function downloadPdf() {
   error.value = '';
   notice.value = '';
@@ -922,10 +931,15 @@ async function downloadPdf() {
     }
     const template = buildTemplate();
     if (!template.elements.length) { error.value = 'Нечего печатать'; return; }
+    const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
+    const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
     const rows = result.value.valid.map((c) => ({
       code: c.code,
       gtin: c.gtin,
       serial: c.serial,
+      serialAi: c.serial ? `21 ${c.serial}` : '',
+      kindQty: kindQtyValue,
+      expiryLine: expiryLineValue,
       barcode: String(product.barcode || '').trim(),
       name: String(product.name || '').trim(),
       article: String(product.article || '').trim(),
@@ -1075,8 +1089,13 @@ async function printLabels() {
     }
     const template = buildTemplate();
     if (!template.elements.length) throw new Error('Нечего печатать');
+    const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
+    const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
     const rows = result.value.valid.map((c) => ({
       code: c.code, gtin: c.gtin, serial: c.serial,
+      serialAi: c.serial ? `21 ${c.serial}` : '',
+      kindQty: kindQtyValue,
+      expiryLine: expiryLineValue,
       barcode: String(product.barcode || '').trim(), name: String(product.name || '').trim(),
       article: String(product.article || '').trim(), dosage: String(product.dosage || '').trim(),
       form: String(product.form || '').trim(), size: String(product.size || '').trim(),
@@ -1134,9 +1153,6 @@ async function printLabels() {
             </select>
             <p class="text-xs text-slate-500 mt-1">PDF-страница: {{ currentFormat.w }}×{{ currentFormat.h }} мм ({{ (currentFormat.w / 10).toFixed(1) }}×{{ (currentFormat.h / 10).toFixed(1) }} см)</p>
           </div>
-          <button type="button" class="btn-ghost !py-1.5 !px-3 text-xs self-start" @click="applyGsdmxPreset">
-            Как в сервисах проверки (gsdmx): поля ЧЗ + EAN-13
-          </button>
           <label class="flex items-start gap-2 text-sm mt-1">
             <input v-model="qrOnly" type="checkbox" class="mt-0.5">
             <span><b>Только DataMatrix — QR на всю этикетку</b><br><span class="text-xs text-slate-500">Квадратный код вписывается по меньшей стороне, по краям остаётся небольшой отступ для печати.</span></span>
@@ -1318,7 +1334,7 @@ async function printLabels() {
 
       <div v-if="result && productInfo.length" class="glass rounded-2xl p-5 mt-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h2 class="font-display font-semibold">Информация о кодах</h2>
+          <h2 class="font-display font-semibold">Результаты проверки</h2>
           <div class="flex items-center gap-2">
             <span v-if="infoLoading" class="text-xs text-slate-500">Запрашиваем ЧЗ…</span>
             <label class="btn-ghost !py-1 !px-2 text-xs cursor-pointer">
@@ -1339,29 +1355,39 @@ async function printLabels() {
           </div>
           <div>Наименование и производитель подтягиваются из «Честного ЗНАКа», если в настройках подключён токен ЧЗ; иначе видны GTIN и серийник из кода.</div>
         </div>
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          <button
+            v-for="m in VIEW_MODES" :key="m.id" type="button"
+            class="px-3 py-1.5 rounded-lg text-xs border transition"
+            :class="viewMode === m.id
+              ? 'bg-brand-500/15 border-brand-500/40 text-brand-400 font-semibold'
+              : 'border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'"
+            @click="viewMode = m.id"
+          >{{ m.label }}</button>
+        </div>
         <div class="overflow-auto max-h-64">
-          <table class="w-full text-xs min-w-[1080px]">
+          <table class="w-full text-xs min-w-[720px]">
             <thead>
               <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
-                <th class="py-1.5 pr-2">№</th>
-                <th class="py-1.5 pr-3">Код маркировки</th>
-                <th class="py-1.5 pr-3">Статус кода</th>
-                <th class="py-1.5 pr-3">Название</th>
-                <th class="py-1.5 pr-3">Вид товара</th>
-                <th class="py-1.5 pr-3">Объём / вес / количество</th>
-                <th class="py-1.5 pr-3">Дата изготовления</th>
-                <th class="py-1.5 pr-3">Годен до</th>
-                <th class="py-1.5 pr-3">Срок использования</th>
-                <th class="py-1.5 pr-3">Код найден</th>
-                <th class="py-1.5 pr-3">Криптозащита КМ</th>
-                <th class="py-1.5">GTIN</th>
+                <th v-if="colVisible('n')" class="py-1.5 pr-2">№</th>
+                <th v-if="colVisible('code')" class="py-1.5 pr-3">Код маркировки</th>
+                <th v-if="colVisible('status')" class="py-1.5 pr-3">Статус кода</th>
+                <th v-if="colVisible('name')" class="py-1.5 pr-3">Название</th>
+                <th v-if="colVisible('productKind')" class="py-1.5 pr-3">Вид товара</th>
+                <th v-if="colVisible('quantity')" class="py-1.5 pr-3">Объём / вес / количество</th>
+                <th v-if="colVisible('productionDate')" class="py-1.5 pr-3">Дата изготовления</th>
+                <th v-if="colVisible('expirationDate')" class="py-1.5 pr-3">Годен до</th>
+                <th v-if="colVisible('serviceLife')" class="py-1.5 pr-3">Срок использования</th>
+                <th v-if="colVisible('found')" class="py-1.5 pr-3">Код найден</th>
+                <th v-if="colVisible('crypto')" class="py-1.5 pr-3">Криптозащита КМ</th>
+                <th v-if="colVisible('gtin')" class="py-1.5">GTIN</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(p, i) in checkRows.slice(0, 300)" :key="i" class="border-b border-slate-100 dark:border-white/5">
-                <td class="py-1.5 pr-2 text-slate-500">{{ p.n }}</td>
-                <td class="py-1.5 pr-3 font-mono max-w-[220px] truncate" :title="p.code">{{ p.code }}</td>
-                <td class="py-1.5 pr-3">
+                <td v-if="colVisible('n')" class="py-1.5 pr-2 text-slate-500">{{ p.n }}</td>
+                <td v-if="colVisible('code')" class="py-1.5 pr-3 font-mono max-w-[220px] truncate" :title="p.code">{{ p.code }}</td>
+                <td v-if="colVisible('status')" class="py-1.5 pr-3">
                   <span
                     v-if="p.status"
                     class="chip-soon !text-[10px] !py-0"
@@ -1369,15 +1395,15 @@ async function printLabels() {
                   >{{ p.status }}</span>
                   <span v-else class="text-slate-400">—</span>
                 </td>
-                <td class="py-1.5 pr-3">{{ p.name || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.productKind || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.quantity || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.productionDate || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.expirationDate || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.serviceLife || '—' }}</td>
-                <td class="py-1.5 pr-3" :class="p.found === 'Да' ? 'text-emerald-500' : 'text-slate-400'">{{ p.found }}</td>
-                <td class="py-1.5 pr-3" :class="p.crypto === 'Проверено' ? 'text-emerald-500' : (p.crypto === 'Не проверено' ? 'text-amber-500' : 'text-slate-400')">{{ p.crypto }}</td>
-                <td class="py-1.5 font-mono">{{ p.gtin }}</td>
+                <td v-if="colVisible('name')" class="py-1.5 pr-3">{{ p.name || '—' }}</td>
+                <td v-if="colVisible('productKind')" class="py-1.5 pr-3">{{ p.productKind || '—' }}</td>
+                <td v-if="colVisible('quantity')" class="py-1.5 pr-3">{{ p.quantity || '—' }}</td>
+                <td v-if="colVisible('productionDate')" class="py-1.5 pr-3">{{ p.productionDate || '—' }}</td>
+                <td v-if="colVisible('expirationDate')" class="py-1.5 pr-3">{{ p.expirationDate || '—' }}</td>
+                <td v-if="colVisible('serviceLife')" class="py-1.5 pr-3">{{ p.serviceLife || '—' }}</td>
+                <td v-if="colVisible('found')" class="py-1.5 pr-3" :class="p.found === 'Да' ? 'text-emerald-500' : 'text-slate-400'">{{ p.found }}</td>
+                <td v-if="colVisible('crypto')" class="py-1.5 pr-3" :class="p.crypto === 'Проверено' ? 'text-emerald-500' : (p.crypto === 'Не проверено' ? 'text-amber-500' : 'text-slate-400')">{{ p.crypto }}</td>
+                <td v-if="colVisible('gtin')" class="py-1.5 font-mono">{{ p.gtin }}</td>
               </tr>
             </tbody>
           </table>

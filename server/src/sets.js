@@ -1,4 +1,5 @@
-import { renderBarcode, renderBarcodeMany } from './lib/barcode-pool.js';
+import { renderBarcode, renderBarcodeMany, renderDatamatrixVectorMany } from './lib/barcode-pool.js';
+import { drawDatamatrixRuns } from './labels.js';
 import PDFDocument from 'pdfkit';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -155,6 +156,29 @@ export async function prefetchSetBarcodes(p) {
   };
 }
 
+// Для PDF наборов DataMatrix берём модулями (вектор): быстрее и чётче печать.
+export async function prefetchSetVectors(p) {
+  const tasks = [];
+  const map = (code) => {
+    tasks.push({ opts: dataMatrixOpts(code) });
+    return tasks.length - 1;
+  };
+  const setIndex = p.setCodes.map(map);
+  const compIndex = [];
+  if (!p.onlySet) {
+    for (let c = 0; c < p.components.length; c++) {
+      const need = p.setCodes.length * p.components[c].qty;
+      const codes = (p.componentCodes[c]?.codes || []).slice(0, need);
+      compIndex.push(codes.map(map));
+    }
+  }
+  const rendered = tasks.length ? await renderDatamatrixVectorMany(tasks) : [];
+  return {
+    setVectors: setIndex.map((i) => rendered[i]),
+    compVectors: compIndex
+  };
+}
+
 function fitText(doc, text, x, y, width, height, size = 8) {
   doc.font('LabelFont').fontSize(size).fillColor('#000000').text(String(text || ''), x, y, {
     width,
@@ -184,14 +208,14 @@ export async function renderSetsPdf(payload) {
     doc.on('error', reject);
   });
 
-  const { setPngs, compPngs } = await prefetchSetBarcodes(p);
+  const { setVectors, compVectors } = await prefetchSetVectors(p);
 
   for (let s = 0; s < p.setCodes.length; s++) {
     const setCode = p.setCodes[s];
-    const png = setPngs[s];
+    const vector = setVectors[s];
     doc.addPage({ size: [W, H], margin: 0 });
     const qrSize = Math.min(W - m * 2, H * 0.52);
-    doc.image(png, (W - qrSize) / 2, m, { width: qrSize, height: qrSize });
+    if (vector) drawDatamatrixRuns(doc, vector, (W - qrSize) / 2, m, qrSize, qrSize);
     const textY = m + qrSize + 1.5 * MM;
     fitText(doc, p.name, m, textY, W - m * 2, 7 * MM, 8);
     fitText(doc, `GTIN набора: ${p.setGtin}`, m, textY + 7 * MM, W - m * 2, 4 * MM, 5.5);
@@ -209,11 +233,11 @@ export async function renderSetsPdf(payload) {
         for (let q = 0; q < comp.qty; q++) {
           const code = codes[start + q];
           if (!code) continue;
-          const cpng = compPngs[c]?.[start + q];
-          if (!cpng) continue;
+          const cvec = compVectors[c]?.[start + q];
+          if (!cvec) continue;
           doc.addPage({ size: [W, H], margin: 0 });
           const cs = Math.min(W - m * 2, H * 0.55);
-          doc.image(cpng, (W - cs) / 2, m, { width: cs, height: cs });
+          drawDatamatrixRuns(doc, cvec, (W - cs) / 2, m, cs, cs);
           fitText(doc, comp.name, m, m + cs + 2 * MM, W - m * 2, 7 * MM, 8);
           fitText(doc, `GTIN: ${comp.gtin}`, m, m + cs + 9 * MM, W - m * 2, 4 * MM, 5.5);
         }

@@ -243,7 +243,7 @@ export async function registerLabelRoutes(app) {
       doc.on('end', resolve);
       doc.on('error', reject);
     });
-    await renderLabelsPdf(doc, template, dataRows, { single: singlePage, onProgress });
+    await renderLabelsPdf(doc, template, dataRows, { single: singlePage, onProgress, vectorDatamatrix: true });
     doc.end();
     await ended;
     return Buffer.concat(chunks);

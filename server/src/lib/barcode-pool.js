@@ -40,8 +40,28 @@ function memoSet(key, value) {
   memo.set(key, value);
 }
 
+function datamatrixRuns(raw) {
+  const { pixx, pixy, pixs } = raw;
+  const runs = [];
+  for (let y = 0; y < pixy; y++) {
+    let start = -1;
+    for (let x = 0; x <= pixx; x++) {
+      const dark = x < pixx && pixs[y * pixx + x] === 1;
+      if (dark && start < 0) start = x;
+      if (!dark && start >= 0) {
+        runs.push(start, y, x - start);
+        start = -1;
+      }
+    }
+  }
+  return { pixx, pixy, runs };
+}
+
 function inlineRender(kind, opts) {
-  return Promise.resolve().then(() => (kind === 'svg' ? bwipjs.toSVG(opts) : bwipjs.toBuffer(opts)));
+  return Promise.resolve().then(() => {
+    if (kind === 'dm-vector') return datamatrixRuns(bwipjs.raw(opts)[0]);
+    return kind === 'svg' ? bwipjs.toSVG(opts) : bwipjs.toBuffer(opts);
+  });
 }
 
 function spawn() {
@@ -116,7 +136,8 @@ function flushInline() {
 }
 
 /**
- * Рендерит один штрихкод. kind: 'png' (Buffer) или 'svg' (string).
+ * Рендерит один штрихкод. kind: 'png' (Buffer), 'svg' (string) или
+ * 'dm-vector' ({ pixx, pixy, runs } — тёмные модули DataMatrix для PDF).
  * opts — те же, что у bwipjs.toBuffer/toSVG.
  */
 export function renderBarcode(opts, kind = 'png') {
@@ -132,10 +153,17 @@ export function renderBarcode(opts, kind = 'png') {
   }).then((data) => {
     // Из worker'а Buffer приходит как Uint8Array (structured clone) — возвращаем
     // настоящий Buffer: его ждут PDFKit и вызовы .toString('base64').
-    const value = kind === 'svg' ? String(data) : (Buffer.isBuffer(data) ? data : Buffer.from(data));
+    let value = data;
+    if (kind === 'svg') value = String(data);
+    else if (kind === 'png') value = Buffer.isBuffer(data) ? data : Buffer.from(data);
     memoSet(key, value);
     return value;
   });
+}
+
+/** DataMatrix в виде модулей (для векторной отрисовки в PDF). */
+export function renderDatamatrixVector(opts) {
+  return renderBarcode(opts, 'dm-vector');
 }
 
 /**
@@ -144,6 +172,11 @@ export function renderBarcode(opts, kind = 'png') {
  */
 export function renderBarcodeMany(tasks) {
   return Promise.all(tasks.map((task) => renderBarcode(task.opts, task.kind || 'png')));
+}
+
+/** Набор DataMatrix-модулей (порядок сохраняется). */
+export function renderDatamatrixVectorMany(tasks) {
+  return Promise.all(tasks.map((task) => renderDatamatrixVector(task.opts)));
 }
 
 export function barcodePoolSize() {

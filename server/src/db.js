@@ -347,7 +347,37 @@ const MIGRATIONS = [
    );
    CREATE INDEX idx_app_logs_created ON app_logs(created_at);
    CREATE INDEX idx_app_logs_level ON app_logs(level, created_at);
-   CREATE INDEX idx_app_logs_source ON app_logs(source, created_at);`
+   CREATE INDEX idx_app_logs_source ON app_logs(source, created_at);`,
+  // v22 — история входов, просмотр «как клиент» и белый список IP
+  `CREATE TABLE login_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER,
+     email TEXT NOT NULL DEFAULT '',
+     ok INTEGER NOT NULL DEFAULT 1,
+     reason TEXT NOT NULL DEFAULT '',
+     ip TEXT NOT NULL DEFAULT '',
+     user_agent TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_login_events_user ON login_events(user_id, created_at);
+   CREATE INDEX idx_login_events_created ON login_events(created_at);
+
+   CREATE TABLE view_sessions (
+     token TEXT PRIMARY KEY,
+     admin_id INTEGER NOT NULL,
+     user_id INTEGER NOT NULL,
+     expires_at TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_view_sessions_expires ON view_sessions(expires_at);
+
+   CREATE TABLE ip_allowlist (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     ip TEXT NOT NULL UNIQUE,
+     note TEXT NOT NULL DEFAULT '',
+     created_by INTEGER,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );`
 ];
 
 const version = db.pragma('user_version', { simple: true });

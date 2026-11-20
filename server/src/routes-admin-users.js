@@ -5,8 +5,12 @@ import { activatePremium } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { removeJobFiles } from './jobs.js';
 import { publicUrl } from './lib/mailer.js';
+import { sendClientMessage, mailTemplateList, notifyClient } from './lib/client-mail.js';
+import { createViewSession } from './lib/view-session.js';
+import { loginEventsFor } from './lib/auth-events.js';
 import { requireAdmin, requireStaff, paging, sendCsv, like, dateOnly } from './lib/admin.js';
 import { audit } from './lib/audit.js';
+import { logEvent } from './lib/app-log.js';
 
 const ROLES = ['user', 'support', 'admin'];
 const SESSION_RE = /^[a-f0-9]{32}$/;
@@ -181,7 +185,8 @@ export async function registerAdminUserRoutes(app) {
     })();
     notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°Р» Р°РєРєР°СѓРЅС‚' + (reason ? ': ' + reason : ''));
     audit(req, 'user.block', 'user', user.id, { reason });
-    return { ok: true, user: publicAdminUser(getUser(user.id)) };
+    const notified = await notifyClient(user, 'account_blocked', { reason });
+    return { ok: true, notified, user: publicAdminUser(getUser(user.id)) };
   });
 
   app.post('/api/admin/users/:id/unblock', { preHandler: requireAdmin }, async (req, reply) => {
@@ -190,7 +195,8 @@ export async function registerAdminUserRoutes(app) {
     db.prepare("UPDATE users SET status='active', blocked_at=NULL, blocked_reason='' WHERE id=?").run(user.id);
     notifyStatusChange(user, 'РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°Р» Р°РєРєР°СѓРЅС‚');
     audit(req, 'user.unblock', 'user', user.id, {});
-    return { ok: true, user: publicAdminUser(getUser(user.id)) };
+    const notified = await notifyClient(user, 'access_restored', {});
+    return { ok: true, notified, user: publicAdminUser(getUser(user.id)) };
   });
 
   app.post('/api/admin/users/:id/role', { preHandler: requireAdmin }, async (req, reply) => {
@@ -303,7 +309,83 @@ export async function registerAdminUserRoutes(app) {
       ips,
       rateLimits,
       loginLinks,
+      logins: loginEventsFor(user.id, 30),
       lastActions
+    };
+  });
+
+  // Шаблоны писем клиенту (для формы «Написать клиенту»).
+  app.get('/api/admin/mail-templates', { preHandler: requireAdmin }, async () => ({ templates: mailTemplateList() }));
+
+  // Письмо клиенту по шаблону или своё сообщение.
+  app.post('/api/admin/users/:id/message', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const template = String(req.body?.template || 'custom');
+    try {
+      const r = await sendClientMessage(user, {
+        template,
+        subject: req.body?.subject,
+        text: req.body?.text,
+        vars: {
+          until: activeSub(user.id)?.expires_at ? String(activeSub(user.id).expires_at).slice(0, 10) : '',
+          days: Number(req.body?.days) || undefined,
+          reason: String(req.body?.reason || '').slice(0, 200)
+        }
+      });
+      audit(req, 'user.message', 'user', user.id, { template, subject: r.subject });
+      return { ok: true, subject: r.subject };
+    } catch (e) {
+      logEvent({
+        level: 'warn', source: 'mail', event: 'admin_mail_failed',
+        message: `Письмо клиенту не отправлено (${user.email}): ${String(e?.message || e)}`,
+        userId: user.id, ip: req.ip, method: 'ADMIN', url: req.url,
+        meta: { template }
+      });
+      return reply.code(400).send({ error: String(e?.message || e) });
+    }
+  });
+
+  // Компенсация за инцидент: продлить PREMIUM и (опционально) написать клиенту.
+  app.post('/api/admin/users/:id/compensate', { preHandler: requireAdmin }, async (req, reply) => {
+    const days = Math.round(Number(req.body?.days));
+    if (!Number.isFinite(days) || days < 1 || days > 90) {
+      return reply.code(400).send({ error: 'Компенсация: от 1 до 90 дней' });
+    }
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const reason = String(req.body?.reason || '').slice(0, 200);
+    activatePremium(user.id, 'compensation', null, null, days);
+    const sub = activeSub(user.id);
+    notifyStatusChange(user, `Компенсация: PREMIUM продлён на ${days} дн.${reason ? ' (' + reason + ')' : ''}`);
+    const notified = await notifyClient(user, 'compensation', { days, reason, until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' });
+    audit(req, 'user.compensate', 'user', user.id, { days, reason, notified });
+    return { ok: true, days, premiumUntil: sub?.expires_at || null, notified };
+  });
+
+  // Отозвать все API-ключи клиента (утечка ключа, смена интегратора).
+  app.post('/api/admin/users/:id/revoke-api-keys', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const r = db.prepare('DELETE FROM api_keys WHERE user_id=?').run(user.id);
+    audit(req, 'user.revoke_api_keys', 'user', user.id, { removed: r.changes });
+    return { ok: true, removed: r.changes };
+  });
+
+  // Просмотр «как клиент»: ссылка открывает отдельную read-only сессию,
+  // админская сессия при этом не сбрасывается.
+  app.post('/api/admin/users/:id/impersonate', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Свой аккаунт смотреть не нужно' });
+    if (user.status === 'blocked') return reply.code(400).send({ error: 'Аккаунт заблокирован' });
+    const view = createViewSession(req.user.id, user.id);
+    audit(req, 'user.view_as', 'user', user.id, { expiresAt: view.expiresAt });
+    return {
+      ok: true,
+      url: `${publicUrl().replace(/\/$/, '')}/api/admin/view/${view.token}`,
+      expiresAt: view.expiresAt,
+      warning: 'Откроется только чтение на 30 минут. Выход — кнопка «Выйти» или закрытие вкладки.'
     };
   });
 
@@ -313,8 +395,9 @@ export async function registerAdminUserRoutes(app) {
     if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
     const before = db.prepare('SELECT fails, locked_until FROM login_attempts WHERE email=?').get(user.email.toLowerCase());
     db.prepare('DELETE FROM login_attempts WHERE email=?').run(user.email.toLowerCase());
-    audit(req, 'user.unlock_login', 'user', user.id, { fails: before?.fails || 0, lockedUntil: before?.locked_until || null });
-    return { ok: true, clearedFails: before?.fails || 0 };
+    const notified = await notifyClient(user, 'access_restored', {});
+    audit(req, 'user.unlock_login', 'user', user.id, { fails: before?.fails || 0, lockedUntil: before?.locked_until || null, notified });
+    return { ok: true, clearedFails: before?.fails || 0, notified };
   });
 
   // Сброс 2FA: клиент потерял телефон. Сессии завершаются, вход — по паролю.
@@ -328,8 +411,9 @@ export async function registerAdminUserRoutes(app) {
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     })();
     notifyStatusChange(user, 'Администратор сбросил двухфакторную аутентификацию — включите её заново в разделе «Безопасность».');
-    audit(req, 'user.reset_2fa', 'user', user.id, {});
-    return { ok: true, user: publicAdminUser(getUser(user.id)) };
+    const notified = await notifyClient(user, 'twofa_reset', {});
+    audit(req, 'user.reset_2fa', 'user', user.id, { notified });
+    return { ok: true, notified, user: publicAdminUser(getUser(user.id)) };
   });
 
   // Обнулить дневной лимит кодов (клиенту нужно срочно продолжить работу).

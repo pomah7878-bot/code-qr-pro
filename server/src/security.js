@@ -1,10 +1,12 @@
 import { db } from './db.js';
+import { isAllowlisted } from './lib/allowlist.js';
 
 // Постоянный rate-limit по IP (переживает рестарт и работает при нескольких процессах)
 export function rateLimitHook(max = 300, windowMs = 60000) {
   const windowSec = Math.max(1, Math.ceil(windowMs / 1000));
   return async (req, reply) => {
     if (!req.url.startsWith('/api/')) return;
+    if (isAllowlisted(req.ip)) return;
     const now = Math.floor(Date.now() / 1000);
     const key = `ip:${req.ip}`;
     try {

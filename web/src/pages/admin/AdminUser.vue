@@ -23,6 +23,17 @@ const modal = reactive({ open: false, kind: '', title: '', busy: false, reason: 
 const diag = ref(null);
 const diagLoading = ref(false);
 const helpBusy = ref('');
+const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false });
+const comp = reactive({ open: false, days: 3, reason: '', busy: false });
+
+const LOGIN_REASON = {
+  password: 'пароль',
+  '2fa': '2FA',
+  admin_link: 'ссылка админа',
+  bad_password: 'неверный пароль',
+  locked: 'вход заблокирован',
+  blocked: 'аккаунт заблокирован'
+};
 
 const ACTION_LABELS = {
   'user.grant': 'Выдан PREMIUM',
@@ -149,6 +160,85 @@ async function copyLink() {
     error.value = 'Не удалось скопировать — выделите ссылку вручную';
   }
 }
+
+async function openMail() {
+  Object.assign(mail, { open: true, loading: true, busy: false, subject: '', text: '' });
+  try {
+    if (!mail.templates.length) mail.templates = (await api.adminMailTemplates()).templates;
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    mail.loading = false;
+  }
+}
+
+async function sendMailToClient() {
+  mail.busy = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminSendMessage(id.value, { template: mail.template, subject: mail.subject, text: mail.text });
+    mail.open = false;
+    notice.value = `Письмо отправлено: «${r.subject}»`;
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    mail.busy = false;
+  }
+}
+
+function openCompensate() {
+  Object.assign(comp, { open: true, days: 3, reason: '', busy: false });
+}
+
+async function doCompensate() {
+  comp.busy = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminCompensate(id.value, comp.days, comp.reason);
+    comp.open = false;
+    notice.value = `Компенсация: +${r.days} дн. до ${fmtDate(r.premiumUntil)}${r.notified ? ' · клиенту отправлено письмо' : ''}`;
+    await Promise.all([load(), loadDiagnostics()]);
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    comp.busy = false;
+  }
+}
+
+async function revokeApiKeys() {
+  if (!window.confirm('Отозвать все API-ключи клиента? Интеграции (1С, склад) перестанут работать до создания новых ключей.')) return;
+  helpBusy.value = 'keys';
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminRevokeApiKeys(id.value);
+    notice.value = `Отозвано ключей: ${r.removed}`;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    helpBusy.value = '';
+  }
+}
+
+async function viewAsClient() {
+  helpBusy.value = 'view';
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminImpersonate(id.value);
+    window.open(r.url, '_blank', 'noopener');
+    notice.value = 'Просмотр открыт в новой вкладке: только чтение, 30 минут';
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    helpBusy.value = '';
+  }
+}
+
+const loginReason = (r) => LOGIN_REASON[r] || r || '—';
 
 async function grant() {
   error.value = '';
@@ -424,9 +514,27 @@ onMounted(load);
           <button class="btn-primary !py-2 !px-3 text-sm" :disabled="helpBusy === 'link' || user.status === 'blocked'" @click="makeLoginLink">
             {{ helpBusy === 'link' ? 'Готовим…' : 'Ссылка для входа' }}
           </button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="mail.busy" @click="openMail">Написать клиенту</button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'view' || user.status === 'blocked'" @click="viewAsClient">
+            {{ helpBusy === 'view' ? 'Открываем…' : 'Смотреть как клиент' }}
+          </button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCompensate">Компенсация</button>
+          <button class="btn-ghost !py-2 !px-3 text-sm text-red-500" :disabled="helpBusy === 'keys'" @click="revokeApiKeys">Отозвать API-ключи</button>
           <button v-if="diag?.rateLimits?.length" class="btn-ghost !py-2 !px-3 text-sm text-amber-500" :disabled="helpBusy === 'ratelimit'" @click="clearRateLimits">
             Снять лимит запросов ({{ diag.rateLimits.length }})
           </button>
+        </div>
+
+        <div v-if="diag?.logins?.length" class="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
+          <div class="text-xs text-slate-500 mb-1">Последние входы</div>
+          <ul class="text-xs space-y-0.5 max-h-40 overflow-y-auto">
+            <li v-for="(l, i) in diag.logins.slice(0, 10)" :key="i" class="flex flex-wrap items-center gap-2">
+              <span :class="l.ok ? 'text-emerald-500' : 'text-red-500'">{{ l.ok ? 'успешно' : 'отказ' }}</span>
+              <span class="text-slate-500">{{ fmtDateTime(l.created_at) }}</span>
+              <span class="text-slate-500">{{ loginReason(l.reason) }}</span>
+              <span v-if="l.ip" class="text-slate-400 font-mono">{{ l.ip }}</span>
+            </li>
+          </ul>
         </div>
 
         <div v-if="diag?.lastActions?.length" class="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
@@ -601,6 +709,39 @@ onMounted(load);
           <button class="btn-primary !py-2 !px-4 text-sm" @click="modal.open = false">Готово</button>
         </div>
       </template>
+    </Modal>
+
+    <Modal :open="mail.open" title="Письмо клиенту" @close="mail.open = false">
+      <p class="text-sm text-slate-500">Письмо уходит на {{ user?.email }}. Если SMTP не настроен — будет ошибка.</p>
+      <label class="label mt-3" for="mail-template">Шаблон</label>
+      <select id="mail-template" v-model="mail.template" class="input text-sm">
+        <option v-for="t in mail.templates" :key="t.id" :value="t.id">{{ t.title }}</option>
+      </select>
+      <template v-if="mail.template === 'custom'">
+        <label class="label mt-3" for="mail-subject">Тема</label>
+        <input id="mail-subject" v-model="mail.subject" class="input text-sm" maxlength="200" placeholder="Например: помогли с доступом">
+        <label class="label mt-3" for="mail-text">Текст</label>
+        <textarea id="mail-text" v-model="mail.text" rows="6" maxlength="5000" class="input text-sm" placeholder="Здравствуйте! …"></textarea>
+      </template>
+      <p v-else class="text-xs text-slate-500 mt-2">Текст шаблона подставится автоматически (имя клиента, срок PREMIUM).</p>
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="mail.open = false">Отмена</button>
+        <button class="btn-primary !py-2 !px-4 text-sm" :disabled="mail.busy || mail.loading" @click="sendMailToClient">
+          {{ mail.busy ? 'Отправляем…' : 'Отправить' }}
+        </button>
+      </div>
+    </Modal>
+
+    <Modal :open="comp.open" title="Компенсация за инцидент" @close="comp.open = false">
+      <p class="text-sm text-slate-500">Продлевает PREMIUM и отправляет клиенту письмо с извинением. В журнал попадёт причина.</p>
+      <label class="label mt-3" for="comp-days">На сколько дней</label>
+      <input id="comp-days" v-model.number="comp.days" type="number" min="1" max="90" class="input text-sm">
+      <label class="label mt-3" for="comp-reason">Причина</label>
+      <input id="comp-reason" v-model="comp.reason" class="input text-sm" maxlength="200" placeholder="Например: сбой печати 20 ноября">
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="comp.open = false">Отмена</button>
+        <button class="btn-primary !py-2 !px-4 text-sm" :disabled="comp.busy" @click="doCompensate">{{ comp.busy ? 'Продлеваем…' : 'Продлить и уведомить' }}</button>
+      </div>
     </Modal>
   </div>
 </template>

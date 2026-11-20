@@ -7,6 +7,7 @@ import {
 } from './lib/totp.js';
 import { readTicket, countAttempt, clearTicket } from './lib/twofa-ticket.js';
 import { audit } from './lib/audit.js';
+import { logLogin } from './lib/auth-events.js';
 import { encryptSecret, decryptSecret, isEncrypted } from './lib/secrets.js';
 
 // Шифруем TOTP-секреты, созданные старой версией в открытом виде.
@@ -104,6 +105,7 @@ export async function registerTwoFactorRoutes(app) {
     });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
     req.user = user;
+    logLogin({ userId: user.id, email: user.email, ok: true, reason: '2fa', ip: req.ip, ua: req.headers['user-agent'] });
     audit(req, 'auth.2fa.login', 'user', String(user.id), {});
     return { user: publicUser(user) };
   });

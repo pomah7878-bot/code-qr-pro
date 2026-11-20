@@ -5,6 +5,8 @@ import { PLANS, planOf, publicPlans } from './plans.js';
 import { notifyRegistration } from './notify.js';
 import { issueTicket } from './lib/twofa-ticket.js';
 import { sendMail, smtpConfigured } from './lib/mailer.js';
+import { logLogin } from './lib/auth-events.js';
+import { VIEW_COOKIE, getViewSession, destroyViewSession } from './lib/view-session.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const attempts = new Map(); // ip -> { n, reset }
@@ -83,16 +85,31 @@ function notifyLoginBlocked(user, ip) {
 const PASSWORD_EXEMPT = new Set(['/api/auth/password', '/api/auth/logout', '/api/me']);
 
 export const requireAuth = async (req, reply) => {
-  const user = sessionUser(req.cookies[COOKIE]);
+  let user = null;
+  let impersonatedBy = null;
+  // Режим просмотра «как клиент» имеет приоритет: пока открыта вкладка просмотра,
+  // запросы идут от лица клиента и только на чтение.
+  const view = getViewSession(req.cookies?.[VIEW_COOKIE]);
+  if (view) {
+    if (!['GET', 'HEAD'].includes(req.method)) {
+      return reply.code(403).send({ error: 'Режим просмотра: только чтение', code: 'readonly' });
+    }
+    user = db.prepare(
+      `SELECT id, email, name, role, plan, status, must_change_password, totp_enabled, created_at
+       FROM users WHERE id=?`
+    ).get(view.user_id);
+    if (user) impersonatedBy = view.admin_id;
+  }
+  if (!user) user = sessionUser(req.cookies[COOKIE]);
   if (!user) return reply.code(401).send({ error: 'Не авторизован' });
   if (user.status === 'blocked') {
     return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
   }
   const path = String(req.url || '').split('?')[0];
-  if (user.must_change_password && !PASSWORD_EXEMPT.has(path)) {
+  if (!impersonatedBy && user.must_change_password && !PASSWORD_EXEMPT.has(path)) {
     return reply.code(428).send({ error: 'Сначала смените временный пароль', code: 'password_change_required' });
   }
-  req.user = user;
+  req.user = impersonatedBy ? { ...user, impersonatedBy } : user;
 };
 
 export async function registerRoutes(app) {
@@ -132,6 +149,7 @@ export async function registerRoutes(app) {
     const normalizedEmail = String(email || '').toLowerCase().trim();
     if (!normalizedEmail) return reply.code(401).send({ error: 'Неверный email или пароль' });
     if (lockStatus(normalizedEmail)) {
+      logLogin({ email: normalizedEmail, ok: false, reason: 'locked', ip: req.ip, ua: req.headers['user-agent'] });
       return reply.code(429).send({ error: 'Слишком много неудачных попыток. Вход заблокирован на 15 минут.' });
     }
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
@@ -139,9 +157,11 @@ export async function registerRoutes(app) {
     if (!user || !passwordInput || passwordInput.length > 200 || !verifyPassword(passwordInput, user.password_hash)) {
       const justLocked = recordLoginFail(normalizedEmail);
       if (justLocked) notifyLoginBlocked(user, req.ip);
+      logLogin({ userId: user?.id ?? null, email: normalizedEmail, ok: false, reason: 'bad_password', ip: req.ip, ua: req.headers['user-agent'] });
       return reply.code(401).send({ error: 'Неверный email или пароль' });
     }
     if (user.status === 'blocked') {
+      logLogin({ userId: user.id, email: normalizedEmail, ok: false, reason: 'blocked', ip: req.ip, ua: req.headers['user-agent'] });
       return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
     }
     clearLoginFails(normalizedEmail);
@@ -151,6 +171,7 @@ export async function registerRoutes(app) {
     db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
     const { token, expires } = createSession(user.id, { ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role) });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
+    logLogin({ userId: user.id, email: normalizedEmail, ok: true, reason: 'password', ip: req.ip, ua: req.headers['user-agent'] });
     return { user: publicUser(user) };
   });
 
@@ -184,6 +205,20 @@ export async function registerRoutes(app) {
       ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
     });
     reply.setCookie(COOKIE, sessionToken, cookieOpts(new Date(expires)));
+    logLogin({ userId: user.id, email: user.email, ok: true, reason: 'admin_link', ip: req.ip, ua: req.headers['user-agent'] });
+    return reply.redirect('/app', 302);
+  });
+
+  // Вход в режим просмотра «как клиент» по одноразовой ссылке от админа.
+  app.get('/api/admin/view/:token', async (req, reply) => {
+    const token = String(req.params?.token || '');
+    const view = getViewSession(token);
+    if (!view) return reply.code(410).type('text/html; charset=utf-8')
+      .send(linkPage('Ссылка просмотра истекла', 'Попросите администратора открыть просмотр заново.'));
+    reply.setCookie(VIEW_COOKIE, token, {
+      path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
+      expires: new Date(Date.now() + 30 * 60 * 1000)
+    });
     return reply.redirect('/app', 302);
   });
 
@@ -273,9 +308,18 @@ export async function registerRoutes(app) {
     return { ok: true };
   });
 
+  // Выход из режима просмотра: админская сессия остаётся.
+  app.post('/api/auth/view/exit', async (req, reply) => {
+    destroyViewSession(req.cookies?.[VIEW_COOKIE]);
+    reply.clearCookie(VIEW_COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
   app.post('/api/auth/logout', async (req, reply) => {
     destroySession(req.cookies[COOKIE]);
+    destroyViewSession(req.cookies?.[VIEW_COOKIE]);
     reply.clearCookie(COOKIE, { path: '/' });
+    reply.clearCookie(VIEW_COOKIE, { path: '/' });
     return { ok: true };
   });
 
@@ -299,6 +343,8 @@ export async function registerRoutes(app) {
     return {
       user: publicUser(req.user),
       plan,
+      impersonated: Boolean(req.user.impersonatedBy),
+      impersonatedBy: req.user.impersonatedBy || null,
       usage: { codesToday: usageToday(req.user.id), codesPerDay: plan.codesPerDay }
     };
   });

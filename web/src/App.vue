@@ -12,6 +12,10 @@ const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: ''
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 
 async function logout() { await store.logout(); menuOpen.value = false; router.push('/'); }
+async function exitViewMode() {
+  try { await api.exitViewMode(); } catch { /* всё равно перезагрузимся */ }
+  window.location.href = '/app';
+}
 function go(path) { menuOpen.value = false; router.push(path); }
 
 async function changePassword() {
@@ -35,6 +39,12 @@ async function changePassword() {
 
 <template>
   <div class="min-h-screen flex flex-col">
+    <div v-if="store.impersonated" class="sticky top-0 z-50 bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 text-sm text-amber-600 dark:text-amber-400">
+      <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+        <span>Режим просмотра от имени клиента — только чтение, изменения заблокированы.</span>
+        <button class="rounded-lg border border-amber-500/50 px-3 py-1 text-xs font-medium" @click="exitViewMode">Выйти из просмотра</button>
+      </div>
+    </div>
     <header class="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
       <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <router-link to="/" class="flex items-center gap-2 font-display font-extrabold tracking-wide shrink-0" @click="menuOpen = false">

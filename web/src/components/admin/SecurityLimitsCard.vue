@@ -5,6 +5,9 @@ import { fmtDateTime } from '../../lib/format.js';
 
 const limits = ref([]);
 const locks = ref([]);
+const allow = ref([]);
+const newIp = ref('');
+const newNote = ref('');
 const loading = ref(false);
 const busy = ref('');
 const error = ref('');
@@ -14,13 +17,48 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const [r, l] = await Promise.all([api.adminRateLimits(), api.adminLoginLocks()]);
+    const [r, l, a] = await Promise.all([api.adminRateLimits(), api.adminLoginLocks(), api.adminAllowlist()]);
     limits.value = r.limits || [];
     locks.value = l.locks || [];
+    allow.value = a.ips || [];
   } catch (e) {
     error.value = e.message;
   } finally {
     loading.value = false;
+  }
+}
+
+async function addAllow() {
+  const ip = String(newIp.value || '').trim();
+  if (!ip) return;
+  busy.value = 'add-allow';
+  error.value = '';
+  notice.value = '';
+  try {
+    await api.adminAddAllowlist(ip, newNote.value);
+    notice.value = `IP ${ip} добавлен в белый список`;
+    newIp.value = '';
+    newNote.value = '';
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    busy.value = '';
+  }
+}
+
+async function removeAllow(ip) {
+  busy.value = 'del-allow:' + ip;
+  error.value = '';
+  notice.value = '';
+  try {
+    await api.adminRemoveAllowlist(ip);
+    notice.value = `IP ${ip} убран из белого списка`;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    busy.value = '';
   }
 }
 
@@ -135,6 +173,34 @@ onMounted(load);
             </div>
             <button class="btn-ghost !py-1 !px-2 text-xs shrink-0" :disabled="busy === 'email:' + l.email" @click="clearLock(l.email)">Снять</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5 pt-4 border-t border-slate-200 dark:border-white/10">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <h3 class="font-semibold text-sm">Белый список IP · {{ allow.length }}</h3>
+        <span class="text-[11px] text-slate-500">такие адреса не упираются в антиспам</span>
+      </div>
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="flex-1 min-w-[160px]">
+          <label class="label !text-xs" for="allow-ip">IP-адрес</label>
+          <input id="allow-ip" v-model="newIp" class="input !py-2 text-sm font-mono" placeholder="203.0.113.10" @keyup.enter="addAllow">
+        </div>
+        <div class="flex-1 min-w-[160px]">
+          <label class="label !text-xs" for="allow-note">Комментарий</label>
+          <input id="allow-note" v-model="newNote" class="input !py-2 text-sm" maxlength="200" placeholder="Офис клиента / склад">
+        </div>
+        <button class="btn-primary !py-2 !px-4 text-sm" :disabled="busy === 'add-allow' || !newIp.trim()" @click="addAllow">Добавить</button>
+      </div>
+      <p v-if="!allow.length" class="text-xs text-slate-500 mt-2">Список пуст — антиспам действует для всех.</p>
+      <div v-else class="mt-2 space-y-1.5 max-h-44 overflow-y-auto pr-1">
+        <div v-for="a in allow" :key="a.ip" class="flex items-center justify-between gap-2 text-xs rounded-lg border border-slate-200 dark:border-white/10 px-2.5 py-1.5">
+          <div class="min-w-0">
+            <div class="font-mono truncate">{{ a.ip }}</div>
+            <div class="text-slate-500 truncate">{{ a.note || 'без комментария' }} · добавлен {{ fmtDateTime(a.created_at) }}</div>
+          </div>
+          <button class="btn-ghost !py-1 !px-2 text-xs shrink-0 text-red-500" :disabled="busy === 'del-allow:' + a.ip" @click="removeAllow(a.ip)">Убрать</button>
         </div>
       </div>
     </div>

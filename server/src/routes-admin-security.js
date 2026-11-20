@@ -1,6 +1,7 @@
 import { db } from './db.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
+import { allowlistRows, refreshAllowlist, validIp } from './lib/allowlist.js';
 
 /**
  * Безопасность: админ видит и снимает защитные лимиты, чтобы быстро помочь клиенту.
@@ -59,5 +60,31 @@ export async function registerAdminSecurityRoutes(app) {
     const r = db.prepare('DELETE FROM login_attempts').run();
     audit(req, 'security.login_lock_clear_all', 'email', '', { removed: r.changes });
     return { ok: true, removed: r.changes };
+  });
+
+  // Белый список IP: такие адреса не упираются в антиспам (офис, склад, интегратор).
+  app.get('/api/admin/security/allowlist', { preHandler: requireAdmin }, async () => ({ ips: allowlistRows() }));
+
+  app.post('/api/admin/security/allowlist', { preHandler: requireAdmin }, async (req, reply) => {
+    const ip = String(req.body?.ip || '').trim().slice(0, 60);
+    if (!validIp(ip)) return reply.code(400).send({ error: 'Некорректный IP-адрес' });
+    const note = String(req.body?.note || '').trim().slice(0, 200);
+    try {
+      db.prepare('INSERT INTO ip_allowlist (ip, note, created_by) VALUES (?,?,?)').run(ip, note, req.user.id);
+    } catch {
+      return reply.code(409).send({ error: 'Этот IP уже в белом списке' });
+    }
+    refreshAllowlist();
+    audit(req, 'security.allowlist_add', 'ip', ip, { note });
+    return { ok: true, ip };
+  });
+
+  app.delete('/api/admin/security/allowlist/:ip', { preHandler: requireAdmin }, async (req, reply) => {
+    const ip = String(req.params.ip || '').trim().slice(0, 60);
+    const r = db.prepare('DELETE FROM ip_allowlist WHERE ip=?').run(ip);
+    if (!r.changes) return reply.code(404).send({ error: 'Этого IP нет в белом списке' });
+    refreshAllowlist();
+    audit(req, 'security.allowlist_remove', 'ip', ip, {});
+    return { ok: true };
   });
 }

@@ -3,12 +3,18 @@ import { extractKizCodes } from './pdfCodes.js';
 // Распознавание DataMatrix со страниц PDF идёт в отдельном worker'е (ZXing WASM).
 // Раньше декодирование выполнялось в главном потоке и на многостраничном PDF
 // интерфейс «замирал» на всё время разбора — страница не отвечала на нажатия.
+//
+// Если worker недоступен или сломан (браузер без module worker, сбой WASM),
+// импорт не ломается: страницы разбираются старым способом в главном потоке.
 let decodeWorker = null;
 let decodeSeq = 0;
+let workerBroken = false;
+let workerEmptyStreak = 0;
 const waiting = new Map();
+const WORKER_TIMEOUT_MS = 20000;
 
 function getPageWorker() {
-  if (typeof Worker === 'undefined') return null;
+  if (typeof Worker === 'undefined' || workerBroken) return null;
   if (decodeWorker) return decodeWorker;
   try {
     const worker = new Worker(new URL('./zxing-worker.js', import.meta.url), { type: 'module' });
@@ -22,13 +28,20 @@ function getPageWorker() {
     worker.onerror = () => {
       for (const waiter of waiting.values()) waiter.reject(new Error('Декодер остановился'));
       waiting.clear();
-      decodeWorker = null;
+      markWorkerBroken();
     };
     decodeWorker = worker;
     return worker;
   } catch {
+    markWorkerBroken();
     return null;
   }
+}
+
+function markWorkerBroken() {
+  workerBroken = true;
+  try { decodeWorker?.terminate(); } catch { /* ignore */ }
+  decodeWorker = null;
 }
 
 function decodeImageInWorker(imageData) {
@@ -36,7 +49,15 @@ function decodeImageInWorker(imageData) {
   if (!worker) return Promise.reject(new Error('Worker недоступен'));
   return new Promise((resolve, reject) => {
     const id = ++decodeSeq;
-    waiting.set(id, { resolve, reject });
+    const timer = setTimeout(() => {
+      waiting.delete(id);
+      markWorkerBroken();
+      reject(new Error('Декодер не ответил'));
+    }, WORKER_TIMEOUT_MS);
+    waiting.set(id, {
+      resolve: (texts) => { clearTimeout(timer); resolve(texts); },
+      reject: (e) => { clearTimeout(timer); reject(e); }
+    });
     const pixels = new Uint8ClampedArray(imageData.data);
     worker.postMessage(
       { type: 'decodePage', id, buffer: pixels.buffer, width: imageData.width, height: imageData.height },
@@ -45,8 +66,7 @@ function decodeImageInWorker(imageData) {
   });
 }
 
-// Резервный путь: если worker по какой-то причине не поднялся, распознаём
-// в главном потоке, как это было раньше (медленнее, но результат не теряется).
+// Резервный путь: разбор кадра в главном потоке (как было до появления worker'а).
 let fallbackZxing = null;
 let fallbackReader = null;
 let fallbackHints = null;
@@ -74,6 +94,8 @@ async function fallbackDecodeImage(imageData) {
 
 // Читает PDF: сначала текстовый слой, если кодов нет — распознаёт DataMatrix со страниц.
 export async function importPdf(file, onProgress = () => {}) {
+  workerBroken = false;
+  workerEmptyStreak = 0;
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
   const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
@@ -109,7 +131,7 @@ export async function importPdf(file, onProgress = () => {}) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       try {
-        const texts = await decodePage(page, canvas, ctx);
+        const texts = await decodePage(page, canvas, ctx, found.size);
         const codes = [];
         for (const payload of texts) {
           const pageCodes = extractKizCodes(payload);
@@ -132,7 +154,7 @@ export async function importPdf(file, onProgress = () => {}) {
   }
 }
 
-async function decodePage(page, canvas, ctx) {
+async function decodePage(page, canvas, ctx, foundSoFar) {
   const base = page.getViewport({ scale: 1 });
   // мелкие этикетки рендерим крупнее, A4 — без гигантских полотен
   const scale = Math.min(4, Math.max(1, 900 / base.width));
@@ -146,14 +168,27 @@ async function decodePage(page, canvas, ctx) {
     await page.render({ canvasContext: ctx, viewport }).promise;
 
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let texts = null;
-    try {
-      texts = await decodeImageInWorker(image);
-    } catch {
-      // worker не поднялся — этот же кадр разбираем в главном потоке
-      texts = await fallbackDecodeImage(image);
+    if (!workerBroken) {
+      try {
+        const texts = await decodeImageInWorker(image);
+        if (texts && texts.length) {
+          workerEmptyStreak = 0;
+          return texts;
+        }
+        workerEmptyStreak += 1;
+      } catch {
+        // worker сломался — ниже сработает резервный путь
+      }
     }
-    if (texts && texts.length) return texts;
+    // Пока не найден ни один код, сверяемся со старым способом: если он видит
+    // код, а worker — нет, значит worker в этом браузере не декодирует.
+    if (workerBroken || (foundSoFar === 0 && workerEmptyStreak >= 2)) {
+      const inline = await fallbackDecodeImage(image);
+      if (inline.length) {
+        if (!workerBroken) markWorkerBroken();
+        return inline;
+      }
+    }
   }
   return [];
 }

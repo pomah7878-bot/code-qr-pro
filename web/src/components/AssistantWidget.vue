@@ -6,6 +6,7 @@ import { store } from '../store.js';
 import { assistantUi, closeAssistant } from '../lib/assistant-ui.js';
 import { pageContext } from '../lib/pageContext.js';
 import BrandIcon from './BrandIcon.vue';
+import RobotMascot from './RobotMascot.vue';
 
 const route = useRoute();
 const messages = ref([]);
@@ -15,6 +16,17 @@ const error = ref('');
 const notice = ref('');
 const chatEl = ref(null);
 const support = reactive({ open: false, busy: false, subject: '', message: '', aiContext: '', error: '' });
+
+// эмоции робота: покой / машет / думает / радуется / любит
+const mascotState = ref('idle');
+let mascotTimer = 0;
+function setMascot(state, holdMs = 0) {
+  mascotState.value = state;
+  window.clearTimeout(mascotTimer);
+  if (holdMs) {
+    mascotTimer = window.setTimeout(() => { mascotState.value = 'idle'; }, holdMs);
+  }
+}
 
 const currentPage = computed(() => pageContext(route.path));
 const pageKey = computed(() => assistantUi.pageKey || currentPage.value.key);
@@ -49,12 +61,18 @@ watch(() => assistantUi.open, (open) => {
   if (open) {
     dismissHint();
     resetChat();
+    setMascot('wave', 1800);
     if (isPremium.value) loadTickets();
+  } else {
+    setMascot('idle');
   }
 });
 watch(() => route.path, () => {
   // смена раздела: обновляем подсказку, чтобы помощник отвечал про новое меню
   if (assistantUi.open) resetChat();
+});
+watch(() => support.open, (isOpen) => {
+  if (!isOpen) setMascot('idle');
 });
 
 const quickChips = computed(() => pageContext(`/app/${pageKey.value === 'overview' ? '' : pageKey.value}`).chips || []);
@@ -73,6 +91,7 @@ async function ask() {
   messages.value.push({ role: 'q', text });
   question.value = '';
   busy.value = true;
+  setMascot('think');
   scrollChat();
   try {
     // передаём историю диалога, чтобы помощник не переспрашивал одно и то же
@@ -90,10 +109,14 @@ async function ask() {
       reason: r.reason || (repeatedClarify ? 'Помощник не смог решить — передайте администратору' : ''),
       sources: r.sources || []
     });
+    // эмоции: поблагодарили — «любит», иначе «радуется» готовому ответу
+    if (/спасибо|благодар/i.test(text)) setMascot('heart', 2200);
+    else setMascot('cheer', 1700);
   } catch (e) {
     error.value = e.message;
     messages.value.pop();
     question.value = text;
+    setMascot('idle');
   } finally {
     busy.value = false;
     scrollChat();
@@ -121,6 +144,7 @@ function openSupport() {
   support.aiContext = lastA.slice(0, 3000);
   support.error = '';
   support.open = true;
+  setMascot('think', 0);
 }
 
 async function submitSupport() {
@@ -221,6 +245,7 @@ onUnmounted(() => {
   window.clearTimeout(hideTimer);
   window.clearTimeout(peekTimer);
   window.clearTimeout(pressTimer);
+  window.clearTimeout(mascotTimer);
   window.clearInterval(peekInterval);
 });
 </script>
@@ -243,7 +268,7 @@ onUnmounted(() => {
       </transition>
 
       <button
-        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white right-0 bottom-0 w-14 h-14 p-0 sm:w-auto sm:h-auto sm:px-4 sm:py-3 sm:gap-2"
+        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white right-0 bottom-0 w-16 h-16 p-0 sm:w-auto sm:h-auto sm:pl-1.5 sm:pr-4 sm:py-1.5 sm:gap-3"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
         aria-label="Открыть AI-помощника"
         :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
@@ -252,11 +277,13 @@ onUnmounted(() => {
         @mouseleave="hovering = false"
       >
         <span class="ai-shimmer" aria-hidden="true"></span>
-        <BrandIcon name="star" :size="22" class="sm:hidden" />
-        <span class="ai-launcher-icon hidden sm:inline-flex"><BrandIcon name="star" :size="15" /></span>
-        <BrandIcon name="help" :size="18" class="hidden sm:block" />
-        <span class="hidden sm:inline">AI-помощник</span>
-        <span class="ai-premium-tag hidden sm:inline">PREMIUM</span>
+        <span class="ai-bot-disc">
+          <RobotMascot :state="mascotState" :size="56" crop="head" />
+        </span>
+        <span class="hidden sm:flex flex-col items-start leading-none text-left">
+          <span class="text-[13px] font-semibold tracking-wide">AI-помощник</span>
+          <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">PREMIUM · СПРОСИТЬ</span>
+        </span>
         <span class="ai-notify-dot" :class="{ 'is-on': idleHint }" aria-hidden="true"></span>
       </button>
     </div>
@@ -270,7 +297,9 @@ onUnmounted(() => {
           <div class="ai-head px-3 sm:px-4 py-2.5 sm:py-3">
             <div class="flex items-start justify-between gap-2">
               <div class="flex items-center gap-2.5 min-w-0">
-                <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-8 h-8 sm:w-9 sm:h-9 ai-logo">
+                <span class="ai-head-avatar">
+                  <RobotMascot :state="mascotState" :size="40" crop="head" />
+                </span>
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-display font-bold tracking-wide text-[15px] sm:text-base">AI-помощник</span>
@@ -290,7 +319,9 @@ onUnmounted(() => {
 
           <div v-if="!isPremium" class="p-5 text-center">
             <div class="ai-upsell rounded-2xl p-5">
-              <BrandIcon name="star" :size="30" class="mx-auto text-brand-400" />
+              <div class="mx-auto w-fit">
+                <RobotMascot state="idle" :size="104" />
+              </div>
               <p class="text-sm mt-3 font-semibold">AI-помощник — премиальная функция</p>
               <p class="text-xs text-slate-500 mt-1">Отвечает по «Честному ЗНАКу» и работе сервиса, а сложные вопросы передаёт администратору.</p>
               <router-link to="/app/billing" class="ai-cta inline-block mt-4 !py-2.5 !px-5 text-sm" @click="closeAssistant">Оформить PREMIUM</router-link>
@@ -504,6 +535,28 @@ onUnmounted(() => {
   isolation: isolate;
   animation: ai-idle-bob 5.5s ease-in-out infinite;
   transform-origin: 50% 90%;
+}
+.ai-bot-disc {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #0e0b1c;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .22), 0 6px 16px -6px rgba(0, 0, 0, .6);
+  flex: none;
+}
+.ai-head-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #0e0b1c;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, .55), 0 4px 12px -6px rgba(124, 58, 237, .7);
+  flex: none;
 }
 .ai-launcher.ai-hover {
   animation: none;

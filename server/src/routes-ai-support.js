@@ -49,6 +49,26 @@ const PAGES = {
   assistant: { label: 'AI-помощник', keywords: '' }
 };
 
+const safeParse = (value) => {
+  try { return JSON.parse(value); } catch { return null; }
+};
+
+/** Ответ мог прийти «почти-JSON» с обрывом по лимиту токенов — вытаскиваем текст. */
+function cleanAnswer(text) {
+  let s = String(text || '').trim();
+  if (!/^\{\s*"/.test(s)) return s.slice(0, 3000);
+  const m = /"answer"\s*:\s*"([\s\S]*)$/.exec(s);
+  if (!m) return s.slice(0, 3000);
+  s = m[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\t/g, '\t')
+    .replace(/\\\\/g, '\\');
+  const cut = s.search(/"\s*,\s*"(clarify|needHuman|reason|sources)"\s*:/);
+  if (cut > 0) s = s.slice(0, cut);
+  return s.replace(/["}\]]+\s*$/, '').trim().slice(0, 3000);
+}
+
 const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток). Помогаешь клиентам прямо в личном кабинете.
 Клиент находится в разделе кабинета: {{PAGE}}.
 
@@ -56,7 +76,7 @@ const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (мар�
 Уточняющий вопрос допустим РОВНО ОДИН раз и только если сообщение клиента — одно-два слова без контекста («не работает», «помогите») и в диалоге ещё не было ответов. Если клиент уже что-то уточнил, если это продолжение диалога или вопрос понятен — сразу отвечай по делу, без вопросов. Никогда не задавай второй уточняющий вопрос подряд.
 
 Правила:
-1. Отвечай по-русски, шагами, 3–7 предложений или короткий список. Без markdown-заголовков.
+1. Отвечай по-русски, шагами, 3–7 предложений или короткий список. Без markdown-заголовков. Весь ответ — до 700 символов.
 2. Опирайся на статьи базы знаний ниже. Если в базе нет точного ответа — дай общий безопасный совет и предложи поддержку.
 3. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
 4. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
@@ -117,12 +137,12 @@ export async function registerAiSupportRoutes(app) {
         system: SYSTEM.replace('{{PAGE}}', page.label),
         user: askPrompt(extra),
         cfg,
-        freeMaxTokens: 900
+        freeMaxTokens: 1100
       });
       const parsed = res.parsed || {};
       return {
         model: String(res.model || cfg.model).slice(0, 120),
-        answer: String(parsed.answer || res.content || '').trim().slice(0, 3000),
+        answer: cleanAnswer(parsed.answer || res.content || ''),
         clarify: Boolean(parsed.clarify),
         needHuman: Boolean(parsed.needHuman),
         reason: String(parsed.reason || '').slice(0, 300)

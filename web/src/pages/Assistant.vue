@@ -3,8 +3,17 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import BrandIcon from '../components/BrandIcon.vue';
+import RobotMascot from '../components/RobotMascot.vue';
 import Modal from '../components/admin/Modal.vue';
 import SideNav from '../components/SideNav.vue';
+
+const mascotState = ref('idle');
+let mascotTimer = 0;
+function setMascot(state, holdMs = 0) {
+  mascotState.value = state;
+  window.clearTimeout(mascotTimer);
+  if (holdMs) mascotTimer = window.setTimeout(() => { mascotState.value = 'idle'; }, holdMs);
+}
 
 const messages = ref([]);
 const question = ref('');
@@ -44,6 +53,7 @@ async function ask() {
   messages.value.push({ role: 'q', text });
   question.value = '';
   busy.value = true;
+  setMascot('think');
   scrollChat();
   try {
     const history = messages.value
@@ -60,10 +70,13 @@ async function ask() {
       reason: r.reason || (repeatedClarify ? 'Помощник не смог решить — передайте администратору' : ''),
       model: r.model
     });
+    if (/спасибо|благодар/i.test(text)) setMascot('heart', 2200);
+    else setMascot('cheer', 1700);
   } catch (e) {
     error.value = e.message;
     messages.value.pop();
     question.value = text;
+    setMascot('idle');
   } finally {
     busy.value = false;
     scrollChat();
@@ -132,7 +145,7 @@ onMounted(() => {
     <div class="ai-hero rounded-2xl p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-3">
-          <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-11 h-11 ai-logo">
+          <span class="ai-hero-bot"><RobotMascot :state="mascotState" :size="76" /></span>
           <div>
             <div class="flex items-center gap-2">
               <h1 class="font-display font-bold text-2xl">AI-помощник</h1>
@@ -249,6 +262,12 @@ onMounted(() => {
   background: linear-gradient(120deg, rgba(124, 58, 237, 0.16), rgba(99, 102, 241, 0.08) 55%, rgba(217, 70, 239, 0.14));
   border: 1px solid rgba(124, 58, 237, 0.28);
   box-shadow: 0 18px 45px -24px rgba(124, 58, 237, 0.55);
+}
+.ai-hero-bot {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  filter: drop-shadow(0 10px 22px rgba(124, 58, 237, .45));
 }
 .ai-logo {
   border-radius: 12px;

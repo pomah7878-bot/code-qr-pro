@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-помощник — варианты кнопки</title>
+<style>
+  :root {
+    --violet: #7c3aed;
+    --indigo: #6366f1;
+    --fuchsia: #d946ef;
+    --ink: #0b0916;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #e2e8f0;
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(124, 58, 237, 0.35), transparent 60%),
+      radial-gradient(700px 420px at 85% 0%, rgba(217, 70, 239, 0.22), transparent 55%),
+      var(--ink);
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 36px 24px 56px; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: #94a3b8; font-size: 14px; margin: 0 0 4px; }
+  .hint { color: #a78bfa; font-size: 13px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 22px;
+    margin-top: 30px;
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 18px 18px;
+    border-radius: 22px;
+    background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015));
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    min-height: 300px;
+    overflow: hidden;
+  }
+  .card:hover { border-color: rgba(167, 139, 250, 0.45); }
+  .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px 0 22px; }
+  .caption { text-align: center; font-size: 13px; color: #cbd5e1; }
+  .caption b { display: block; font-size: 15px; color: #f1f5f9; margin-bottom: 4px; }
+  .caption span { color: #94a3b8; font-size: 12px; }
+  .tag {
+    position: absolute; top: 12px; right: 12px;
+    font-size: 9px; letter-spacing: 0.12em; font-weight: 700;
+    padding: 3px 7px; border-radius: 6px;
+    color: #ddd6fe; background: rgba(124, 58, 237, 0.28);
+    border: 1px solid rgba(167, 139, 250, 0.45);
+  }
+
+  /* Общие эффекты */
+  .bot {
+    --ex: 0px; --ey: 0px; --tilt: 0deg; --wave: 0deg;
+    position: relative;
+    border: 0; padding: 0; background: transparent;
+    cursor: pointer;
+    filter: drop-shadow(0 16px 30px rgba(124, 58, 237, 0.35));
+    transform: rotate(var(--tilt));
+    transition: transform 0.25s ease, filter 0.25s ease;
+    animation: bob 4.8s ease-in-out infinite;
+  }
+  .bot:hover { animation-play-state: paused; transform: rotate(0) translateY(-4px) scale(1.04); filter: drop-shadow(0 22px 42px rgba(124, 58, 237, 0.55)); }
+  .bot:active { transform: scale(0.94); }
+  @keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+
+  .eye {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #f8fafc;
+    box-shadow: inset 0 2px 5px rgba(15, 23, 42, 0.45);
+  }
+  .pupil {
+    width: 42%; height: 42%; border-radius: 50%;
+    background: #0f172a;
+    transform: translate(var(--ex), var(--ey));
+    transition: transform 0.08s linear;
+    position: relative;
+  }
+  .pupil::after {
+    content: ''; position: absolute; left: 18%; top: 12%;
+    width: 32%; height: 32%; border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+  }
+  .bot.blink .eye { transform: scaleY(0.12); }
+  .eye { transition: transform 0.12s ease; }
+
+  /* ---------- Вариант 1: ВАЛЛИ ---------- */
+  .walle { width: 170px; height: 172px; }
+  .walle .head {
+    position: absolute; left: 33px; top: 36px;
+    width: 104px; height: 92px; border-radius: 30px;
+    background: linear-gradient(160deg, #59438f, #2a1f4f 58%, #191231);
+    border: 2px solid rgba(167, 139, 250, 0.6);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,0.22),
+      inset 0 -12px 24px rgba(0,0,0,0.6),
+      0 0 30px rgba(124, 58, 237, 0.4);
+  }
+  .walle .face {
+    position: absolute; left: 50%; top: 16px; translate: -50% 0;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .walle .eye-ring {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 45%, #1b1430 42%, #c4b5fd 44%, #7c3aed 100%);
+    box-shadow: 0 0 14px rgba(167, 139, 250, 0.55), inset 0 0 6px rgba(0,0,0,0.6);
+    display: grid; place-items: center;
+  }
+  .walle .eye {
+    position: relative;
+    width: 19px; height: 19px; border-radius: 50%;
+    background: #f8fafc;
+    box-shadow: inset 0 1px 3px rgba(15,23,42,0.5);
+  }
+  .walle .bridge {
+    position: absolute; left: 50%; top: 14px; translate: -50% 0;
+    width: 10px; height: 4px; border-radius: 3px;
+    background: #a78bfa;
+  }
+  .walle .grille {
+    position: absolute; left: 50%; bottom: 12px; translate: -50% 0;
+    display: flex; gap: 3px;
+  }
+  .walle .grille i {
+    display: block; width: 5px; height: 9px; border-radius: 2px;
+    background: rgba(196, 181, 253, 0.55);
+    box-shadow: 0 0 6px rgba(167,139,250,0.4);
+  }
+  .walle .screw {
+    position: absolute; width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(196,181,253,0.5);
+  }
+  .walle .screw.tl { left: 8px; top: 7px; }
+  .walle .screw.tr { right: 8px; top: 7px; }
+  .walle .antenna {
+    position: absolute; left: 83px; top: 8px; width: 4px; height: 28px;
+    background: linear-gradient(#a78bfa, #6d28d9); border-radius: 3px;
+  }
+  .walle .antenna::after {
+    content: ''; position: absolute; left: -4px; top: -10px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #f5d0fe, var(--fuchsia));
+    box-shadow: 0 0 14px rgba(217, 70, 239, 0.95);
+    animation: blinkLed 2.4s ease-in-out infinite;
+  }
+  @keyframes blinkLed { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  .walle .arm {
+    position: absolute; top: 70px; width: 34px; height: 58px;
+    transform-origin: 50% 8px;
+    animation: sway 3.6s ease-in-out infinite;
+  }
+  .walle .arm.left { left: -2px; }
+  .walle .arm.right { right: -2px; animation-delay: 0.4s; }
+  .walle .arm::before {
+    content: ''; position: absolute; left: 15px; top: 0;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #e9d5ff, #7c3aed);
+    box-shadow: 0 0 8px rgba(167,139,250,0.8);
+  }
+  .walle .arm .upper {
+    position: absolute; left: 18px; top: 6px; width: 5px; height: 18px;
+    border-radius: 3px; background: linear-gradient(#c4b5fd, #8b5cf6);
+  }
+  .walle .arm .fore {
+    position: absolute; left: 8px; top: 22px; width: 23px; height: 5px;
+    border-radius: 3px; background: linear-gradient(90deg, #8b5cf6, #c4b5fd);
+    transform: rotate(8deg); transform-origin: 100% 50%;
+  }
+  .walle .arm .claw {
+    position: absolute; left: 4px; top: 26px; width: 18px; height: 16px;
+    border: 3px solid #a78bfa; border-radius: 9px 9px 12px 12px;
+    border-top-color: transparent;
+    box-shadow: 0 0 8px rgba(167,139,250,0.5);
+  }
+  .walle .arm.right .claw { left: 12px; }
+  .walle .arm.right .fore { left: 4px; transform: rotate(-8deg); transform-origin: 0% 50%; }
+  .walle .arm.right .upper { left: 11px; }
+  @keyframes sway { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
+  .walle .arm.right.wave { animation: waveArm 1.6s ease-in-out; }
+  @keyframes waveArm {
+    0% { transform: rotate(0); } 25% { transform: rotate(-38deg); }
+    50% { transform: rotate(-14deg); } 75% { transform: rotate(-34deg); } 100% { transform: rotate(0); }
+  }
+
+  /* ---------- Вариант 2: Классик ---------- */
+  .classic { width: 150px; height: 150px; }
+  .classic .head {
+    position: absolute; left: 24px; top: 26px;
+    width: 102px; height: 96px; border-radius: 34px;
+    background: linear-gradient(150deg, #8b5cf6 0%, #6366f1 48%, #d946ef 100%);
+    box-shadow:
+      inset 0 3px 0 rgba(255,255,255,0.4),
+      inset 0 -14px 26px rgba(49, 10, 90, 0.45),
+      0 0 30px rgba(124, 58, 237, 0.45);
+    border: 1px solid rgba(255,255,255,0.35);
+  }
+  .classic .eye {
+    position: absolute; top: 26px; width: 26px; height: 26px;
+    border-radius: 50%; background: #fff;
+  }
+  .classic .eye.left { left: 20px; }
+  .classic .eye.right { right: 20px; }
+  .classic .cheek {
+    position: absolute; top: 58px; width: 14px; height: 8px; border-radius: 50%;
+    background: rgba(244, 114, 182, 0.55); filter: blur(1px);
+  }
+  .classic .cheek.left { left: 14px; }
+  .classic .cheek.right { right: 14px; }
+  .classic .smile {
+    position: absolute; left: 50%; top: 58px; translate: -50% 0;
+    width: 30px; height: 16px;
+    border: 3px solid rgba(255,255,255,0.92);
+    border-top: 0; border-radius: 0 0 18px 18px;
+  }
+  .classic .antenna {
+    position: absolute; left: 73px; top: 8px; width: 4px; height: 22px;
+    background: rgba(226, 232, 240, 0.85); border-radius: 3px;
+  }
+  .classic .antenna::after {
+    content: ''; position: absolute; left: -4px; top: -9px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #fff, #a78bfa);
+    box-shadow: 0 0 14px rgba(196, 181, 253, 0.95);
+  }
+  .classic .arm {
+    position: absolute; top: 66px; width: 26px; height: 34px;
+    transform-origin: 50% 8px;
+    animation: sway 4s ease-in-out infinite;
+  }
+  .classic .arm.left { left: 4px; }
+  .classic .arm.right { right: 4px; animation-delay: 0.5s; }
+  .classic .arm::before {
+    content: ''; position: absolute; left: 12px; top: 0;
+    width: 4px; height: 18px; background: rgba(226, 232, 240, 0.85); border-radius: 3px;
+  }
+  .classic .arm::after {
+    content: ''; position: absolute; left: 4px; top: 14px;
+    width: 18px; height: 16px; border-radius: 50% 50% 45% 45%;
+    background: linear-gradient(#f5d0fe, #d946ef);
+    box-shadow: 0 0 10px rgba(217, 70, 239, 0.6);
+  }
+
+  /* ---------- Вариант 3: Капсула ---------- */
+  .capsule { width: 150px; height: 160px; }
+  .capsule .head {
+    position: absolute; left: 37px; top: 24px;
+    width: 76px; height: 112px; border-radius: 38px;
+    background: linear-gradient(170deg, #1e1b33, #120e24 65%);
+    border: 2px solid rgba(167, 139, 250, 0.5);
+    box-shadow: inset 0 0 20px rgba(124, 58, 237, 0.3), 0 0 24px rgba(124, 58, 237, 0.3);
+  }
+  .capsule .visor {
+    position: absolute; left: 10px; top: 26px;
+    width: 56px; height: 36px; border-radius: 18px;
+    background: linear-gradient(180deg, #0a0714, #17112b);
+    border: 1px solid rgba(148,163,184,0.25);
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .capsule .eye {
+    position: relative;
+    width: 17px; height: 17px; border-radius: 50%;
+    box-shadow: 0 0 12px rgba(167,139,250,0.85);
+  }
+  .capsule .core {
+    position: absolute; left: 50%; bottom: 14px; translate: -50% 0;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #f5d0fe, #a21caf);
+    box-shadow: 0 0 16px rgba(217, 70, 239, 0.8);
+    animation: core 2.6s ease-in-out infinite;
+  }
+  @keyframes core { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.12); opacity: 1; } }
+  .capsule .ear {
+    position: absolute; top: 52px; width: 12px; height: 26px; border-radius: 8px;
+    background: linear-gradient(#8b5cf6, #4c1d95); box-shadow: 0 0 12px rgba(139,92,246,0.6);
+  }
+  .capsule .ear.left { left: 24px; }
+  .capsule .ear.right { right: 24px; }
+  .capsule .arm {
+    position: absolute; top: 74px; width: 30px; height: 36px;
+    transform-origin: 50% 6px;
+    animation: sway 3.2s ease-in-out infinite;
+  }
+  .capsule .arm.left { left: 6px; }
+  .capsule .arm.right { right: 6px; animation-delay: 0.35s; }
+  .capsule .arm::before {
+    content: ''; position: absolute; left: 13px; top: 0; width: 4px; height: 16px;
+    background: linear-gradient(#c4b5fd, #7c3aed); border-radius: 3px;
+  }
+  .capsule .arm::after {
+    content: ''; position: absolute; left: 5px; top: 12px; width: 20px; height: 20px;
+    border: 3px solid #a78bfa; border-radius: 12px 12px 14px 14px;
+    border-top-color: transparent;
+  }
+
+  /* ---------- Вариант 4: Минимал ---------- */
+  .minimal { width: 150px; height: 150px; }
+  .minimal .head {
+    position: absolute; left: 27px; top: 25px; width: 96px; height: 96px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #8b5cf6, #d946ef);
+    box-shadow:
+      inset 0 3px 0 rgba(255,255,255,0.45),
+      0 0 0 6px rgba(124, 58, 237, 0.16),
+      0 0 34px rgba(124, 58, 237, 0.55);
+    animation: halo 4s ease-in-out infinite;
+  }
+  @keyframes halo {
+    0%, 100% { box-shadow: inset 0 3px 0 rgba(255,255,255,0.45), 0 0 0 6px rgba(124,58,237,0.14), 0 0 28px rgba(124,58,237,0.45); }
+    50% { box-shadow: inset 0 3px 0 rgba(255,255,255,0.45), 0 0 0 10px rgba(124,58,237,0.1), 0 0 40px rgba(217,70,239,0.55); }
+  }
+  .minimal .eye {
+    position: absolute; top: 34px; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff;
+  }
+  .minimal .eye.left { left: 24px; }
+  .minimal .eye.right { right: 24px; }
+  .minimal .smile {
+    position: absolute; left: 50%; top: 62px; translate: -50% 0;
+    width: 26px; height: 13px; border: 3px solid rgba(255,255,255,0.95);
+    border-top: 0; border-radius: 0 0 16px 16px;
+  }
+  .minimal .arm {
+    position: absolute; top: 48px; width: 22px; height: 30px;
+    opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+    transform: translateX(6px) rotate(12deg);
+  }
+  .minimal .arm.left { left: 2px; }
+  .minimal .arm.right { right: 2px; transform: translateX(-6px) rotate(-12deg); }
+  .minimal:hover .arm { opacity: 1; transform: translateX(0) rotate(0); }
+  .minimal .arm::after {
+    content: ''; position: absolute; left: 5px; top: 6px; width: 13px; height: 22px;
+    border-radius: 10px; background: linear-gradient(#f5d0fe, #d946ef);
+    box-shadow: 0 0 10px rgba(217,70,239,0.6);
+  }
+
+  .foot { margin-top: 30px; color: #64748b; font-size: 12px; text-align: center; }
+  @media (prefers-reduced-motion: reduce) {
+    .bot, .antenna::after, .core, .head { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>AI-помощник: варианты кнопки</h1>
+    <p class="sub">Наведите курсор — глаза следят за мышкой, руки живые, при клике кнопка «прыгает».</p>
+    <p class="hint">Выберите номер — этот вариант сделаем в кабинете (с меткой PREMIUM и всплывающим окном).</p>
+
+    <div class="grid">
+      <div class="card">
+        <span class="tag">PREMIUM</span>
+        <div class="stage">
+          <button class="bot walle" aria-label="Вариант 1 ВАЛЛИ">
+            <span class="antenna"></span>
+            <span class="arm left"><span class="upper"></span><span class="fore"></span><span class="claw"></span></span>
+            <span class="arm right"><span class="upper"></span><span class="fore"></span><span class="claw"></span></span>
+            <span class="head">
+              <span class="screw tl"></span>
+              <span class="screw tr"></span>
+              <span class="face">
+                <span class="eye-ring"><span class="eye"><span class="pupil"></span></span></span>
+                <span class="eye-ring"><span class="eye"><span class="pupil"></span></span></span>
+              </span>
+              <span class="grille"><i></i><i></i><i></i></span>
+            </span>
+          </button>
+        </div>
+        <div class="caption"><b>1. «ВАЛЛИ»</b><span>экран-визор, антенна, лапки-клешни</span></div>
+      </div>
+
+      <div class="card">
+        <span class="tag">PREMIUM</span>
+        <div class="stage">
+          <button class="bot classic" aria-label="Вариант 2 Классик">
+            <span class="antenna"></span>
+            <span class="arm left"></span>
+            <span class="arm right"></span>
+            <span class="head">
+              <span class="eye left"><span class="pupil"></span></span>
+              <span class="eye right"><span class="pupil"></span></span>
+              <span class="cheek left"></span>
+              <span class="cheek right"></span>
+              <span class="smile"></span>
+            </span>
+          </button>
+        </div>
+        <div class="caption"><b>2. «КЛАССИК»</b><span>брендовый градиент, улыбка, ручки-ладошки</span></div>
+      </div>
+
+      <div class="card">
+        <span class="tag">PREMIUM</span>
+        <div class="stage">
+          <button class="bot capsule" aria-label="Вариант 3 Капсула">
+            <span class="ear left"></span>
+            <span class="ear right"></span>
+            <span class="arm left"></span>
+            <span class="arm right"></span>
+            <span class="head">
+              <span class="visor">
+                <span class="eye"><span class="pupil"></span></span>
+                <span class="eye"><span class="pupil"></span></span>
+              </span>
+              <span class="core"></span>
+            </span>
+          </button>
+        </div>
+        <div class="caption"><b>3. «КАПСУЛА»</b><span>высокая голова, уши, пульсирующее ядро</span></div>
+      </div>
+
+      <div class="card">
+        <span class="tag">PREMIUM</span>
+        <div class="stage">
+          <button class="bot minimal" aria-label="Вариант 4 Минимал">
+            <span class="arm left"></span>
+            <span class="arm right"></span>
+            <span class="head">
+              <span class="eye left"><span class="pupil"></span></span>
+              <span class="eye right"><span class="pupil"></span></span>
+              <span class="smile"></span>
+            </span>
+          </button>
+        </div>
+        <div class="caption"><b>4. «МИНИМАЛ»</b><span>круглый, руки появляются при наведении</span></div>
+      </div>
+    </div>
+
+    <p class="foot">Черновик-прототип · CODE QR PRO · после выбора перенесём в кабинет</p>
+  </div>
+
+<script>
+  const bots = [...document.querySelectorAll('.bot')];
+  let mx = window.innerWidth / 2;
+  let my = window.innerHeight / 2;
+  window.addEventListener('mousemove', (e) => { mx = e.clientX; my = e.clientY; });
+
+  function tick() {
+    for (const bot of bots) {
+      const r = bot.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = Math.max(-1, Math.min(1, (mx - cx) / 220));
+      const dy = Math.max(-1, Math.min(1, (my - cy) / 220));
+      bot.style.setProperty('--ex', (dx * 5).toFixed(1) + 'px');
+      bot.style.setProperty('--ey', (dy * 4).toFixed(1) + 'px');
+      bot.style.setProperty('--tilt', (dx * 3.5).toFixed(1) + 'deg');
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function blink(bot) {
+    bot.classList.add('blink');
+    setTimeout(() => bot.classList.remove('blink'), 150);
+  }
+  for (const bot of bots) {
+    (function schedule() {
+      setTimeout(() => { blink(bot); schedule(); }, 2600 + Math.random() * 4200);
+    })();
+  }
+
+  // изредка правая лапка машет
+  setInterval(() => {
+    const bot = bots[Math.floor(Math.random() * bots.length)];
+    const arm = bot.querySelector('.arm.right');
+    if (!arm) return;
+    arm.classList.add('wave');
+    setTimeout(() => arm.classList.remove('wave'), 1700);
+  }, 9000);
+
+  // клик — «прыжок» и подмигивание
+  for (const bot of bots) {
+    bot.addEventListener('click', () => {
+      bot.animate(
+        [{ transform: 'translateY(0) scale(1)' }, { transform: 'translateY(-14px) scale(1.06)' }, { transform: 'translateY(0) scale(1)' }],
+        { duration: 420, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }
+      );
+      blink(bot);
+    });
+  }
+</script>
+</body>
+</html>

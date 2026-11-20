@@ -9,6 +9,7 @@ import PageGuide from '../components/PageGuide.vue';
 import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
+import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -621,10 +622,12 @@ async function exportPdf() {
     error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
     return;
   }
+  const count = dataRows.value.length;
+  const guard = mobilePdfGuard(count);
+  if (guard) { error.value = guard; return; }
   // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
-  const count = dataRows.value.length;
   pdfBusy.value = true;
   try {
     const body = jobId.value != null
@@ -640,7 +643,8 @@ async function exportPdf() {
       await downloadBlob('/api/labels/pdf', body, `labels-${count}.pdf`, iosWin);
     }
     navigated = true;
-    if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы».';
+    const pdfNotice = mobilePdfNotice();
+    if (pdfNotice) notice.value = pdfNotice;
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -657,9 +661,11 @@ async function exportPdfSingle() {
     error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
     return;
   }
+  const count = dataRows.value.length;
+  const guard = mobilePdfGuard(count);
+  if (guard) { error.value = guard; return; }
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
-  const count = dataRows.value.length;
   pdfBusy.value = true;
   try {
     const body = jobId.value != null
@@ -674,7 +680,8 @@ async function exportPdfSingle() {
       await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${count}.pdf`, iosWin);
     }
     navigated = true;
-    if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
+    const pdfNotice = mobilePdfNotice();
+    if (pdfNotice) notice.value = pdfNotice;
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -690,6 +697,8 @@ async function printLabels() {
   if (dataRows.value.length > 1000) { error.value = 'Для печати из браузера — до 1000 этикеток'; return; }
   // На iPhone/iPad печать идёт через PDF-просмотрщик Safari.
   if (isIOS()) return exportPdfSingle();
+  const printGuard = mobilePrintGuard(dataRows.value.length);
+  if (printGuard) { error.value = printGuard; return; }
   const win = openPlaceholderWindow();
   try {
     const body = jobId.value != null

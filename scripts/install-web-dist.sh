@@ -29,5 +29,16 @@ if [ -d "$SRC/assets" ]; then
   echo "assets: $count"
 fi
 
+# Прочие файлы из корня сборки (public/: print-tools.js, qr-icon.svg, manifest, robots.txt и т.п.)
+root_count=0
+for f in "$SRC"/*; do
+  [ -f "$f" ] || continue
+  base=$(basename "$f")
+  [ "$base" = "index.html" ] && continue
+  install -m 644 "$f" "$DST/$base"
+  root_count=$((root_count + 1))
+done
+echo "root files: $root_count"
+
 chmod -R a+rX "$DST"
 echo "dist_ok"

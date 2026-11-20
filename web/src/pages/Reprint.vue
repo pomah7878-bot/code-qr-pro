@@ -9,6 +9,7 @@ import PageGuide from '../components/PageGuide.vue';
 import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
+import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
 
 const MAX = 5000;
 const categories = [
@@ -621,6 +622,8 @@ async function downloadPdf() {
   notice.value = '';
   if (!premium.value) { error.value = 'PDF-печать доступна на тарифе PREMIUM'; return; }
   if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
+  const pdfGuard = mobilePdfGuard(codesCount.value);
+  if (pdfGuard) { error.value = pdfGuard; return; }
   // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
@@ -678,11 +681,8 @@ async function downloadPdf() {
       blobUrl = await downloadBlob('/api/labels/pdf', body, `reprint-${rows.length}.pdf`, iosWin);
     }
     navigated = true;
-    if (isIOS()) {
-      notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
-    } else {
-      notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
-    }
+    const pdfNotice = mobilePdfNotice();
+    notice.value = pdfNotice || 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
     pdfUrl.value = blobUrl;
   } catch (e) {
@@ -702,6 +702,8 @@ async function printLabels() {
   // На iPhone/iPad window.print() для отдельного окна не работает:
   // открываем PDF в просмотрщике Safari, откуда идёт печать.
   if (isIOS()) return downloadPdf();
+  const printGuard = mobilePrintGuard(codesCount.value);
+  if (printGuard) { error.value = printGuard; return; }
   const win = openPlaceholderWindow();
   busy.value = true;
   try {

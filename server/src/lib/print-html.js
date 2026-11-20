@@ -41,17 +41,33 @@ export function printDocument({ labels, widthMm, heightMm, title = 'Печать
   @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  .hint { position: sticky; top: 0; z-index: 10; padding: 10px 12px; background: #fef3c7; border-bottom: 1px solid #fcd34d; color: #78350f; font: 13px/1.45 Arial, Helvetica, sans-serif; }
-  .hint b { color: #92400e; }
+  .bar {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    font: 13px/1.4 Arial, Helvetica, sans-serif; color: #334155;
+  }
+  .bar .btn {
+    border: 0; border-radius: 10px; padding: 11px 18px; font: 600 15px/1 Arial, Helvetica, sans-serif; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, #7c3aed, #6366f1 50%, #d946ef); box-shadow: 0 6px 16px -6px rgba(124,58,237,.8);
+    -webkit-appearance: none; appearance: none; min-height: 44px;
+  }
+  .bar .btn.ghost { background: #e2e8f0; color: #334155; box-shadow: none; font-weight: 500; }
+  .bar-hint { flex: 1 1 220px; min-width: 180px; font-size: 12px; line-height: 1.4; color: #475569; }
+  .bar-hint b { color: #7c3aed; }
   .label { position: relative; overflow: hidden; background: #fff; page-break-after: always; break-after: page; }
   .label:last-child { page-break-after: auto; break-after: auto; }
   .el { position: absolute; overflow: hidden; }
   .bc { display: block; width: 100%; height: 100%; object-fit: contain; }
   .txt { white-space: pre-wrap; line-height: 1.15; color: #000; font-family: Arial, Helvetica, sans-serif; }
-  @media print { .hint { display: none !important; } }
+  @media print { .bar { display: none !important; } }
 </style></head>
-<body><div class="hint">
-  <b>Печать с телефона:</b> iPhone/iPad — «Поделиться» → «Напечатать» (AirPrint). Android — меню ⋮ → «Печать» (Mopria / Default Print Service).
-  Принтер и телефон должны быть в одной Wi-Fi сети; в диалоге выберите размер бумаги ${Number(widthMm)}×${Number(heightMm)} мм.
-</div>${labels.join('')}</body></html>`;
+<body><div class="bar">
+  <button class="btn" type="button" data-print>Напечатать</button>
+  <button class="btn ghost" type="button" data-close>Закрыть</button>
+  <div class="bar-hint">
+    <b>iPhone/iPad:</b> «Поделиться» → «Напечатать» (AirPrint). <b>Android:</b> кнопка «Напечатать» или меню ⋮ → «Печать» (Mopria).
+    Принтер и телефон — в одной Wi-Fi сети; размер бумаги ${Number(widthMm)}×${Number(heightMm)} мм.
+  </div>
+</div>${labels.join('')}
+<script src="/print-tools.js" defer></script></body></html>`;
 }

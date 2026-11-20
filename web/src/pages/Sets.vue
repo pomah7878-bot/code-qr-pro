@@ -8,6 +8,7 @@ import PageGuide from '../components/PageGuide.vue';
 import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
+import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
 
 const plan = computed(() => store.plan || {});
 const premium = computed(() => Boolean(plan.value.labelEditor));
@@ -216,6 +217,9 @@ async function downloadPdf() {
   error.value = ''; notice.value = '';
   if (!premium.value) { error.value = 'Печать наборов доступна на тарифе PREMIUM'; return; }
   if (!canPrint.value) { error.value = 'Заполните карточку набора и вставьте нужное количество кодов'; return; }
+  const totalLabels = setCount.value + (form.onlySet ? 0 : form.components.reduce((sum, c) => sum + (Number(c.qty) || 0), 0));
+  const pdfGuard = mobilePdfGuard(totalLabels);
+  if (pdfGuard) { error.value = pdfGuard; return; }
   // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
@@ -233,8 +237,9 @@ async function downloadPdf() {
     timer = setTimeout(() => controller.abort(), 120000);
     const blobUrl = await downloadBlob('/api/sets/pdf', payload, `nabor-${setCount.value}.pdf`, iosWin);
     navigated = true;
-    if (isIOS()) {
-      notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
+    const pdfNotice = mobilePdfNotice();
+    if (pdfNotice) {
+      notice.value = pdfNotice;
     } else {
       notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     }
@@ -255,6 +260,8 @@ async function printSets() {
   if (!canPrint.value) { error.value = 'Заполните карточку набора и вставьте нужное количество кодов'; return; }
   // На iPhone/iPad window.print() в отдельном окне не работает — печатаем через PDF.
   if (isIOS()) return downloadPdf();
+  const printGuard = mobilePrintGuard(setCount.value);
+  if (printGuard) { error.value = printGuard; return; }
   const win = openPlaceholderWindow();
   try {
     const payload = {

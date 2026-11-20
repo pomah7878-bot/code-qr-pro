@@ -32,6 +32,7 @@ export function sessionUser(token) {
   if (!token) return null;
   const row = db.prepare(
     `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.totp_enabled, u.created_at,
+            u.cz_token,
             s.last_used_at, s.created_at AS session_created_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > datetime('now')`

@@ -172,5 +172,7 @@ export const api = {
   createKey: (b) => req('POST', '/api/keys', b),
   deleteKey: (id) => req('DELETE', '/api/keys/' + id),
   czVerify: (b) => req('POST', '/api/cz/verify', b),
+  czTokenStatus: () => req('GET', '/api/cz/token'),
+  czTokenSave: (token) => req('PUT', '/api/cz/token', { token }),
   productCards: (codes) => req('POST', '/api/product/cards', { codes })
 };

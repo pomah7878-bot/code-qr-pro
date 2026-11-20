@@ -6,6 +6,7 @@ import { createJobForUser } from './routes-jobs.js';
 import { verifyCodes } from './cz.js';
 import { getSetting } from './settings.js';
 import { logActivity } from './lib/activity.js';
+import { audit } from './lib/audit.js';
 import { productCard } from './lib/product-card.js';
 
 const hashKey = (k) => createHash('sha256').update(k).digest('hex');
@@ -96,6 +97,21 @@ export async function registerApiRoutes(app) {
     return result;
   });
 
+  // Личный токен ЧЗ (True API): клиент вставляет свой токен — карточки идут из ЧЗ
+  app.get('/api/cz/token', { preHandler: requireAuth }, async (req) => {
+    const t = String(req.user.cz_token || '');
+    const globalToken = getSetting('cz_enabled', '0') === '1' && Boolean(getSetting('cz_token', ''));
+    return { ok: true, configured: Boolean(t), tail: t ? t.slice(-6) : '', global: globalToken };
+  });
+
+  app.put('/api/cz/token', { preHandler: requireAuth }, async (req, reply) => {
+    const token = String(req.body?.token || '').trim();
+    if (token && token.length < 20) return reply.code(400).send({ error: 'Токен слишком короткий — скопируйте токен True API целиком' });
+    db.prepare('UPDATE users SET cz_token = ? WHERE id = ?').run(token.slice(0, 4000), req.user.id);
+    audit(req, 'cz.token_save', 'user', req.user.id, { configured: Boolean(token) });
+    return { ok: true, configured: Boolean(token), tail: token ? token.slice(-6) : '' };
+  });
+
   // Карточка товара по коду: ЧЗ (если есть токен) -> открытые базы -> своя история
   app.post('/api/product/cards', { preHandler: requireAuth }, async (req, reply) => {
     const codes = Array.isArray(req.body?.codes) ? req.body.codes.slice(0, 50) : [];
@@ -105,7 +121,7 @@ export async function registerApiRoutes(app) {
       const code = typeof item === 'string' ? item : String(item?.code || '');
       const gtin = typeof item === 'string' ? '' : String(item?.gtin || '');
       try {
-        const card = await productCard({ userId: req.user.id, code, gtin });
+        const card = await productCard({ userId: req.user.id, code, gtin, czToken: req.user.cz_token || '' });
         cards.push(card);
       } catch (e) {
         cards.push({ ok: false, error: String(e?.message || e), code });

@@ -439,7 +439,9 @@ const MIGRATIONS = [
      status TEXT NOT NULL DEFAULT '',
      raw TEXT NOT NULL DEFAULT '{}',
      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-   );`
+   );`,
+  // v28 — личный токен «Честного ЗНАКа» (True API) у клиента
+  `ALTER TABLE users ADD COLUMN cz_token TEXT NOT NULL DEFAULT '';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

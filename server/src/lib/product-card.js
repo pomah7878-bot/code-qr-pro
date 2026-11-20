@@ -111,42 +111,96 @@ async function openFactsLookup(gtin) {
   return null;
 }
 
-/** ЧЗ True API — если настроен токен. Запрос может падать (TLS ГОСТ), это не критично. */
-async function czLookup(code, gtin) {
+/** Базовый URL True API. В документации это markirovka.crpt.ru (обычный TLS). */
+function czBase() {
+  const raw = String(getSetting('cz_api_url', 'https://markirovka.crpt.ru/api/v3/true-api') || '').trim()
+    .replace(/\/+$/, '');
+  if (!raw) return 'https://markirovka.crpt.ru/api/v3/true-api';
+  // Раньше в настройках мог быть api.mdlp.crpt.ru (ГОСТ-TLS, legacy) — переводим на рабочий хост.
+  if (/api\.mdlp\.crpt\.ru/.test(raw) || !/\/api\/v\d\//.test(raw)) return 'https://markirovka.crpt.ru/api/v3/true-api';
+  return raw;
+}
+
+/** Токен ЧЗ: сначала личный токен пользователя, затем глобальный из настроек. */
+function resolveCzToken(userToken) {
+  const personal = String(userToken || '').trim();
+  if (personal) return { token: personal, source: 'user' };
+  const globalToken = String(getSetting('cz_token', '') || '').trim();
   const enabled = getSetting('cz_enabled', '0') === '1';
-  const token = getSetting('cz_token', '');
-  if (!enabled || !token) return { configured: false, card: null, error: '' };
-  const apiUrl = (getSetting('cz_api_url', 'https://api.mdlp.crpt.ru') || 'https://api.mdlp.crpt.ru').replace(/\/$/, '');
-  try {
-    const res = await fetch(`${apiUrl}/api/v3/true-api/cises/info`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': UA },
-      body: JSON.stringify([String(code || '').trim()]),
-      signal: AbortSignal.timeout(15000)
-    });
-    const data = await res.json().catch(() => ({}));
-    const item = Array.isArray(data) ? data[0] : data;
-    const info = item?.cisInfo;
-    if (!info) return { configured: true, card: null, error: item?.errorMessage || (res.ok ? '' : `HTTP ${res.status}`) };
-    return {
-      configured: true,
-      error: '',
-      card: {
-        found: true,
-        source: 'cz',
-        sourceLabel: 'Честный ЗНАК',
-        name: info.productName || '',
-        brand: info.brand || '',
-        category: info.productGroup || '',
-        quantity: '',
-        producer: info.producerName || info.ownerName || '',
-        status: info.status || '',
-        raw: { emissionDate: info.emissionDate, gtin: info.gtin || gtin, owner: info.ownerName }
+  if (enabled && globalToken) return { token: globalToken, source: 'global' };
+  return { token: '', source: '' };
+}
+
+function mapCzProduct(card) {
+  return {
+    name: card.name || card.productName || '',
+    brand: card.brand || '',
+    category: card.productGroup || card.productKind || '',
+    quantity: card.nominalQuantity || '',
+    producer: card.producerName || card.ownerName || '',
+    model: card.model || '',
+    size: card.size || '',
+    color: card.color || '',
+    material: card.material || '',
+    structure: card.structure || '',
+    age: card.age || '',
+    productKind: card.productKind || '',
+    expirationDate: card.expirationDate || '',
+    gtin: card.gtin || ''
+  };
+}
+
+/** ЧЗ True API: сведения по коду (статус, криптопроверка) + карточка товара по GTIN. */
+async function czLookup(code, gtin, userToken = '') {
+  const { token, source } = resolveCzToken(userToken);
+  if (!token) return { configured: false, card: null, error: '', source: '' };
+  const base = czBase();
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'User-Agent': UA };
+  let card = null;
+  let error = '';
+
+  if (code) {
+    try {
+      const res = await fetch(`${base}/cises/info`, {
+        method: 'POST', headers: auth, body: JSON.stringify([String(code).trim()]), signal: AbortSignal.timeout(15000)
+      });
+      const data = await res.json().catch(() => ({}));
+      const item = Array.isArray(data) ? data[0] : data;
+      const info = item?.cisInfo;
+      if (info) {
+        card = {
+          ...mapCzProduct(info),
+          source: 'cz',
+          sourceLabel: 'Честный ЗНАК',
+          status: info.status || '',
+          raw: { emissionDate: info.emissionDate, owner: info.ownerName, cis: String(code).slice(0, 120) }
+        };
+      } else if (!res.ok) {
+        error = item?.error_message || data?.error_message || `ЧЗ вернул HTTP ${res.status}`;
       }
-    };
-  } catch (e) {
-    return { configured: true, card: null, error: String(e?.message || e) };
+    } catch (e) {
+      error = String(e?.message || e);
+    }
   }
+
+  if ((!card || !card.name) && gtin) {
+    try {
+      const res = await fetch(`${base.replace(/\/api\/v3\/true-api$/, '/api/v4/true-api')}/product/info`, {
+        method: 'POST', headers: auth, body: JSON.stringify({ gtins: [gtin] }), signal: AbortSignal.timeout(15000)
+      });
+      const data = await res.json().catch(() => ({}));
+      const item = data?.results?.[0];
+      if (item) {
+        card = { ...(card || {}), ...mapCzProduct(item), source: 'cz', sourceLabel: 'Честный ЗНАК', status: card?.status || '', raw: card?.raw || {} };
+      } else if (!res.ok && !error) {
+        error = data?.error_message || `ЧЗ вернул HTTP ${res.status}`;
+      }
+    } catch (e) {
+      if (!error) error = String(e?.message || e);
+    }
+  }
+
+  return { configured: true, card, error, source };
 }
 
 function historyLookup(userId, gtin, code) {
@@ -171,32 +225,41 @@ function historyLookup(userId, gtin, code) {
 }
 
 /** Возвращает карточку товара + разбор кода + историю нахождений. */
-export async function productCard({ userId = null, code = '', gtin = '' } = {}) {
+export async function productCard({ userId = null, code = '', gtin = '', czToken = '' } = {}) {
   const decoded = decodeCode(code);
   const g = normalizeGtin(gtin) || decoded.gtin;
   const history = historyLookup(userId, g, code);
+  const personalToken = String(czToken || '').trim();
+  const hasToken = Boolean(personalToken) || (getSetting('cz_enabled', '0') === '1' && Boolean(getSetting('cz_token', '')));
+
+  const cz = await czLookup(code, g, personalToken);
+  if (cz.card && cz.card.name) {
+    cachePut(g, cz.card);
+    return {
+      ok: true, gtin: g, decoded, history,
+      card: { found: true, ...cz.card, cached: false },
+      cz: { configured: true, source: cz.source, error: '' }
+    };
+  }
 
   let card = g ? cacheGet(g) : null;
   if (card && card.name) {
-    card = {
-      found: true,
-      source: card.source,
-      sourceLabel: card.source === 'cz' ? 'Честный ЗНАК' : (OPEN_FACTS.find((s) => s.id === card.source)?.label || 'Открытые данные'),
-      name: card.name,
-      brand: card.brand,
-      category: card.category,
-      quantity: card.quantity,
-      producer: card.producer,
-      status: card.status,
-      cached: true
+    return {
+      ok: true, gtin: g, decoded, history,
+      card: {
+        found: true,
+        source: card.source,
+        sourceLabel: card.source === 'cz' ? 'Честный ЗНАК' : (OPEN_FACTS.find((s) => s.id === card.source)?.label || 'Открытые данные'),
+        name: card.name,
+        brand: card.brand,
+        category: card.category,
+        quantity: card.quantity,
+        producer: card.producer,
+        status: card.status,
+        cached: true
+      },
+      cz: { configured: hasToken, error: cz.error || '' }
     };
-    return { ok: true, gtin: g, decoded, history, card, cz: { configured: getSetting('cz_enabled', '0') === '1' && Boolean(getSetting('cz_token', '')) } };
-  }
-
-  const cz = await czLookup(code, g);
-  if (cz.card) {
-    cachePut(g, cz.card);
-    return { ok: true, gtin: g, decoded, history, card: { ...cz.card, cached: false }, cz: { configured: true } };
   }
 
   let found = null;
@@ -205,17 +268,24 @@ export async function productCard({ userId = null, code = '', gtin = '' } = {}) 
     if (found) cachePut(g, found);
   }
 
+  let message = '';
+  if (!found) {
+    if (hasToken && cz.error) {
+      message = `ЧЗ ответил: ${cz.error}. Карточка в открытых базах не найдена — проверьте токен ЧЗ или заполните данные вручную.`;
+    } else if (hasToken) {
+      message = `В ЧЗ по коду ничего не найдено (GTIN ${g}); в открытых базах тоже нет — заполните данные вручную.`;
+    } else {
+      message = `GTIN ${g} не найден в открытых базах. Вставьте свой токен ЧЗ (True API) — тогда карточка придёт из «Честного ЗНАКа», либо заполните поля вручную.`;
+    }
+  }
+
   return {
     ok: true,
     gtin: g,
     decoded,
     history,
     card: found ? { ...found, cached: false } : null,
-    cz: { configured: cz.configured, error: cz.error || '' },
-    message: found
-      ? ''
-      : (cz.error && cz.configured
-        ? `ЧЗ недоступен из этой сети (${cz.error}). В открытых базах GTIN ${g} не найден.`
-        : `GTIN ${g} не найден в открытых базах — заполните данные товара вручную или загрузите «Справочник товаров».`)
+    cz: { configured: hasToken, source: cz.source, error: cz.error || '' },
+    message
   };
 }

@@ -80,6 +80,7 @@ const infoLoading = ref(false);
 const cards = ref([]);
 const cardsLoading = ref(false);
 const cardsMessage = ref('');
+const czToken = reactive({ configured: false, tail: '', global: false, input: '', busy: false, message: '' });
 const catalog = ref({});
 const catalogStatus = ref('');
 try { catalog.value = JSON.parse(localStorage.getItem('cq_product_catalog') || '{}'); } catch { catalog.value = {}; }
@@ -436,7 +437,7 @@ function restoreDraft() {
     if (d.fields && typeof d.fields === 'object') Object.assign(fields, d.fields);
   } catch { /* битый черновик — игнорируем */ }
 }
-onMounted(restoreDraft);
+onMounted(() => { restoreDraft(); loadCzToken(); });
 
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
 // Что можно прочитать прямо из кода (без обращения к ЧЗ)
@@ -532,6 +533,49 @@ async function loadProductCards() {
     cardsMessage.value = `Не удалось получить карточку товара: ${e.message}`;
   } finally {
     cardsLoading.value = false;
+  }
+}
+
+async function loadCzToken() {
+  try {
+    const r = await api.czTokenStatus();
+    czToken.configured = Boolean(r.configured);
+    czToken.tail = r.tail || '';
+    czToken.global = Boolean(r.global);
+  } catch { /* не критично */ }
+}
+
+async function saveCzToken() {
+  const token = String(czToken.input || '').trim();
+  if (!token) { czToken.message = 'Вставьте токен True API'; return; }
+  czToken.busy = true;
+  czToken.message = '';
+  try {
+    const r = await api.czTokenSave(token);
+    czToken.configured = Boolean(r.configured);
+    czToken.tail = r.tail || '';
+    czToken.input = '';
+    czToken.message = 'Токен сохранён — карточка теперь запрашивается из «Честного ЗНАКа»';
+    loadProductCards();
+  } catch (e) {
+    czToken.message = e.message;
+  } finally {
+    czToken.busy = false;
+  }
+}
+
+async function clearCzToken() {
+  czToken.busy = true;
+  czToken.message = '';
+  try {
+    await api.czTokenSave('');
+    czToken.configured = false;
+    czToken.tail = '';
+    czToken.message = 'Токен отключён — используются открытые источники';
+  } catch (e) {
+    czToken.message = e.message;
+  } finally {
+    czToken.busy = false;
   }
 }
 
@@ -933,6 +977,23 @@ async function printLabels() {
           <span v-else class="text-[11px] text-slate-500">Источники: «Честный ЗНАК», Open Food/Beauty Facts, ваша история</span>
         </div>
         <p v-if="cardsMessage" class="text-xs text-slate-500 mb-2">{{ cardsMessage }}</p>
+        <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3 mb-3 space-y-2">
+          <div v-if="czToken.configured" class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="chip-soon !text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10">ЧЗ подключён · токен …{{ czToken.tail }}</span>
+            <button class="text-slate-500 underline" :disabled="czToken.busy" @click="clearCzToken">Отключить</button>
+          </div>
+          <template v-else>
+            <div class="text-xs text-slate-500">
+              Токен «Честного ЗНАКа» (True API): с ним название, производитель, модель, размер, цвет и статус кода
+              приходят из ЧЗ — как в сервисах проверки кодов. Без токена используются открытые базы.
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <input v-model="czToken.input" type="password" autocomplete="off" class="input !py-1.5 text-xs font-mono flex-1 min-w-[200px]" placeholder="Вставьте токен True API">
+              <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="czToken.busy" @click="saveCzToken">{{ czToken.busy ? 'Сохраняем…' : 'Подключить' }}</button>
+            </div>
+          </template>
+          <p v-if="czToken.message" class="text-[11px] text-amber-500">{{ czToken.message }}</p>
+        </div>
         <div class="space-y-2">
           <div
             v-for="(c, i) in cards" :key="i"
@@ -950,6 +1011,14 @@ async function printLabels() {
                 <span v-if="c.card?.category"> · {{ c.card.category }}</span>
                 <span v-if="c.card?.quantity"> · {{ c.card.quantity }}</span>
                 <span v-if="c.card?.producer"> · {{ c.card.producer }}</span>
+              </div>
+              <div v-if="c.card && (c.card.model || c.card.size || c.card.color || c.card.material || c.card.structure || c.card.expirationDate)" class="text-xs text-slate-500 mt-0.5">
+                <span v-if="c.card.model">модель {{ c.card.model }}</span>
+                <span v-if="c.card.size"> · размер {{ c.card.size }}</span>
+                <span v-if="c.card.color"> · цвет {{ c.card.color }}</span>
+                <span v-if="c.card.material"> · материал {{ c.card.material }}</span>
+                <span v-if="c.card.structure"> · состав {{ c.card.structure }}</span>
+                <span v-if="c.card.expirationDate"> · срок годности {{ c.card.expirationDate }}</span>
               </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 <span v-if="c.card" class="chip-soon !text-[10px] !py-0">{{ c.card.sourceLabel || 'открытые данные' }}</span>

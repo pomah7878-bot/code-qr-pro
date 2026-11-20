@@ -474,6 +474,31 @@ const firstCode = computed(() => {
     batch
   };
 });
+const checkRows = computed(() => {
+  const valid = result.value?.valid || [];
+  return valid.map((c, i) => {
+    const entry = cards.value.find((x) => x && (x.gtin === c.gtin || (x.code && x.code === c.code))) || null;
+    const card = entry?.card || null;
+    return {
+      n: i + 1,
+      code: c.code,
+      gtin: c.gtin,
+      serial: c.serial,
+      kind: c.short ? 'GS1 (93)' : 'КИЗ (91/92)',
+      card,
+      name: card?.name || '',
+      productKind: card?.productKind || card?.category || '',
+      quantity: card?.quantity || card?.size || '',
+      productionDate: card?.productionDate || '',
+      expirationDate: card?.expirationDate || '',
+      serviceLife: card?.serviceLife || '',
+      status: card?.status || '',
+      found: card ? 'Да' : 'Нет',
+      crypto: card?.crypto ? (card.crypto.verified ? 'Проверено' : 'Не проверено') : '—'
+    };
+  });
+});
+
 const infoRows = computed(() => productInfo.value.map((p) => ({
   ...p,
   name: p.name || product.name,
@@ -553,6 +578,8 @@ async function loadProductCards() {
     const publicError = publicCards.map((c) => c.error).find(Boolean) || '';
     if (publicFound.length) {
       cards.value = publicFound;
+      const firstPublicCard = publicFound.find((c) => c.card)?.card;
+      if (firstPublicCard) fillProductFromCard(firstPublicCard);
       if (publicError) cardsMessage.value = `Часть кодов не удалось проверить в ЧЗ: ${publicError}`;
       return;
     }
@@ -570,6 +597,8 @@ async function loadProductCards() {
         }));
         if (catalogFound.length) {
           cards.value = catalogFound;
+          const firstCatalogCard = catalogFound.find((c) => c.card)?.card;
+          if (firstCatalogCard) fillProductFromCard(firstCatalogCard);
           const sent = String(notFound.sentCode || '').slice(0, 45);
           cardsMessage.value = `Код не найден в ЧЗ (статус: ${notFound.czStatus || 'not_found'}) — показана карточка из Национального каталога по GTIN. `
             + `Статус кода не проверен. Отправленный код: ${sent}${String(notFound.sentCode || '').length > 45 ? '…' : ''}.`;
@@ -580,6 +609,8 @@ async function loadProductCards() {
     // 2) Серверный фолбэк: личный токен ЧЗ или открытые базы по GTIN.
     const r = await api.productCards(valid.slice(0, 10).map((c) => ({ code: c.code, gtin: c.gtin })));
     cards.value = (r.cards || []).filter((c) => c && !c.error);
+    const firstServerCard = cards.value.find((c) => c.card)?.card;
+    if (firstServerCard) fillProductFromCard(firstServerCard);
     if (publicError) {
       cardsMessage.value = `Публичная проверка ЧЗ недоступна (${publicError}). `;
     } else if (notFound) {
@@ -644,7 +675,27 @@ async function clearCzToken() {
   }
 }
 
-// Подставляет найденные данные в поля этикетки
+// Заполняет поля этикетки данными карточки ЧЗ (используется авто-заполнением и кнопкой)
+function fillProductFromCard(card, { silent = true } = {}) {
+  if (!card) return false;
+  const setIfEmpty = (key, value) => {
+    if (!value) return;
+    if (!String(product[key] || '').trim()) product[key] = value;
+    fields[key] = true;
+  };
+  setIfEmpty('name', card.name);
+  setIfEmpty('form', card.productKind || card.category);
+  setIfEmpty('size', card.quantity || card.size);
+  setIfEmpty('expiry', card.expirationDate);
+  setIfEmpty('date', card.productionDate);
+  setIfEmpty('manufacturer', card.producer || card.brand);
+  setIfEmpty('composition', card.structure || card.material);
+  setIfEmpty('color', card.color);
+  setIfEmpty('article', card.model);
+  if (!silent) notice.value = 'Данные товара из ЧЗ подставлены в этикетку';
+  return true;
+}
+
 function applyCard(item) {
   const card = item?.card;
   if (!card) return;
@@ -783,39 +834,65 @@ function buildTemplate() {
   const tiny = W <= 22 && H <= 22;
   const m = tiny ? Math.min(W, H) * 0.1 : Math.max(1, Math.min(2.5, Math.min(W, H) * 0.05));
   const elements = [];
-  const dm = tiny ? Math.min(W - 2 * m, H - 2 * m, 32)
-    : printCode.value
-      ? Math.min(W * 0.45, H * 0.36, 32)
-      : Math.min(W * 0.45, H * 0.5, 35);
+  const dm = tiny ? Math.min(W - 2 * m, H - 2 * m, 32) : Math.min(W * 0.42, H * 0.45, 32);
   elements.push({ id: 'dm', type: 'datamatrix', x: m, y: m, w: dm, h: dm, fontSize: 8, align: 'left' });
-  let topH = dm;
-  if (!tiny && fields.ean13 && String(product.barcode).trim()) {
-    if (W >= 50) {
-      const bx = m + dm + m;
-      const bw = W - bx - m;
-      const bh = Math.min(12, Math.max(6, H * 0.22));
-      elements.push({ id: 'ean', type: barcodeFormat.value, field: 'barcode', x: bx, y: m, w: bw, h: bh, fontSize: 8, align: 'left' });
-      topH = Math.max(topH, bh);
-    } else if (m + dm + 1 + 9 <= H - m) {
-      elements.push({ id: 'ean', type: barcodeFormat.value, field: 'barcode', x: m, y: m + dm + 1, w: W - 2 * m, h: 9, fontSize: 8, align: 'left' });
-      topH = dm + 1 + 9;
+  const lineH = Math.max(2.8, Math.min(4.2, H * 0.09));
+
+  // Правый столбец — как на карточке проверки: название, вид товара, объём, годен до.
+  const rightX = m + dm + Math.max(1.2, m * 0.8);
+  const rightW = Math.max(0, W - rightX - m);
+  let rightY = m;
+  for (const key of ['name', 'form', 'size', 'expiry']) {
+    if (!fields[key]) continue;
+    const value = String(product[key] || '').trim();
+    if (!value) continue;
+    if (rightW < 8 || rightY + lineH > H - m) break;
+    elements.push({
+      id: `right_${key}`, type: 'field', field: key, x: rightX, y: rightY, w: rightW, h: lineH,
+      fontSize: key === 'name' ? 7.2 : 6.8, align: 'left'
+    });
+    rightY += lineH + 0.6;
+  }
+
+  // Подпись под DataMatrix: GTIN и серийник.
+  let belowY = m + dm + 1;
+  if (printCode.value) {
+    belowY = caption(elements, m, belowY, Math.max(dm, W * 0.5), 6);
+  }
+
+  // EAN-13 — внизу этикетки (для OZON/Wildberries).
+  let eanPlaced = false;
+  if (!tiny && fields.ean13) {
+    const eanVal = eanDigits(product.barcode);
+    if (eanVal.length === 13) {
+      const eanH = Math.min(12, Math.max(7, H * 0.22));
+      const eanY = Math.max(belowY + 0.6, H - m - eanH);
+      if (eanY + eanH <= H - m + 0.5) {
+        elements.push({ id: 'ean', type: 'ean13', field: 'barcode', x: m, y: eanY, w: W - 2 * m, h: eanH, fontSize: 8, align: 'left' });
+        eanPlaced = true;
+      }
     }
   }
-  let y = m + topH + 1;
-  if (printCode.value) y = Math.max(y, m + dm + 0.9);
-  if (printCode.value && y + 6 <= H - m) {
-    y = caption(elements, m, y, W - 2 * m, 6.5);
-  }
-  const lineH = Math.max(2.6, Math.min(4, H * 0.09));
-  for (const { key } of fieldList) {
-    if (key === 'ean13' || !fields[key]) continue;
+
+  // Остальные отмеченные поля — только если EAN-13 не занял низ этикетки.
+  let y = Math.max(rightY, belowY + 1);
+  for (const { key } of (eanPlaced ? [] : fieldList)) {
+    if (['ean13', 'name', 'form', 'size', 'expiry'].includes(key) || !fields[key]) continue;
     const value = String(product[key] || '').trim();
     if (!value) continue;
     if (y + lineH > H - m) break;
-    elements.push({ id: key, type: 'field', field: key, x: m, y, w: W - 2 * m, h: lineH, fontSize: 7, align: 'left' });
+    elements.push({ id: key, type: 'field', field: key, x: m, y, w: W - 2 * m, h: lineH, fontSize: 6.5, align: 'left' });
     y += lineH + 0.5;
   }
   return { name: `Повторная печать · ${f.label}`, widthMm: W, heightMm: H, dpi: 203, elements };
+}
+
+function applyGsdmxPreset() {
+  qrOnly.value = false;
+  printCode.value = true;
+  for (const key of ['name', 'form', 'size', 'expiry', 'date', 'manufacturer', 'composition']) fields[key] = true;
+  fields.ean13 = true;
+  notice.value = 'Шаблон как в сервисах проверки: название, вид, объём, даты, состав, производитель и EAN-13';
 }
 
 async function downloadPdf() {
@@ -1057,6 +1134,9 @@ async function printLabels() {
             </select>
             <p class="text-xs text-slate-500 mt-1">PDF-страница: {{ currentFormat.w }}×{{ currentFormat.h }} мм ({{ (currentFormat.w / 10).toFixed(1) }}×{{ (currentFormat.h / 10).toFixed(1) }} см)</p>
           </div>
+          <button type="button" class="btn-ghost !py-1.5 !px-3 text-xs self-start" @click="applyGsdmxPreset">
+            Как в сервисах проверки (gsdmx): поля ЧЗ + EAN-13
+          </button>
           <label class="flex items-start gap-2 text-sm mt-1">
             <input v-model="qrOnly" type="checkbox" class="mt-0.5">
             <span><b>Только DataMatrix — QR на всю этикетку</b><br><span class="text-xs text-slate-500">Квадратный код вписывается по меньшей стороне, по краям остаётся небольшой отступ для печати.</span></span>
@@ -1260,31 +1340,48 @@ async function printLabels() {
           <div>Наименование и производитель подтягиваются из «Честного ЗНАКа», если в настройках подключён токен ЧЗ; иначе видны GTIN и серийник из кода.</div>
         </div>
         <div class="overflow-auto max-h-64">
-          <table class="w-full text-xs min-w-[680px]">
+          <table class="w-full text-xs min-w-[1080px]">
             <thead>
               <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
-                <th class="py-1.5 pr-3">GTIN</th>
-                <th class="py-1.5 pr-3">Серийник</th>
-                <th class="py-1.5 pr-3">Тип</th>
-                <th class="py-1.5 pr-3">Товар</th>
-                <th class="py-1.5 pr-3">Дозировка / форма</th>
-                <th class="py-1.5 pr-3">Производитель</th>
-                <th class="py-1.5">Статус</th>
+                <th class="py-1.5 pr-2">№</th>
+                <th class="py-1.5 pr-3">Код маркировки</th>
+                <th class="py-1.5 pr-3">Статус кода</th>
+                <th class="py-1.5 pr-3">Название</th>
+                <th class="py-1.5 pr-3">Вид товара</th>
+                <th class="py-1.5 pr-3">Объём / вес / количество</th>
+                <th class="py-1.5 pr-3">Дата изготовления</th>
+                <th class="py-1.5 pr-3">Годен до</th>
+                <th class="py-1.5 pr-3">Срок использования</th>
+                <th class="py-1.5 pr-3">Код найден</th>
+                <th class="py-1.5 pr-3">Криптозащита КМ</th>
+                <th class="py-1.5">GTIN</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(p, i) in infoRows.slice(0, 300)" :key="i" class="border-b border-slate-100 dark:border-white/5">
-                <td class="py-1.5 pr-3 font-mono">{{ p.gtin }}</td>
-                <td class="py-1.5 pr-3 font-mono">{{ p.serial }}</td>
-                <td class="py-1.5 pr-3">{{ p.short ? 'GS1 (93)' : 'КИЗ (91/92)' }}</td>
-                <td class="py-1.5 pr-3">{{ p.name || '—' }}<span v-if="p.brand || p.group" class="text-slate-500"> · {{ [p.brand, p.group].filter(Boolean).join(' / ') }}</span></td>
-                <td class="py-1.5 pr-3">{{ [p.dosage, p.form].filter(Boolean).join(' · ') || '—' }}</td>
-                <td class="py-1.5 pr-3">{{ p.producer || '—' }}</td>
-                <td class="py-1.5">{{ p.status || '—' }}</td>
+              <tr v-for="(p, i) in checkRows.slice(0, 300)" :key="i" class="border-b border-slate-100 dark:border-white/5">
+                <td class="py-1.5 pr-2 text-slate-500">{{ p.n }}</td>
+                <td class="py-1.5 pr-3 font-mono max-w-[220px] truncate" :title="p.code">{{ p.code }}</td>
+                <td class="py-1.5 pr-3">
+                  <span
+                    v-if="p.status"
+                    class="chip-soon !text-[10px] !py-0"
+                    :class="/В обороте/i.test(p.status) ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : ''"
+                  >{{ p.status }}</span>
+                  <span v-else class="text-slate-400">—</span>
+                </td>
+                <td class="py-1.5 pr-3">{{ p.name || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.productKind || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.quantity || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.productionDate || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.expirationDate || '—' }}</td>
+                <td class="py-1.5 pr-3">{{ p.serviceLife || '—' }}</td>
+                <td class="py-1.5 pr-3" :class="p.found === 'Да' ? 'text-emerald-500' : 'text-slate-400'">{{ p.found }}</td>
+                <td class="py-1.5 pr-3" :class="p.crypto === 'Проверено' ? 'text-emerald-500' : (p.crypto === 'Не проверено' ? 'text-amber-500' : 'text-slate-400')">{{ p.crypto }}</td>
+                <td class="py-1.5 font-mono">{{ p.gtin }}</td>
               </tr>
             </tbody>
           </table>
-          <p v-if="infoRows.length > 300" class="text-xs text-slate-500 mt-2">Показаны первые 300 из {{ infoRows.length }} кодов — в PDF попадут все.</p>
+          <p v-if="checkRows.length > 300" class="text-xs text-slate-500 mt-2">Показаны первые 300 из {{ checkRows.length }} кодов — в PDF попадут все.</p>
         </div>
         <p v-if="infoMessage" class="text-xs text-slate-500 mt-2">{{ infoMessage }}</p>
         <p class="text-xs text-slate-500 mt-2">Для маркировки печатается GS1 DataMatrix с полным кодом; QR не заменяет DataMatrix и в 20×20 не помещается.</p>

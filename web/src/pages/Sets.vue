@@ -284,7 +284,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+  <div class="max-w-[1680px] mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
     <SideNav active="/app/sets" />
     <section class="space-y-6 min-w-0">
       <div class="flex flex-wrap items-end justify-between gap-3">

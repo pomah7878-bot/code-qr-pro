@@ -199,7 +199,7 @@ const itemStatus = { ok: 'ожидает', generated: 'готов', invalid: 'о
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+  <div class="max-w-[1680px] mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
     <SideNav active="/app/generate" />
     <section class="space-y-6 min-w-0">
       <div class="flex items-center justify-between gap-4 flex-wrap">

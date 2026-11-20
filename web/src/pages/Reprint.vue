@@ -1128,7 +1128,7 @@ async function printLabels() {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+  <div class="w-full px-4 sm:px-6 2xl:px-10 py-8 grid lg:grid-cols-[240px_minmax(0,1fr)] gap-6">
     <SideNav active="/app/reprint" />
     <section class="space-y-5 min-w-0">
       <div class="flex flex-wrap items-end justify-between gap-3">

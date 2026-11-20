@@ -28,7 +28,7 @@ const isActive = (to) => (to === '/app/admin' ? route.path === '/app/admin' : ro
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+  <div class="max-w-[1680px] mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
     <SideNav active="/app/admin" />
     <section v-if="!isAdmin" class="glass rounded-2xl p-8 text-center text-slate-500">
       Раздел доступен только администратору

@@ -24,7 +24,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+  <div class="max-w-[1680px] mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
     <SideNav active="/app/apikeys" />
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">API для 1С и складов</h1>

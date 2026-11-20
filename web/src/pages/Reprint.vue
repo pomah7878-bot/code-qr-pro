@@ -614,6 +614,9 @@ async function downloadPdf() {
   notice.value = '';
   if (!premium.value) { error.value = 'PDF-печать доступна на тарифе PREMIUM'; return; }
   if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
+  // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
+  const iosWin = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
   busy.value = true;
   let timer = null;
   try {
@@ -651,7 +654,8 @@ async function downloadPdf() {
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
     if (isIOS()) saveDraft();
-    const blobUrl = await downloadBlob('/api/labels/pdf', { template, rows, single: true, source: 'reprint' }, `reprint-${rows.length}.pdf`);
+    const blobUrl = await downloadBlob('/api/labels/pdf', { template, rows, single: true, source: 'reprint' }, `reprint-${rows.length}.pdf`, iosWin);
+    navigated = true;
     if (isIOS()) {
       notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
     } else {
@@ -662,6 +666,7 @@ async function downloadPdf() {
   } catch (e) {
     error.value = e.name === 'AbortError' ? 'PDF формируется слишком долго. Уменьшите число кодов и попробуйте снова.' : e.message;
   } finally {
+    if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
     if (timer) clearTimeout(timer);
     busy.value = false;
   }

@@ -613,14 +613,20 @@ async function exportPdf() {
     error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
     return;
   }
+  // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
+  const iosWin = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
   try {
     const body = jobId.value != null
       ? { template: tpl, jobId: jobId.value, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
-    await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`);
+    await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`, iosWin);
+    navigated = true;
     if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы».';
   } catch (e) {
     error.value = e.message;
+  } finally {
+    if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
   }
 }
 
@@ -631,14 +637,19 @@ async function exportPdfSingle() {
     error.value = `Для PDF за один раз можно до 10 000 строк, сейчас ${dataRows.value.length}.`;
     return;
   }
+  const iosWin = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
   try {
     const body = jobId.value != null
       ? { template: tpl, jobId: jobId.value, single: true, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true, source: 'labels' };
-    await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`);
+    await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`, iosWin);
+    navigated = true;
     if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
   } catch (e) {
     error.value = e.message;
+  } finally {
+    if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
   }
 }
 

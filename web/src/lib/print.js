@@ -41,9 +41,13 @@ export function openPlaceholderWindow() {
  * (`<url>/ticket`) и документ открывается по обычному URL — Safari показывает
  * свой просмотрщик с «Поделиться» → «Сохранить в Файлы» / «Печать».
  *
+ * preWindow — окно, открытое синхронно в обработчике клика: если оно есть,
+ * PDF откроется в отдельной вкладке и введённые данные не потеряются.
+ * Если окно заблокировано — открываем в текущей вкладке.
+ *
  * На остальных платформах — обычное скачивание через blob + download.
  */
-export async function downloadBlob(url, body, fileName) {
+export async function downloadBlob(url, body, fileName, preWindow = null) {
   if (isIOS() && /\/pdf$/.test(url)) {
     const res = await fetch(`${url}/ticket`, {
       method: 'POST',
@@ -57,6 +61,10 @@ export async function downloadBlob(url, body, fileName) {
     }
     const data = await res.json().catch(() => ({}));
     if (!data?.url) throw new Error('Сервер не выдал ссылку на PDF');
+    if (preWindow && !preWindow.closed) {
+      preWindow.location.href = data.url;
+      return data.url;
+    }
     location.href = data.url;
     return data.url;
   }

@@ -162,8 +162,8 @@ onMounted(() => {
       <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
       <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
 
-      <div class="glass rounded-2xl p-4 flex flex-col min-h-[460px]">
-        <div ref="chatEl" class="flex-1 overflow-y-auto space-y-3 max-h-[440px] pb-2">
+      <div class="glass rounded-2xl p-4 flex flex-col min-h-[380px] sm:min-h-[460px]">
+        <div ref="chatEl" class="flex-1 overflow-y-auto overscroll-contain space-y-3 max-h-[55vh] sm:max-h-[440px] pb-2">
           <p v-if="!messages.length" class="text-sm text-slate-500">
             Задайте вопрос — например, «почему код не читается сканером» или «как перепечатать этикетки».
           </p>
@@ -195,7 +195,7 @@ onMounted(() => {
               @click="question = q">{{ q }}</button>
           </div>
           <div class="flex items-end gap-2">
-            <textarea v-model="question" rows="2" maxlength="1500" class="input text-sm flex-1"
+            <textarea v-model="question" rows="2" maxlength="1500" class="input !py-2.5 text-base sm:text-sm flex-1"
               placeholder="Ваш вопрос по сервису или маркировке…" @keydown.enter.exact.prevent="ask"></textarea>
             <button class="btn-primary !py-2.5 !px-4 text-sm shrink-0" :disabled="busy || !question.trim()" @click="ask">
               {{ busy ? 'Ищем…' : 'Спросить' }}

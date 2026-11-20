@@ -38,6 +38,14 @@ function resetChat() {
 }
 
 watch(() => assistantUi.open, (open) => {
+  if (typeof document !== 'undefined') {
+    if (open && window.innerWidth < 640) {
+      document.body.dataset.aiPrevOverflow = document.body.style.overflow || '';
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = document.body.dataset.aiPrevOverflow || '';
+    }
+  }
   if (open) {
     resetChat();
     if (isPremium.value) loadTickets();
@@ -152,30 +160,33 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   <Teleport to="body">
     <!-- Кнопка вызова окна -->
     <button
-      class="ai-launcher fixed bottom-24 right-5 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white print:hidden"
+      class="ai-launcher fixed z-40 flex items-center justify-center rounded-full text-sm font-semibold text-white print:hidden right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] w-14 h-14 p-0 sm:right-5 sm:bottom-24 sm:w-auto sm:h-auto sm:px-4 sm:py-3 sm:gap-2"
       aria-label="Открыть AI-помощника"
       @click="assistantUi.open ? closeAssistant() : (assistantUi.open = true)"
     >
-      <span class="ai-launcher-icon"><BrandIcon name="star" :size="15" /></span>
-      <BrandIcon name="help" :size="18" />
+      <BrandIcon name="star" :size="22" class="sm:hidden" />
+      <span class="ai-launcher-icon hidden sm:inline-flex"><BrandIcon name="star" :size="15" /></span>
+      <BrandIcon name="help" :size="18" class="hidden sm:block" />
       <span class="hidden sm:inline">AI-помощник</span>
-      <span class="ai-premium-tag">PREMIUM</span>
+      <span class="ai-premium-tag hidden sm:inline">PREMIUM</span>
     </button>
 
-    <!-- Диалоговое окно -->
-    <div v-if="assistantUi.open" class="fixed inset-x-2 bottom-2 z-[75] sm:inset-auto sm:bottom-40 sm:right-5 sm:w-[430px] print:hidden">
-      <div class="ai-shell">
-        <div class="ai-panel flex flex-col h-[min(600px,80vh)] bg-white/95 dark:bg-[#0a0a14]/95" role="dialog" aria-modal="false" aria-label="AI-помощник">
-          <div class="ai-head px-4 py-3">
+    <!-- Диалоговое окно: на телефоне — лист снизу на весь экран, на ПК — окно у кнопки -->
+    <div v-if="assistantUi.open" class="fixed inset-0 z-[75] flex items-end justify-center sm:block sm:inset-auto sm:bottom-40 sm:right-5 sm:w-[430px] print:hidden">
+      <div class="absolute inset-0 bg-black/45 backdrop-blur-[2px] sm:hidden" @click="closeAssistant"></div>
+      <div class="ai-shell relative w-full sm:w-auto sm:rounded-[1.25rem] rounded-t-3xl">
+        <div class="ai-panel flex flex-col h-[92dvh] sm:h-[min(600px,80vh)] bg-white/95 dark:bg-[#0a0a14]/95 pb-[env(safe-area-inset-bottom)]" role="dialog" aria-modal="false" aria-label="AI-помощник">
+          <div class="ai-sheet-handle sm:hidden" aria-hidden="true"></div>
+          <div class="ai-head px-3 sm:px-4 py-2.5 sm:py-3">
             <div class="flex items-start justify-between gap-2">
               <div class="flex items-center gap-2.5 min-w-0">
-                <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-9 h-9 ai-logo">
+                <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-8 h-8 sm:w-9 sm:h-9 ai-logo">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="font-display font-bold tracking-wide">AI-помощник</span>
+                    <span class="font-display font-bold tracking-wide text-[15px] sm:text-base">AI-помощник</span>
                     <span class="ai-premium-tag">PREMIUM</span>
                   </div>
-                  <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  <div class="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     CODE QR PRO · раздел <b class="text-brand-400">{{ pageLabel }}</b>
                   </div>
                 </div>
@@ -197,13 +208,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
           </div>
 
         <template v-else>
-          <div ref="chatEl" class="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
+          <div ref="chatEl" class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-2.5">
             <template v-for="(m, i) in messages" :key="i">
               <div v-if="m.role === 'greet'" class="ai-greet rounded-xl px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
                 {{ m.text }}
               </div>
               <div v-else-if="m.role === 'q'" class="flex justify-end">
-                <div class="max-w-[86%] rounded-2xl rounded-br-md bg-brand-500/15 border border-brand-500/25 px-3 py-2 text-sm whitespace-pre-wrap">{{ m.text }}</div>
+                <div class="max-w-[88%] rounded-2xl rounded-br-md bg-brand-500/15 border border-brand-500/25 px-3 py-2 text-sm whitespace-pre-wrap">{{ m.text }}</div>
               </div>
               <div v-else class="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 text-sm bg-white/40 dark:bg-white/[0.03]">
                 <p class="whitespace-pre-wrap">{{ m.text }}</p>
@@ -213,7 +224,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
                 </div>
                 <div v-if="m.needHuman" class="mt-1.5 flex flex-wrap items-center gap-2">
                   <span class="text-[11px] text-amber-500">{{ m.reason || 'Нужен администратор' }}</span>
-                  <button class="btn-primary !py-1 !px-2.5 text-[11px]" @click="openSupport">Передать в поддержку</button>
+                  <button class="btn-primary !py-1.5 !px-3 text-[11px]" @click="openSupport">Передать в поддержку</button>
                 </div>
               </div>
             </template>
@@ -237,19 +248,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
           </div>
 
           <div class="ai-foot px-3 pb-2 pt-2 space-y-1.5">
-            <div class="flex flex-wrap gap-1">
+            <div class="flex flex-wrap gap-1 max-h-[76px] overflow-y-auto overscroll-contain">
               <button v-for="c in quickChips" :key="c"
-                class="ai-chip text-[10px] px-2 py-1 rounded-lg"
+                class="ai-chip text-[11px] sm:text-[10px] px-2.5 py-2 sm:px-2 sm:py-1 rounded-lg"
                 @click="question = c">{{ c }}</button>
             </div>
             <div class="flex items-end gap-1.5">
-              <textarea v-model="question" rows="2" maxlength="1500" class="input !py-2 text-sm flex-1"
-                :placeholder="`Вопрос по разделу «${pageLabel}»…`" @keydown.enter.exact.prevent="ask"></textarea>
-              <button class="ai-cta !py-2 !px-3 text-sm shrink-0" :disabled="busy || !question.trim()" @click="ask">
+              <textarea v-model="question" rows="2" maxlength="1500" class="input !py-2.5 text-base sm:text-sm flex-1"
+                placeholder="Введите вопрос…" @keydown.enter.exact.prevent="ask"></textarea>
+              <button class="ai-cta min-w-[52px] min-h-[44px] !py-2 !px-3 text-sm shrink-0" :disabled="busy || !question.trim()" @click="ask">
                 {{ busy ? '…' : 'Спросить' }}
               </button>
             </div>
-            <div class="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-500">
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[11px] sm:text-[10px] text-slate-500 pb-1">
               <button class="underline" @click="openSupport">Не помогло — передать администратору</button>
               <div class="flex gap-2">
                 <button class="underline" @click="showTickets = !showTickets">Мои обращения</button>
@@ -262,9 +273,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
       </div>
     </div>
 
-    <!-- Окно эскалации -->
-    <div v-if="support.open" class="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm p-4 overflow-y-auto" @click.self="support.open = false">
-      <div class="mx-auto mt-10 w-full max-w-lg rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 p-5 shadow-2xl">
+    <!-- Окно эскалации: на телефоне — лист снизу -->
+    <div v-if="support.open" class="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto" @click.self="support.open = false">
+      <div class="mx-auto mt-auto sm:mt-10 w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl">
+        <div class="ai-sheet-handle sm:hidden" aria-hidden="true"></div>
         <div class="flex items-start justify-between gap-3">
           <div>
             <h2 class="font-display font-bold text-lg">Передать в поддержку</h2>
@@ -380,6 +392,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 .ai-foot {
   background: linear-gradient(180deg, transparent, rgba(124, 58, 237, 0.05));
   border-top: 1px solid rgba(124, 58, 237, 0.16);
+}
+.ai-sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.55);
+  margin: 8px auto 2px;
+  flex-shrink: 0;
+}
+@media (max-width: 639px) {
+  .ai-shell {
+    border-radius: 1.5rem 1.5rem 0 0;
+  }
+  .ai-panel {
+    border-radius: 1.5rem 1.5rem 0 0;
+  }
 }
 </style>
 

@@ -24,7 +24,12 @@ const STATUS_RU = {
   WRITTEN_OFF: 'Списан',
   DISAGGREGATION: 'Отсоединён',
   RESERVED: 'Зарезервирован',
-  CHECKED: 'Проверен'
+  CHECKED: 'Проверен',
+  WRONG: 'Не проверен',
+  NOT_FOUND: 'Не найден',
+  not_found: 'Не найден',
+  wrong: 'Не проверен',
+  not_found_dm: 'Не найден'
 };
 
 function readCache() {
@@ -49,18 +54,27 @@ function writeCache(code, card) {
   }
 }
 
-/** ЧЗ принимает машинный код с идентификаторами: (01)0463…(21)5ZsWrd → 010463…215ZsWrd */
+/** ЧЗ принимает машинный код: (01)…(21)… + GS + (91)… + GS + (92)… */
 export function normalizeCodeForCz(code) {
   const source = String(code || '').trim();
   if (/\(\d{2,4}\)/.test(source)) {
-    // человекочитаемый вид: собираем «AI + значение» без скобок
-    let out = '';
-    for (const m of source.matchAll(/\((\d{2,4})\)([^()]*)/g)) {
-      out += m[1] + String(m[2] || '').replace(/[\s\u001d\u00e8]/g, '');
+    // человекочитаемый вид: собираем машинный код; GS-разделитель нужен перед (91)/(92) и прочими AI
+    const groups = [...source.matchAll(/\((\d{2,4})\)([^()]*)/g)]
+      .map((m) => ({ ai: m[1], value: String(m[2] || '').replace(/[\s\u001d\u00e8]/g, '') }))
+      .filter((g) => g.value);
+    if (groups.length) {
+      let out = '';
+      for (const group of groups) {
+        const head = out === '';
+        if (head) out = group.ai + group.value;
+        else if (group.ai === '21' && !out.includes('\u001d')) out += group.ai + group.value;
+        else out += '\u001d' + group.ai + group.value;
+      }
+      return out;
     }
-    if (out) return out;
   }
-  return source.replace(/[\s\u001d\u00e8()]/g, '');
+  // машинный вид: сохраняем GS-разделители, убираем только пробелы и FNC1
+  return source.replace(/[\s\u00e8()]/g, '');
 }
 
 function fmtDate(value) {

@@ -604,6 +604,28 @@ async function loadProductCards() {
     }));
     const publicError = publicCards.map((c) => c.error).find(Boolean) || '';
     if (publicFound.length) {
+      // Дополняем карточку ЧЗ недостающими полями из Нацкаталога (срок службы, состав и т.п.)
+      try {
+        const gtins = valid.map((c) => eanDigits(c.gtin)).filter((g) => g.length >= 8);
+        if (gtins.length) {
+          const catalog = await fetchCatalogCards(gtins, 5);
+          for (const entry of publicFound) {
+            const match = catalog.find((c) => c.card && c.gtin === eanDigits(entry.gtin || entry.card?.gtin));
+            if (!match) continue;
+            const extra = match.card;
+            const card = entry.card;
+            card.serviceLife = card.serviceLife || extra.serviceLife || '';
+            card.structure = card.structure || extra.structure || '';
+            card.composition = card.composition || extra.composition || '';
+            card.productKind = card.productKind || extra.productKind || '';
+            card.category = card.category || extra.category || '';
+            card.quantity = card.quantity || extra.quantity || '';
+            card.producer = card.producer || extra.producer || '';
+            card.brand = card.brand || extra.brand || '';
+            card.name = card.name || extra.name || '';
+          }
+        }
+      } catch { /* каталог не критичен */ }
       cards.value = publicFound;
       const firstPublicCard = publicFound.find((c) => c.card)?.card;
       if (firstPublicCard) fillProductFromCard(firstPublicCard);

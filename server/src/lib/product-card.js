@@ -86,17 +86,27 @@ export function gtinFromCode(code) {
   return '';
 }
 
-/** Человекочитаемый код (01)…(21)… → машинный 01…21… (как ждёт ЧЗ). */
+/** Человекочитаемый код (01)…(21)…(91)…(92)… → машинный 01…21…<GS>91…<GS>92… (как ждёт ЧЗ). */
 export function normalizeCzCode(code) {
   const source = String(code || '').trim();
   if (/\(\d{2,4}\)/.test(source)) {
-    let out = '';
-    for (const m of source.matchAll(/\((\d{2,4})\)([^()]*)/g)) {
-      out += m[1] + String(m[2] || '').replace(/[\s\u001d\u00e8]/g, '');
+    // человекочитаемый вид: собираем машинный код; GS-разделитель нужен перед (91)/(92) и прочими AI
+    const groups = [...source.matchAll(/\((\d{2,4})\)([^()]*)/g)]
+      .map((m) => ({ ai: m[1], value: String(m[2] || '').replace(/[\s\u001d\u00e8]/g, '') }))
+      .filter((g) => g.value);
+    if (groups.length) {
+      let out = '';
+      for (const group of groups) {
+        const head = out === '';
+        if (head) out = group.ai + group.value;
+        else if (group.ai === '21' && !out.includes('\u001d')) out += group.ai + group.value;
+        else out += '\u001d' + group.ai + group.value;
+      }
+      return out;
     }
-    if (out) return out;
   }
-  return source.replace(/[\s\u001d\u00e8()]/g, '');
+  // машинный вид: сохраняем GS-разделители, убираем только пробелы и FNC1
+  return source.replace(/[\s\u00e8()]/g, '');
 }
 
 export function normalizeGtin(value) {

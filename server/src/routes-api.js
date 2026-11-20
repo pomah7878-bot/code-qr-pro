@@ -112,6 +112,68 @@ export async function registerApiRoutes(app) {
     return { ok: true, configured: Boolean(token), tail: token ? token.slice(-6) : '' };
   });
 
+  // Фото товара: картинку ищем на сервере (ЧЗ/открытые базы) и отдаём через свой домен.
+  // CSP остаётся строгим, внешние хосты проверяются.
+  app.get('/api/product/image', { preHandler: requireAuth }, async (req, reply) => {
+    const allowed = [
+      'crpt.ru', 'crptech.ru', 'xn--80ajghhoc2aj1c8b.xn--p1ai',
+      'openfoodfacts.org', 'openbeautyfacts.org', 'openproductsfacts.org'
+    ];
+    const hostAllowed = (host) => allowed.some((d) => host === d || host.endsWith(`.${d}`));
+
+    let target = null;
+    const directUrl = String(req.query?.url || '');
+    const gtin = String(req.query?.gtin || '').replace(/\D/g, '');
+    if (directUrl) {
+      try { target = new URL(directUrl); } catch { return reply.code(400).send({ error: 'Некорректный URL картинки' }); }
+      if (target.protocol !== 'https:' || !hostAllowed(target.hostname.toLowerCase())) {
+        return reply.code(403).send({ error: 'Этот источник картинок не разрешён' });
+      }
+    } else if (gtin) {
+      const candidates = [...new Set([gtin, gtin.replace(/^0+/, '')])].filter((g) => g.length >= 8);
+      const bases = ['https://world.openfoodfacts.org', 'https://world.openbeautyfacts.org', 'https://world.openproductsfacts.org'];
+      for (const base of bases) {
+        for (const cand of candidates) {
+          try {
+            const res = await fetch(`${base}/api/v2/product/${cand}.json?fields=image_front_url,image_url`, {
+              headers: { Accept: 'application/json', 'User-Agent': 'CODE-QR-PRO/1.0' },
+              signal: AbortSignal.timeout(10000)
+            });
+            if (!res.ok) continue;
+            const data = await res.json().catch(() => null);
+            const img = data?.product?.image_front_url || data?.product?.image_url || '';
+            if (/^https:\/\//i.test(img)) {
+              const candidate = new URL(img);
+              if (hostAllowed(candidate.hostname.toLowerCase())) { target = candidate; break; }
+            }
+          } catch { /* следующий источник */ }
+        }
+        if (target) break;
+      }
+      if (!target) return reply.code(404).send({ error: 'Фото для этого товара не найдено' });
+    } else {
+      return reply.code(400).send({ error: 'Передайте url или gtin' });
+    }
+
+    try {
+      const res = await fetch(target.toString(), {
+        headers: { 'User-Agent': 'CODE-QR-PRO/1.0 (+https://code-qr.stockcity.ru)', Accept: 'image/*' },
+        signal: AbortSignal.timeout(12000)
+      });
+      if (!res.ok) return reply.code(404).send({ error: `Картинка недоступна (HTTP ${res.status})` });
+      const type = String(res.headers.get('content-type') || '');
+      if (!type.startsWith('image/')) return reply.code(400).send({ error: 'Это не картинка' });
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (!buffer.length || buffer.length > 4 * 1024 * 1024) return reply.code(413).send({ error: 'Картинка слишком большая' });
+      reply.header('Content-Type', type);
+      reply.header('Cache-Control', 'public, max-age=86400, immutable');
+      reply.header('X-Content-Type-Options', 'nosniff');
+      return reply.send(buffer);
+    } catch (e) {
+      return reply.code(502).send({ error: `Не удалось загрузить картинку: ${String(e?.message || e).slice(0, 120)}` });
+    }
+  });
+
   // Карточка товара по коду: ЧЗ (если есть токен) -> открытые базы -> своя история
   app.post('/api/product/cards', { preHandler: requireAuth }, async (req, reply) => {
     const codes = Array.isArray(req.body?.codes) ? req.body.codes.slice(0, 50) : [];

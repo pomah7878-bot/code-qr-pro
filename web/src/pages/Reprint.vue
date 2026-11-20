@@ -745,6 +745,17 @@ function fillProductFromCard(card, { silent = true } = {}) {
   return true;
 }
 
+function cardImageUrl(card) {
+  if (!card) return '';
+  const direct = Array.isArray(card.images)
+    ? card.images.find((u) => /^https?:\/\//i.test(String(u || '')))
+    : '';
+  if (direct) return `/api/product/image?url=${encodeURIComponent(direct)}`;
+  const gtin = String(card.gtin || '').replace(/\D/g, '');
+  if (gtin.length >= 8) return `/api/product/image?gtin=${gtin}`;
+  return '';
+}
+
 function applyCard(item) {
   const card = item?.card;
   if (!card) return;
@@ -1323,7 +1334,23 @@ async function printLabels() {
             v-for="(c, i) in cards" :key="i"
             class="rounded-xl border border-slate-200 dark:border-white/10 p-3 flex flex-wrap items-start justify-between gap-3"
           >
-            <div class="min-w-0">
+            <div class="flex items-start gap-3 min-w-0">
+              <a
+                v-if="cardImageUrl(c.card)"
+                :href="cardImageUrl(c.card)"
+                target="_blank" rel="noopener"
+                class="block flex-none"
+                title="Фото товара — открыть в новой вкладке"
+              >
+                <img
+                  :src="cardImageUrl(c.card)"
+                  alt="Фото товара"
+                  class="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-white/15 bg-white"
+                  loading="lazy"
+                  @error="$event.target.style.display='none'"
+                >
+              </a>
+              <div class="min-w-0">
               <div class="text-sm font-semibold">
                 <template v-if="c.card">{{ c.card.name || 'Без названия' }}</template>
                 <template v-else>Товар не найден</template>
@@ -1361,6 +1388,7 @@ async function printLabels() {
               </div>
             </div>
             <button v-if="c.card" class="btn-ghost !py-1.5 !px-3 text-xs" @click="applyCard(c)">В этикетку</button>
+            </div>
           </div>
         </div>
         <p class="text-[11px] text-slate-500 mt-2">

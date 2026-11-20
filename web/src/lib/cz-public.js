@@ -208,9 +208,15 @@ export async function fetchCatalogCard(gtin) {
     if (!unit || unit === '1') return value;
     return value.includes(unit) ? value : `${value} ${unit}`;
   };
+  const rawImages = catalog.good_images;
+  const images = (Array.isArray(rawImages) ? rawImages : [])
+    .map((img) => (typeof img === 'string' ? img : (img && (img.url || img.photo_url || img.image || img.src))))
+    .filter((u) => /^https?:\/\//i.test(String(u || '')))
+    .slice(0, 3);
   const card = {
     found: true,
     catalogOnly: true,
+    images,
     sourceLabel: 'Честный ЗНАК · Национальный каталог',
     name: raw.productName || catalog.good_name || attr('Полное наименование товара'),
     brand: catalog.brand_name || attr('Товарный знак'),

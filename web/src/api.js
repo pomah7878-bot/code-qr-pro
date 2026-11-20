@@ -171,5 +171,6 @@ export const api = {
   keys: () => req('GET', '/api/keys'),
   createKey: (b) => req('POST', '/api/keys', b),
   deleteKey: (id) => req('DELETE', '/api/keys/' + id),
-  czVerify: (b) => req('POST', '/api/cz/verify', b)
+  czVerify: (b) => req('POST', '/api/cz/verify', b),
+  productCards: (codes) => req('POST', '/api/product/cards', { codes })
 };

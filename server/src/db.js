@@ -426,7 +426,20 @@ const MIGRATIONS = [
      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
    CREATE INDEX idx_support_tickets_user ON support_tickets(user_id, created_at);
-   CREATE INDEX idx_support_tickets_status ON support_tickets(status, created_at);`
+   CREATE INDEX idx_support_tickets_status ON support_tickets(status, created_at);`,
+  // v27 — кэш карточек товара по GTIN (данные из открытых источников и своей базы)
+  `CREATE TABLE product_cards (
+     gtin TEXT PRIMARY KEY,
+     name TEXT NOT NULL DEFAULT '',
+     brand TEXT NOT NULL DEFAULT '',
+     category TEXT NOT NULL DEFAULT '',
+     quantity TEXT NOT NULL DEFAULT '',
+     producer TEXT NOT NULL DEFAULT '',
+     source TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT '',
+     raw TEXT NOT NULL DEFAULT '{}',
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );`
 ];
 
 const version = db.pragma('user_version', { simple: true });

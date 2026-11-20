@@ -6,6 +6,7 @@ import { createJobForUser } from './routes-jobs.js';
 import { verifyCodes } from './cz.js';
 import { getSetting } from './settings.js';
 import { logActivity } from './lib/activity.js';
+import { productCard } from './lib/product-card.js';
 
 const hashKey = (k) => createHash('sha256').update(k).digest('hex');
 
@@ -93,6 +94,25 @@ export async function registerApiRoutes(app) {
       meta: { mode, configured: Boolean(result.configured), online: Boolean(result.online) }
     });
     return result;
+  });
+
+  // Карточка товара по коду: ЧЗ (если есть токен) -> открытые базы -> своя история
+  app.post('/api/product/cards', { preHandler: requireAuth }, async (req, reply) => {
+    const codes = Array.isArray(req.body?.codes) ? req.body.codes.slice(0, 50) : [];
+    if (!codes.length) return reply.code(400).send({ error: 'Передайте список кодов' });
+    const cards = [];
+    for (const item of codes) {
+      const code = typeof item === 'string' ? item : String(item?.code || '');
+      const gtin = typeof item === 'string' ? '' : String(item?.gtin || '');
+      try {
+        const card = await productCard({ userId: req.user.id, code, gtin });
+        cards.push(card);
+      } catch (e) {
+        cards.push({ ok: false, error: String(e?.message || e), code });
+      }
+    }
+    logActivity(req.user, 'product_card', 'Карточка товара по коду', { total: codes.length, ok: cards.filter((c) => c.card).length });
+    return { cards };
   });
 
   // Информация о товаре из «Честного ЗНАКа» по коду (True API, если настроен токен)

@@ -76,6 +76,10 @@ const barcodeFormats = [
 const productInfo = ref([]);
 const infoMessage = ref('');
 const infoLoading = ref(false);
+// Карточки товара по коду из открытых источников (Open Food/Beauty Facts) и своей истории
+const cards = ref([]);
+const cardsLoading = ref(false);
+const cardsMessage = ref('');
 const catalog = ref({});
 const catalogStatus = ref('');
 try { catalog.value = JSON.parse(localStorage.getItem('cq_product_catalog') || '{}'); } catch { catalog.value = {}; }
@@ -440,12 +444,14 @@ const firstCode = computed(() => {
   const v = result.value?.valid?.[0];
   if (!v) return null;
   const s = String(v.code || '');
+  const production = (s.match(/(?:^|\u001d)11(\d{6})/) || [])[1] || '';
   const expiry = (s.match(/(?:^|\u001d)17(\d{6})/) || [])[1] || '';
   const batch = (s.match(/(?:^|\u001d)10([^\u001d]{1,20})/) || [])[1] || '';
   return {
     gtin: v.gtin || '',
     serial: v.serial || '',
     kind: v.short ? 'GS1 (код 93)' : 'КИЗ (код 91/92)',
+    production: production ? `${production.slice(4, 6)}.${production.slice(2, 4)}.20${production.slice(0, 2)}` : '',
     expiry: expiry ? `${expiry.slice(4, 6)}.${expiry.slice(2, 4)}.20${expiry.slice(0, 2)}` : '',
     batch
   };
@@ -504,8 +510,40 @@ async function checkCodes() {
     productInfo.value = result.value.valid.map((c) => ({ code: c.code, gtin: c.gtin, serial: c.serial, short: c.short, name: '', producer: '', brand: '', group: '', status: '', owner: '' }));
     applyCatalog();
     loadProductInfo();
+    loadProductCards();
   } catch (e) { error.value = e.message; }
   finally { busy.value = false; }
+}
+
+// Ищем карточку товара по коду: ЧЗ (если настроен) → открытые базы → своя история
+async function loadProductCards() {
+  const valid = result.value?.valid || [];
+  cards.value = [];
+  cardsMessage.value = '';
+  if (!valid.length) return;
+  cardsLoading.value = true;
+  try {
+    const r = await api.productCards(valid.slice(0, 10).map((c) => ({ code: c.code, gtin: c.gtin })));
+    cards.value = (r.cards || []).filter((c) => c && !c.error);
+    if (!cards.value.some((c) => c.card)) {
+      cardsMessage.value = cards.value[0]?.message || 'Товар не найден в открытых источниках.';
+    }
+  } catch (e) {
+    cardsMessage.value = `Не удалось получить карточку товара: ${e.message}`;
+  } finally {
+    cardsLoading.value = false;
+  }
+}
+
+// Подставляет найденные данные в поля этикетки
+function applyCard(item) {
+  const card = item?.card;
+  if (!card) return;
+  if (card.name && !product.name) product.name = card.name;
+  if (card.producer && !product.manufacturer) product.manufacturer = card.producer;
+  else if (card.brand && !product.manufacturer) product.manufacturer = card.brand;
+  if (card.quantity && !product.size) product.size = card.quantity;
+  notice.value = 'Данные товара подставлены в этикетку';
 }
 
 function applyCatalog() {
@@ -888,6 +926,48 @@ async function printLabels() {
         </div>
       </div>
 
+      <div v-if="cards.length || cardsLoading" class="glass rounded-2xl p-5 mt-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <h2 class="font-display font-semibold">Карточка товара по коду</h2>
+          <span v-if="cardsLoading" class="text-xs text-slate-500">Ищем товар…</span>
+          <span v-else class="text-[11px] text-slate-500">Источники: «Честный ЗНАК», Open Food/Beauty Facts, ваша история</span>
+        </div>
+        <p v-if="cardsMessage" class="text-xs text-slate-500 mb-2">{{ cardsMessage }}</p>
+        <div class="space-y-2">
+          <div
+            v-for="(c, i) in cards" :key="i"
+            class="rounded-xl border border-slate-200 dark:border-white/10 p-3 flex flex-wrap items-start justify-between gap-3"
+          >
+            <div class="min-w-0">
+              <div class="text-sm font-semibold">
+                <template v-if="c.card">{{ c.card.name || 'Без названия' }}</template>
+                <template v-else>Товар не найден</template>
+                <span v-if="c.card && c.card.brand" class="text-slate-500 font-normal"> · {{ c.card.brand }}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                GTIN <span class="font-mono">{{ c.gtin || c.decoded?.gtin }}</span>
+                <span v-if="c.decoded?.serial"> · серийник <span class="font-mono">{{ c.decoded.serial }}</span></span>
+                <span v-if="c.card?.category"> · {{ c.card.category }}</span>
+                <span v-if="c.card?.quantity"> · {{ c.card.quantity }}</span>
+                <span v-if="c.card?.producer"> · {{ c.card.producer }}</span>
+              </div>
+              <div class="text-[11px] text-slate-500 mt-1">
+                <span v-if="c.card" class="chip-soon !text-[10px] !py-0">{{ c.card.sourceLabel || 'открытые данные' }}</span>
+                <span v-if="c.card?.status" class="chip-soon !text-[10px] !py-0 ml-1">статус: {{ c.card.status }}</span>
+                <span v-if="c.history" class="chip-soon !text-[10px] !py-0 ml-1">из вашей истории: {{ c.history.jobName }}</span>
+                <span v-if="c.cz?.configured" class="ml-1">ЧЗ подключён</span>
+                <span v-else-if="c.cz?.error" class="ml-1">ЧЗ недоступен: {{ c.cz.error }}</span>
+              </div>
+            </div>
+            <button v-if="c.card" class="btn-ghost !py-1.5 !px-3 text-xs" @click="applyCard(c)">В этикетку</button>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">
+          В самом DataMatrix хранятся только GTIN, серийник и криптохвост. Название, бренд и категория берутся из внешних
+          источников — «Честного ЗНАКа» (по токену) или открытых баз; если товара там нет, заполните поля вручную.
+        </p>
+      </div>
+
       <div v-if="result && productInfo.length" class="glass rounded-2xl p-5 mt-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h2 class="font-display font-semibold">Информация о кодах</h2>
@@ -905,6 +985,7 @@ async function printLabels() {
             <b>В коде:</b> GTIN <span class="font-mono">{{ firstCode.gtin }}</span>
             · серийник <span class="font-mono">{{ firstCode.serial }}</span>
             · {{ firstCode.kind }}
+            <span v-if="firstCode.production"> · изготовлен {{ firstCode.production }}</span>
             <span v-if="firstCode.expiry"> · срок годности {{ firstCode.expiry }}</span>
             <span v-if="firstCode.batch"> · партия <span class="font-mono">{{ firstCode.batch }}</span></span>
           </div>

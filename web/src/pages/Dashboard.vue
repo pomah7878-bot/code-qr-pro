@@ -46,7 +46,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
         <div class="relative flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30">
-              <BrandIcon name="star" :size="22" />
+              <BrandIcon name="ai" :size="22" solid="#ffffff" />
             </span>
             <div>
               <div class="flex items-center gap-2">

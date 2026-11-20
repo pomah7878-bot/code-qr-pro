@@ -73,7 +73,7 @@ const features = [
   { icon: 'print', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
   { icon: 'archive', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
   { icon: 'api', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
-  { icon: 'star', title: 'AI-помощник 24/7', text: 'Отвечает по «Честному ЗНАКу» и работе сервиса, подсказывает по шагам и передаёт сложное администратору. Входит в PREMIUM.' },
+  { icon: 'ai', title: 'AI-помощник 24/7', text: 'Отвечает по «Честному ЗНАКу» и работе сервиса, подсказывает по шагам и передаёт сложное администратору. Входит в PREMIUM.' },
   { icon: 'lock', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
 ];
 const steps = [
@@ -177,7 +177,7 @@ const openFaq = ref(null);
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div class="reveal glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
           <div class="absolute right-3 top-3 text-[9px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-violet-600 to-accent-500 rounded-full px-2 py-0.5">PREMIUM</div>
-          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30"><BrandIcon name="star" :size="24" /></span></div>
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30"><BrandIcon name="ai" :size="24" solid="#ffffff" /></span></div>
           <h3 class="font-display font-semibold text-lg mb-2">AI-помощник 24/7</h3>
           <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Отвечает по GS1 DataMatrix, «Честному ЗНАКу» и работе сервиса. Понимает, в каком разделе вы находитесь, и подсказывает по шагам.</p>
         </div>
@@ -314,7 +314,7 @@ const openFaq = ref(null);
               <span class="text-emerald-500 font-bold"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
             </li>
             <li class="flex items-center gap-2.5">
-              <span class="text-violet-500 font-bold"><BrandIcon name="star" :size="14" /></span> AI-помощник 24/7 и база знаний
+              <span class="text-violet-500 font-bold"><BrandIcon name="ai" :size="14" /></span> AI-помощник 24/7 и база знаний
             </li>
             <li class="flex items-center gap-2.5">
               <span class="text-violet-500 font-bold"><BrandIcon name="check" :size="14" /></span> Поддержка с историей обращений

@@ -56,7 +56,9 @@ const blocks = [
       <div class="glass rounded-2xl p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
-            <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-10 h-10 rounded-xl">
+            <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30">
+              <BrandIcon name="ai" :size="24" solid="#ffffff" />
+            </span>
             <div>
               <div class="flex items-center gap-2">
                 <div class="font-display font-semibold">AI-помощник</div>

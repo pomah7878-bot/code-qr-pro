@@ -105,7 +105,7 @@ async function changePassword() {
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')"><BrandIcon name="billing" :size="18" class="inline-block mr-2 -mt-0.5" />Подписка</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/security')"><BrandIcon name="lock" :size="18" class="inline-block mr-2 -mt-0.5" />Безопасность</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/help')"><BrandIcon name="help" :size="18" class="inline-block mr-2 -mt-0.5" />Помощь</button>
-            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-brand-400" @click="menuOpen = false; openAssistant()"><BrandIcon name="star" :size="18" class="inline-block mr-2 -mt-0.5" />AI-помощник</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-brand-400" @click="menuOpen = false; openAssistant()"><BrandIcon name="ai" :size="18" class="inline-block mr-2 -mt-0.5" />AI-помощник</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
           </template>
           <template v-else>

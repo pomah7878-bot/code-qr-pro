@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { api } from '../../api.js';
+import BrandIcon from '../BrandIcon.vue';
 
 const form = reactive({
   enabled: false,
@@ -117,7 +118,12 @@ onMounted(() => { load(); loadUsage(); });
   <div class="glass rounded-2xl p-6">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="font-display font-semibold">AI-помощник</h2>
+        <h2 class="font-display font-semibold flex items-center gap-2">
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-md shadow-violet-600/30">
+            <BrandIcon name="ai" :size="18" solid="#ffffff" />
+          </span>
+          AI-помощник
+        </h2>
         <p class="text-xs text-slate-500 mt-1">
           Кнопка «Спросить ИИ» в карточке клиента: модель получает только факты об аккаунте (без паролей и токенов)
           и возвращает диагноз, шаги и предложенные действия. Действия выполняет человек — модель ничего не меняет сама.

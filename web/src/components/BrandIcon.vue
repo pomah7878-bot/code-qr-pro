@@ -4,7 +4,8 @@ import { computed } from 'vue';
 const props = defineProps({
   name: { type: String, required: true },
   size: { type: [Number, String], default: 28 },
-  title: { type: String, default: '' }
+  title: { type: String, default: '' },
+  solid: { type: String, default: '' }
 });
 
 const paths = {
@@ -179,6 +180,15 @@ const paths = {
   ],
   pill: [
     { d: 'M8 5l11 11-3 3L5 8z M8 5l3 3' }
+  ],
+  ai: [
+    { d: 'M7 8.2h10a4 4 0 0 1 4 4v1.6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-1.6a4 4 0 0 1 4-4z' },
+    { d: 'M12 8.2V4.6' },
+    { d: 'M12 2.4a1.7 1.7 0 1 1 0 3.4 1.7 1.7 0 0 1 0-3.4z', fill: true },
+    { d: 'M9.4 12.3a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5z', fill: true },
+    { d: 'M14.6 12.3a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5z', fill: true },
+    { d: 'M10 16.9c.7.7 1.4 1 2 1s1.3-.3 2-1' },
+    { d: 'M2.6 12.6v1.4 M21.4 12.6v1.4' }
   ]
 };
 
@@ -207,8 +217,8 @@ const gradId = `brand-grad-${Math.random().toString(36).slice(2, 9)}`;
       v-for="(shape, i) in shapes"
       :key="i"
       :d="shape.d"
-      :fill="shape.fill ? `url(#${gradId})` : 'none'"
-      :stroke="shape.fill ? 'none' : `url(#${gradId})`"
+      :fill="shape.fill ? (solid || `url(#${gradId})`) : 'none'"
+      :stroke="shape.fill ? 'none' : (solid || `url(#${gradId})`)"
       stroke-width="1.55"
       stroke-linecap="round"
       stroke-linejoin="round"

@@ -7,7 +7,8 @@ const form = reactive({
   backend: 'api',
   baseUrl: 'https://api.deepseek.com/v1',
   model: 'deepseek-chat',
-  maxTokens: 900,
+  maxTokens: 600,
+  freeFirst: true,
   apiKey: '',
   clearKey: false
 });
@@ -42,7 +43,8 @@ async function load() {
       backend: d.backend || 'api',
       baseUrl: d.baseUrl || 'https://api.deepseek.com/v1',
       model: d.model || 'deepseek-chat',
-      maxTokens: d.maxTokens || 900,
+      maxTokens: d.maxTokens || 600,
+      freeFirst: d.freeFirst !== false,
       apiKey: '',
       clearKey: false
     });
@@ -148,6 +150,13 @@ onMounted(load);
         <label class="label !text-xs" for="ai-tokens">Лимит ответа, токенов</label>
         <input id="ai-tokens" v-model.number="form.maxTokens" type="number" min="300" max="3000" step="100" class="input !py-2 text-sm">
       </div>
+      <label class="flex items-start gap-2 text-sm md:col-span-2">
+        <input v-model="form.freeFirst" type="checkbox" class="mt-0.5">
+        <span>
+          <b>Сначала бесплатные модели Kilo</b> (kilo-auto/free, openrouter/free), аккаунт — только если они недоступны.
+          <span class="block text-xs text-slate-500">Экономит токены платного аккаунта: бесплатные модели не тарифицируются.</span>
+        </span>
+      </label>
     </div>
 
     <p class="text-xs text-slate-500 mt-3">

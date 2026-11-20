@@ -41,6 +41,7 @@ const ACTION_LABELS = {
 };
 const confidenceLabel = (c) => ({ high: 'уверен', medium: 'средняя уверенность', low: 'мало данных' }[c] || c);
 const actionLabel = (id) => ACTION_LABELS[id] || id;
+const modelLabel = (m) => (String(m).startsWith('free:') ? `бесплатная · ${String(m).slice(5)}` : m);
 
 let searchTimer = 0;
 watch(search, () => {
@@ -291,7 +292,7 @@ onMounted(checkAi);
                       : m.answer?.confidence === 'low' ? '!text-amber-500 !border-amber-500/30 !bg-amber-500/10' : ''">
                     {{ confidenceLabel(m.answer?.confidence) }}
                   </span>
-                  <span v-if="m.model">{{ m.model }}</span>
+                  <span v-if="m.model">{{ modelLabel(m.model) }}</span>
                   <span v-if="m.durationMs">· {{ (m.durationMs / 1000).toFixed(1) }} с</span>
                 </div>
                 <div>

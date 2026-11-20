@@ -13,31 +13,13 @@ const ALLOWED_ACTIONS = [
 ];
 const ALLOWED = new Set(ALLOWED_ACTIONS);
 
-const SYSTEM = `Ты — «AI-помощник» админ-панели CODE QR PRO: сервис генерации GS1 DataMatrix, проверки кодов «Честный ЗНАК», наборов с КИН и печати этикеток.
-Тебе дают вопрос администратора и факты об аккаунте клиента. Нужно быстро поставить диагноз и предложить действия.
-
-Правила:
-1. Опирайся ТОЛЬКО на факты из данных. Если данных не хватает — так и напиши, поставь confidence "low".
-2. Не выдумывай статусы, даты и ошибки, которых нет в данных.
-3. Отвечай по-русски, кратко и по делу. Без воды.
-4. Не предлагай нарушать закон и не советуй подделывать коды маркировки.
-5. Не предлагай удаление аккаунта, смену роли и другие необратимые действия.
-6. Действия выбирай только из списка разрешённых.
-
-Разрешённые действия (id):
-unlock_login — снять блокировку входа после неудачных попыток;
-reset_2fa — сбросить 2FA (клиент потерял телефон);
-login_link — одноразовая ссылка входа на 15 минут;
-reset_usage — обнулить дневной лимит кодов;
-clear_password_flag — снять требование сменить пароль при входе;
-clear_rate_limits — снять лимит запросов по IP клиента;
-compensate — компенсация: продлить PREMIUM (1–90 дней);
-revoke_api_keys — отозвать все API-ключи клиента;
-view_as_client — посмотреть кабинет от имени клиента (только чтение);
-send_email — отправить клиенту письмо по шаблону.
+const SYSTEM = `Ты — AI-помощник админки CODE QR PRO (маркировка «Честный ЗНАК», DataMatrix, печать этикеток).
+По фактам аккаунта поставь диагноз и предложи шаги. Опирайся только на факты; не выдумывай; отвечай по-русски, кратко.
+Не советуй нарушать закон и не предлагай удаление аккаунта/смену роли. Действия — только из списка:
+unlock_login, reset_2fa, login_link, reset_usage, clear_password_flag, clear_rate_limits, compensate, revoke_api_keys, view_as_client, send_email.
 
 Верни строго JSON без markdown:
-{"diagnosis":"1–3 предложения: в чём причина","steps":["шаг 1","шаг 2"],"actions":["unlock_login"],"draft":"черновик короткого письма клиенту, 2–4 предложения","confidence":"high|medium|low"}`;
+{"diagnosis":"1–2 предложения","steps":["шаг 1","шаг 2"],"actions":["unlock_login"],"draft":"2–3 предложения клиенту","confidence":"high|medium|low"}`;
 
 const safeParse = (value) => {
   try { return JSON.parse(value); } catch { return null; }
@@ -67,6 +49,7 @@ export async function registerAdminAiRoutes(app) {
       baseUrl: cfg.baseUrl,
       model: cfg.model,
       maxTokens: cfg.maxTokens,
+      freeFirst: cfg.freeFirst,
       hasKey: Boolean(cfg.apiKey),
       configured: aiConfigured(cfg),
       allowedActions: ALLOWED_ACTIONS
@@ -83,7 +66,8 @@ export async function registerAdminAiRoutes(app) {
       ['ai_backend', ['api', 'dsh'].includes(b.backend) ? b.backend : undefined],
       ['ai_base_url', b.baseUrl !== undefined ? String(b.baseUrl).trim().slice(0, 300) : undefined],
       ['ai_model', b.model !== undefined ? String(b.model).trim().slice(0, 120) : undefined],
-      ['ai_max_tokens', b.maxTokens !== undefined ? String(Math.min(3000, Math.max(300, Number(b.maxTokens) || 900))) : undefined],
+      ['ai_max_tokens', b.maxTokens !== undefined ? String(Math.min(3000, Math.max(300, Number(b.maxTokens) || 600))) : undefined],
+      ['ai_free_first', b.freeFirst !== undefined ? (b.freeFirst ? '1' : '0') : undefined],
       ['ai_api_key', b.clearKey ? '' : (b.apiKey && String(b.apiKey).trim() ? String(b.apiKey).trim() : undefined)]
     ];
     for (const [key, value] of pairs) {
@@ -133,14 +117,29 @@ export async function registerAdminAiRoutes(app) {
     let actions = [];
 
     try {
+      const facts = formatAiContext(ctx);
       const res = await askAi({
         system: SYSTEM,
-        user: `Вопрос администратора: ${question}\n\nДанные аккаунта:\n${formatAiContext(ctx)}`,
-        cfg
+        // факты обрезаем: модель не должна получать лишние токены
+        user: `Вопрос: ${question}\n\nФакты:\n${facts.length > 1600 ? facts.slice(0, 1600) + '…' : facts}`,
+        cfg,
+        freeMaxTokens: 900
       });
       content = String(res.content || '').slice(0, 4000);
       model = String(res.model || cfg.model).slice(0, 120);
       parsed = res.parsed;
+      if (!parsed && content) {
+        // бесплатная модель ответила текстом — не тратим аккаунт ради переформатирования
+        parsed = { diagnosis: content.slice(0, 900), steps: [], actions: [], draft: '', confidence: 'low' };
+      }
+      if (res.via === 'account' && Array.isArray(res.freeErrors) && res.freeErrors.length) {
+        logEvent({
+          level: 'warn', source: 'ai', event: 'ai_account_fallback',
+          message: 'AI: бесплатные модели недоступны, ответ дал аккаунт',
+          userId, ip: req.ip, method: 'ADMIN', url: req.url,
+          meta: { errors: res.freeErrors.join(' | ').slice(0, 500) }
+        });
+      }
       if (parsed && Array.isArray(parsed.actions)) {
         actions = parsed.actions.filter((a) => ALLOWED.has(a)).slice(0, 5);
       }
@@ -197,22 +196,31 @@ export async function registerAdminAiRoutes(app) {
     let model = cfg.model;
     let error = '';
     try {
+      const facts = formatAiContext(ctx).replace(/[a-z0-9]\*+@[a-z0-9.-]+/gi, 'клиент');
       const res = await askAi({
         system: SYSTEM_DRAFT,
         user: [
           note ? `Что случилось / что сделано (со слов администратора): ${note}` : 'Администратор не дал пояснений — опирайся только на факты аккаунта.',
-          hint ? `Дополнительный контекст (предыдущий разбор): ${hint}` : '',
+          hint ? `Дополнительный контекст (предыдущий разбор): ${hint.slice(0, 400)}` : '',
           '',
           'Факты аккаунта:',
           // контакты и технические id в письмо попадать не должны
-          formatAiContext(ctx).replace(/[a-z0-9]\*+@[a-z0-9.-]+/gi, 'клиент')
+          facts.length > 1400 ? facts.slice(0, 1400) + '…' : facts
         ].filter(Boolean).join('\n'),
-        cfg
+        cfg,
+        freeMaxTokens: 900
       });
       model = String(res.model || cfg.model).slice(0, 120);
       const parsed = res.parsed || {};
       subject = String(parsed.subject || '').trim().slice(0, 120);
       text = String(parsed.text || '').trim().slice(0, 5000);
+      if ((!subject || !text) && res.content) {
+        // модель ответила обычным текстом — используем его, чтобы не тратить аккаунт
+        const plain = String(res.content).trim();
+        const lines = plain.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+        if (!subject && lines.length) subject = lines[0].replace(/^["«]+|["»]+$/g, '').slice(0, 120);
+        if (!text) text = plain.slice(0, 5000);
+      }
       if (!subject || !text) throw new Error('AI не вернул письмо, попробуйте ещё раз');
     } catch (e) {
       error = String(e?.message || e).slice(0, 400);
@@ -251,3 +259,4 @@ export async function registerAdminAiRoutes(app) {
     };
   });
 }
+

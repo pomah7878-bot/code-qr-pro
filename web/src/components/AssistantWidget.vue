@@ -47,6 +47,7 @@ watch(() => assistantUi.open, (open) => {
     }
   }
   if (open) {
+    dismissHint();
     resetChat();
     if (isPremium.value) loadTickets();
   }
@@ -154,22 +155,111 @@ function onKeydown(e) {
 }
 onMounted(() => window.addEventListener('keydown', onKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+
+// «Живая» кнопка: мягко покачивается, изредка подмигивает и один раз за сессию
+// показывает короткую подсказку. Всё уважает prefers-reduced-motion и не мешает работе.
+const idleHint = ref(false);
+const peeking = ref(false);
+const pressed = ref(false);
+const hovering = ref(false);
+let hintTimer = 0;
+let hideTimer = 0;
+let peekTimer = 0;
+let peekInterval = 0;
+let pressTimer = 0;
+
+function dismissHint() {
+  idleHint.value = false;
+  try { sessionStorage.setItem('cq_ai_hint_shown', '1'); } catch { /* ignore */ }
+}
+
+function openFromHint() {
+  dismissHint();
+  assistantUi.open = true;
+}
+
+function peek() {
+  if (assistantUi.open || document.hidden) return;
+  peeking.value = true;
+  window.clearTimeout(peekTimer);
+  peekTimer = window.setTimeout(() => { peeking.value = false; }, 1600);
+}
+
+function press() {
+  pressed.value = true;
+  window.clearTimeout(pressTimer);
+  pressTimer = window.setTimeout(() => { pressed.value = false; }, 420);
+}
+
+function toggleOpen() {
+  press();
+  if (assistantUi.open) closeAssistant();
+  else assistantUi.open = true;
+}
+
+const reduceMotion = () => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+};
+
+onMounted(() => {
+  if (reduceMotion()) return;
+  let seen = false;
+  try { seen = sessionStorage.getItem('cq_ai_hint_shown') === '1'; } catch { /* ignore */ }
+  if (!seen) {
+    hintTimer = window.setTimeout(() => {
+      if (!assistantUi.open) {
+        idleHint.value = true;
+        hideTimer = window.setTimeout(dismissHint, 9000);
+      }
+    }, 22000);
+  }
+  peekInterval = window.setInterval(peek, 42000);
+});
+
+onUnmounted(() => {
+  window.clearTimeout(hintTimer);
+  window.clearTimeout(hideTimer);
+  window.clearTimeout(peekTimer);
+  window.clearTimeout(pressTimer);
+  window.clearInterval(peekInterval);
+});
 </script>
 
 <template>
   <Teleport to="body">
     <!-- Кнопка вызова окна -->
-    <button
-      class="ai-launcher fixed z-40 flex items-center justify-center rounded-full text-sm font-semibold text-white print:hidden right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] w-14 h-14 p-0 sm:right-5 sm:bottom-24 sm:w-auto sm:h-auto sm:px-4 sm:py-3 sm:gap-2"
-      aria-label="Открыть AI-помощника"
-      @click="assistantUi.open ? closeAssistant() : (assistantUi.open = true)"
-    >
-      <BrandIcon name="star" :size="22" class="sm:hidden" />
-      <span class="ai-launcher-icon hidden sm:inline-flex"><BrandIcon name="star" :size="15" /></span>
-      <BrandIcon name="help" :size="18" class="hidden sm:block" />
-      <span class="hidden sm:inline">AI-помощник</span>
-      <span class="ai-premium-tag hidden sm:inline">PREMIUM</span>
-    </button>
+    <div class="fixed z-40 right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:right-5 sm:bottom-24 print:hidden">
+      <transition name="ai-pop">
+        <button
+          v-if="idleHint && !assistantUi.open"
+          type="button"
+          class="ai-hint-bubble"
+          @click="openFromHint"
+        >
+          <span class="ai-hint-emoji" aria-hidden="true">👋</span>
+          Я рядом — подскажу по шагам и передам администратору
+          <span class="ai-hint-close" role="button" aria-label="Скрыть" @click.stop="dismissHint">×</span>
+        </button>
+      </transition>
+
+      <button
+        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white right-0 bottom-0 w-14 h-14 p-0 sm:w-auto sm:h-auto sm:px-4 sm:py-3 sm:gap-2"
+        :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
+        aria-label="Открыть AI-помощника"
+        :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
+        @click="toggleOpen"
+        @mouseenter="hovering = true"
+        @mouseleave="hovering = false"
+      >
+        <span class="ai-shimmer" aria-hidden="true"></span>
+        <BrandIcon name="star" :size="22" class="sm:hidden" />
+        <span class="ai-launcher-icon hidden sm:inline-flex"><BrandIcon name="star" :size="15" /></span>
+        <BrandIcon name="help" :size="18" class="hidden sm:block" />
+        <span class="hidden sm:inline">AI-помощник</span>
+        <span class="ai-premium-tag hidden sm:inline">PREMIUM</span>
+        <span class="ai-notify-dot" :class="{ 'is-on': idleHint }" aria-hidden="true"></span>
+      </button>
+    </div>
 
     <!-- Диалоговое окно: на телефоне — лист снизу на весь экран, на ПК — окно у кнопки -->
     <div v-if="assistantUi.open" class="fixed inset-0 z-[75] flex items-end justify-center sm:block sm:inset-auto sm:bottom-40 sm:right-5 sm:w-[430px] print:hidden">
@@ -308,7 +398,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .ai-launcher:hover {
-  transform: translateY(-1px);
   box-shadow: 0 14px 34px -8px rgba(124, 58, 237, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.24) inset;
 }
 .ai-launcher-icon {
@@ -407,6 +496,167 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown));
   }
   .ai-panel {
     border-radius: 1.5rem 1.5rem 0 0;
+  }
+}
+
+/* «Живая» кнопка: покачивание, свечение, редкое подглядывание */
+.ai-launcher {
+  isolation: isolate;
+  animation: ai-idle-bob 5.5s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+.ai-launcher.ai-hover {
+  animation: none;
+  transform: translateY(-1px) scale(1.04);
+}
+.ai-launcher.ai-peek {
+  animation: ai-peek 1.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ai-launcher.ai-pressed {
+  animation: ai-press 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ai-shimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.ai-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-18deg);
+  animation: ai-shimmer 7.5s ease-in-out infinite;
+}
+.ai-launcher > *:not(.ai-shimmer) {
+  position: relative;
+  z-index: 1;
+}
+.ai-notify-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #34d399;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 10px rgba(52, 211, 153, 0.9);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 2;
+}
+.ai-notify-dot.is-on {
+  opacity: 1;
+  transform: scale(1);
+  animation: ai-dot 1.8s ease-in-out infinite;
+}
+.ai-hint-bubble {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 2rem));
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.35;
+  padding: 10px 26px 10px 12px;
+  border-radius: 14px;
+  color: #334155;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(245, 243, 255, 0.98));
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  box-shadow: 0 14px 34px -14px rgba(124, 58, 237, 0.55);
+  cursor: pointer;
+}
+:global(.dark) .ai-hint-bubble {
+  color: #e2e8f0;
+  background: linear-gradient(135deg, rgba(23, 20, 38, 0.98), rgba(30, 25, 50, 0.98));
+}
+.ai-hint-bubble::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: inherit;
+  border-right: 1px solid rgba(124, 58, 237, 0.3);
+  border-bottom: 1px solid rgba(124, 58, 237, 0.3);
+}
+.ai-hint-emoji {
+  margin-right: 4px;
+  animation: ai-wave 2.4s ease-in-out 2;
+  display: inline-block;
+  transform-origin: 70% 80%;
+}
+.ai-hint-close {
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  font-size: 15px;
+  line-height: 1;
+  color: #94a3b8;
+}
+.ai-hint-close:hover {
+  color: #7c3aed;
+}
+.ai-pop-enter-active,
+.ai-pop-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.ai-pop-enter-from,
+.ai-pop-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+}
+@keyframes ai-idle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes ai-peek {
+  0%, 100% { transform: rotate(0) scale(1); }
+  25% { transform: rotate(-7deg) scale(1.06); }
+  55% { transform: rotate(5deg) scale(1.04); }
+  78% { transform: rotate(-2deg) scale(1.01); }
+}
+@keyframes ai-press {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+@keyframes ai-shimmer {
+  0%, 62% { left: -60%; }
+  82%, 100% { left: 130%; }
+}
+@keyframes ai-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.75; }
+}
+@keyframes ai-wave {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(18deg); }
+  60% { transform: rotate(-10deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-launcher,
+  .ai-launcher.ai-peek,
+  .ai-launcher.ai-pressed,
+  .ai-shimmer::after,
+  .ai-notify-dot.is-on,
+  .ai-hint-emoji {
+    animation: none !important;
+  }
+  .ai-hint-bubble,
+  .ai-pop-enter-active,
+  .ai-pop-leave-active {
+    transition: none !important;
   }
 }
 </style>

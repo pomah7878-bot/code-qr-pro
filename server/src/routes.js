@@ -5,6 +5,8 @@ import { PLANS, planOf, publicPlans } from './plans.js';
 import { notifyRegistration } from './notify.js';
 import { issueTicket } from './lib/twofa-ticket.js';
 import { sendMail, smtpConfigured } from './lib/mailer.js';
+import { renderBrandEmail } from './lib/email-template.js';
+import { publicUrl } from './lib/public-url.js';
 import { logLogin } from './lib/auth-events.js';
 import { VIEW_COOKIE, getViewSession, destroyViewSession } from './lib/view-session.js';
 
@@ -71,14 +73,22 @@ function linkPage(title, text) {
 
 function notifyLoginBlocked(user, ip) {
   if (!user || !smtpConfigured()) return;
+  const safeIp = String(ip || '').replace(/[<>&]/g, '');
+  const { html, text } = renderBrandEmail({
+    title: 'Подозрительная активность',
+    badge: 'Безопасность',
+    preheader: 'Зафиксировано 5 неудачных попыток входа',
+    intro: 'Зафиксировано 5 неудачных попыток входа в аккаунт CODE QR PRO.\nВход временно заблокирован на 15 минут.',
+    notice: `IP: ${safeIp}\nЕсли это были не вы — смените пароль после разблокировки.`,
+    noticeTone: 'warn',
+    ctaLabel: 'Открыть безопасность',
+    ctaUrl: `${publicUrl()}/app/security`
+  });
   sendMail({
     to: user.email,
     subject: 'Подозрительная активность — CODE QR PRO',
-    text: `Зафиксировано 5 неудачных попыток входа в аккаунт CODE QR PRO.\nВход временно заблокирован на 15 минут.\nIP: ${ip}\n\nЕсли это были не вы — смените пароль после разблокировки.`,
-    html: `<p>Зафиксировано 5 неудачных попыток входа в аккаунт <b>CODE QR PRO</b>.</p>
-      <p>Вход временно заблокирован на <b>15 минут</b>.</p>
-      <p>IP: <b>${String(ip || '').replace(/[<>&]/g, '')}</b></p>
-      <p>Если это были не вы — смените пароль после разблокировки.</p>`
+    text,
+    html
   }).catch(() => {});
 }
 // Пока стоит флаг must_change_password, работать можно только с этими маршрутами
@@ -241,17 +251,22 @@ export async function registerRoutes(app) {
       .run(user.id, resetCodeHash(user.id, code), expires, String(req.ip || '').slice(0, 60));
 
     try {
+      const brand = renderBrandEmail({
+        title: 'Восстановление пароля',
+        badge: 'Код доступа',
+        preheader: `Код для смены пароля: ${code}`,
+        intro: 'Здравствуйте!\n\nВы запросили восстановление пароля в CODE QR PRO. Введите код на странице восстановления:',
+        code,
+        notice: 'Код действует 15 минут. Если вы не запрашивали восстановление — просто проигнорируйте письмо, пароль останется прежним.',
+        noticeTone: 'warn',
+        ctaLabel: 'Ввести код',
+        ctaUrl: `${publicUrl()}/login?reset=1`
+      });
       await sendMail({
         to: user.email,
         subject: 'Восстановление пароля CODE QR PRO',
-        text: `Здравствуйте!\n\nКод для восстановления пароля: ${code}\nКод действует 15 минут.\n\nЕсли вы не запрашивали восстановление — просто проигнорируйте это письмо.`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
-          <h2 style="margin:0 0 12px">Восстановление пароля</h2>
-          <p>Код для смены пароля:</p>
-          <p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0">${code}</p>
-          <p>Код действует <b>15 минут</b>.</p>
-          <p style="color:#64748b;font-size:13px">Если вы не запрашивали восстановление — просто проигнорируйте это письмо.</p>
-        </div>`
+        text: brand.text,
+        html: brand.html
       });
     } catch (e) {
       console.error('password reset email failed:', e?.message || e);

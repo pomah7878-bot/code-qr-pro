@@ -6,6 +6,7 @@ import { audit } from './lib/audit.js';
 import {
   smtpConfig, smtpConfigured, verifySmtp, sendMail, renderEmail, readUnsubscribeToken, publicUrl
 } from './lib/mailer.js';
+import { renderBrandEmail } from './lib/email-template.js';
 import { pumpMailQueue } from './lib/mail-queue.js';
 
 const SEGMENTS = {
@@ -85,7 +86,14 @@ export async function registerAdminMailRoutes(app) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return reply.code(400).send({ error: 'Некорректный адрес получателя' });
     try {
       await verifySmtp();
-      const { html, text } = renderEmail('Это тестовое письмо из админки CODE QR PRO. SMTP настроен правильно.', null);
+      const { html, text } = renderBrandEmail({
+        title: 'Почта работает',
+        badge: 'Проверка',
+        preheader: 'Тестовое письмо из админки CODE QR PRO',
+        intro: 'Это тестовое письмо из админки CODE QR PRO. SMTP настроен правильно — клиенты будут получать письма в этом же фирменном оформлении.',
+        ctaLabel: 'Открыть админку',
+        ctaUrl: `${publicUrl()}/app/admin/settings`
+      });
       await sendMail({ to, subject: 'CODE QR PRO — проверка SMTP', text, html });
       audit(req, 'mail.test', 'settings', 'smtp', { to });
       return { ok: true };

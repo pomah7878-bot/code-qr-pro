@@ -1,14 +1,15 @@
-import { sendMail, smtpConfigured, publicUrl } from './mailer.js';
+import { sendMail, smtpConfigured } from './mailer.js';
+import { renderBrandEmail } from './email-template.js';
+import { publicUrl, supportEmail } from './public-url.js';
 import { logEvent } from './app-log.js';
 
 /**
  * Письма клиенту от администратора: шаблоны для быстрых ответов
  * («доступ восстановлен», «оплата не прошла» и т.п.) и уведомления
- * о действиях админа. Это сервисные письма — без ссылки «отписаться».
+ * о действиях админа. Все письма собираются в фирменном шаблоне.
  */
 
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const base = () => publicUrl().replace(/\/$/, '');
+const site = () => publicUrl();
 
 export const MAIL_TEMPLATES = [
   { id: 'access_restored', title: 'Доступ восстановлен', subject: 'Доступ к аккаунту CODE QR PRO восстановлен' },
@@ -22,83 +23,74 @@ export const MAIL_TEMPLATES = [
 ];
 
 const TEMPLATES = {
-  access_restored: (u) => ({
+  access_restored: () => ({
     subject: 'Доступ к аккаунту CODE QR PRO восстановлен',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Администратор снял ограничение на вход в ваш аккаунт CODE QR PRO.
-Войдите с обычным паролем: ${base()}/login
-
-Если вы не запрашивали помощь — ответьте на это письмо.`
+    badge: 'Доступ',
+    title: 'Доступ восстановлен',
+    intro: 'Здравствуйте!\n\nАдминистратор снял ограничение на вход в ваш аккаунт. Можно снова входить с обычным паролем.',
+    notice: 'Если вы не запрашивали помощь — просто ответьте на это письмо.',
+    ctaLabel: 'Войти в кабинет',
+    ctaUrl: `${site()}/login`
   }),
-  twofa_reset: (u) => ({
+  twofa_reset: () => ({
     subject: 'Двухфакторная аутентификация отключена администратором',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Администратор сбросил двухфакторную аутентификацию в вашем аккаунте CODE QR PRO.
-Вход снова доступен по паролю. Все активные сессии завершены.
-
-Пожалуйста, включите 2FA заново: ${base()}/app/security
-
-Если это были не вы — сразу напишите в поддержку.`
+    badge: 'Безопасность',
+    title: 'Двухфакторная аутентификация отключена',
+    intro: 'Здравствуйте!\n\nАдминистратор сбросил 2FA в вашем аккаунте CODE QR PRO. Вход снова доступен по паролю, все активные сессии завершены.',
+    notice: 'Пожалуйста, включите 2FA заново — это займёт минуту.',
+    noticeTone: 'warn',
+    ctaLabel: 'Включить 2FA',
+    ctaUrl: `${site()}/app/security`
   }),
-  password_reset: (u) => ({
+  password_reset: () => ({
     subject: 'Пароль CODE QR PRO сброшен администратором',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Администратор сбросил пароль в вашем аккаунте CODE QR PRO.
-Временный пароль вам передаст поддержка. При входе его нужно будет сменить.
-
-Вход: ${base()}/login`
+    badge: 'Безопасность',
+    title: 'Пароль сброшен',
+    intro: 'Здравствуйте!\n\nАдминистратор сбросил пароль в вашем аккаунте CODE QR PRO. Временный пароль вам передаст поддержка, при входе его нужно будет сменить.',
+    ctaLabel: 'Перейти ко входу',
+    ctaUrl: `${site()}/login`
   }),
   premium_granted: (u, vars) => ({
     subject: 'PREMIUM в CODE QR PRO активирован',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Администратор активировал тариф PREMIUM${vars.until ? ' до ' + vars.until : ''}.
-Открыты редактор этикеток, наборы, печать PDF, Print Bridge и API.
-
-В кабинет: ${base()}/app`
+    badge: 'PREMIUM',
+    title: 'Тариф PREMIUM активирован',
+    intro: `Здравствуйте!\n\nАдминистратор активировал тариф PREMIUM${vars.until ? ' до ' + vars.until : ''}. Открыты редактор этикеток, наборы с КИН, печать PDF, Print Bridge и API.`,
+    ctaLabel: 'Открыть кабинет',
+    ctaUrl: `${site()}/app`
   }),
   compensation: (u, vars) => ({
     subject: 'Компенсация: PREMIUM в CODE QR PRO продлён',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Компенсация за инцидент: PREMIUM продлён на ${vars.days || 3} дн.${vars.until ? ' — до ' + vars.until : ''}.
-${vars.reason ? 'Комментарий: ' + vars.reason + '\n' : ''}
-В кабинет: ${base()}/app`
+    badge: 'Компенсация',
+    title: 'Мы продлили PREMIUM',
+    intro: `Здравствуйте!\n\nИзвините за неудобства. PREMIUM продлён на ${vars.days || 3} дн.${vars.until ? ' — до ' + vars.until : ''}.`,
+    notice: vars.reason ? `Комментарий: ${vars.reason}` : '',
+    ctaLabel: 'Открыть кабинет',
+    ctaUrl: `${site()}/app`
   }),
-  payment_failed: (u) => ({
+  payment_failed: () => ({
     subject: 'Оплата в CODE QR PRO не прошла',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Платёж не прошёл, подписка не активирована. Обычно причина — лимит карты или отказ банка.
-Попробуйте ещё раз: ${base()}/app/billing
-
-Если оплата всё же прошла — ответьте на это письмо, мы проверим.`
+    badge: 'Оплата',
+    title: 'Платёж не прошёл',
+    intro: 'Здравствуйте!\n\nПлатёж не прошёл, подписка не активирована. Обычно причина — лимит карты или отказ банка. Попробуйте ещё раз — это занимает минуту.',
+    notice: 'Если деньги всё же списались — ответьте на это письмо, мы проверим.',
+    noticeTone: 'warn',
+    ctaLabel: 'Повторить оплату',
+    ctaUrl: `${site()}/app/billing`
   }),
   account_blocked: (u, vars) => ({
     subject: 'Аккаунт CODE QR PRO заблокирован',
-    text: `Здравствуйте${u.name ? ', ' + u.name : ''}!
-
-Доступ к аккаунту CODE QR PRO заблокирован администратором.
-${vars.reason ? 'Причина: ' + vars.reason + '\n' : ''}
-Если считаете блокировку ошибкой — ответьте на это письмо.`
+    badge: 'Блокировка',
+    title: 'Аккаунт заблокирован',
+    intro: 'Здравствуйте!\n\nДоступ к аккаунту CODE QR PRO заблокирован администратором.',
+    notice: vars.reason ? `Причина: ${vars.reason}` : '',
+    noticeTone: 'danger',
+    ctaLabel: 'Написать в поддержку',
+    ctaUrl: `mailto:${supportEmail()}`
   })
 };
 
 export function mailTemplateList() {
   return MAIL_TEMPLATES.map((t) => ({ ...t }));
-}
-
-function wrap(text) {
-  return `<!doctype html><html><body style="margin:0;background:#f6f7fb;font-family:Inter,Arial,sans-serif;color:#0f172a">
-  <div style="max-width:560px;margin:24px auto;background:#ffffff;border-radius:16px;padding:28px">
-    <div style="font-weight:800;letter-spacing:.04em;color:#4f46e5;margin-bottom:18px">CODE QR PRO</div>
-    <div style="font-size:15px;line-height:1.6">${esc(text).replace(/\r?\n/g, '<br>')}</div>
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-    <div style="font-size:12px;color:#64748b">CODE QR PRO · сервисное сообщение о вашем аккаунте</div>
-  </div></body></html>`;
 }
 
 /** Отправка письма клиенту. Бросает ошибку, если SMTP не настроен или отправка не удалась. */
@@ -110,13 +102,25 @@ export async function sendClientMessage(user, { template = 'custom', subject = '
     const s = String(subject || '').trim().slice(0, 200);
     const t = String(text || '').trim().slice(0, 5000);
     if (!s || !t) throw new Error('Заполните тему и текст письма');
-    payload = { subject: s, text: t };
+    payload = { subject: s, title: s, badge: 'Сообщение', intro: t, ctaLabel: 'Открыть кабинет', ctaUrl: `${site()}/app` };
   } else {
     const builder = TEMPLATES[template];
     if (!builder) throw new Error('Неизвестный шаблон письма');
     payload = builder(user, vars || {});
   }
-  await sendMail({ to: user.email, subject: payload.subject, text: payload.text, html: wrap(payload.text) });
+  const { html, text: plain } = renderBrandEmail({
+    title: payload.title,
+    preheader: payload.intro?.split('\n')[0] || payload.subject,
+    badge: payload.badge,
+    intro: payload.intro,
+    notice: payload.notice,
+    noticeTone: payload.noticeTone,
+    ctaLabel: payload.ctaLabel,
+    ctaUrl: payload.ctaUrl,
+    secondaryLabel: payload.secondaryLabel,
+    secondaryUrl: payload.secondaryUrl
+  });
+  await sendMail({ to: user.email, subject: payload.subject, text: plain, html });
   return { ok: true, subject: payload.subject };
 }
 
@@ -138,9 +142,21 @@ export async function notifyClient(user, template, vars = {}) {
   }
 }
 
-export function renderTemplatePreview(template, user, vars = {}) {
-  if (template === 'custom') return null;
-  const builder = TEMPLATES[template];
-  if (!builder) return null;
-  return builder(user || { name: '' }, vars || {});
+/** HTML письма для предпросмотра в админке (без отправки). */
+export function previewClientMessage(user, { template = 'custom', subject = '', text = '', vars = {} } = {}) {
+  const builder = template === 'custom' ? null : TEMPLATES[template];
+  const payload = builder
+    ? builder(user || {}, vars || {})
+    : { subject: subject || 'Сообщение', title: subject || 'Сообщение', badge: 'Сообщение', intro: text || '', ctaLabel: 'Открыть кабинет', ctaUrl: `${site()}/app` };
+  const rendered = renderBrandEmail({
+    title: payload.title,
+    preheader: payload.intro,
+    badge: payload.badge,
+    intro: payload.intro,
+    notice: payload.notice,
+    noticeTone: payload.noticeTone,
+    ctaLabel: payload.ctaLabel,
+    ctaUrl: payload.ctaUrl
+  });
+  return { subject: payload.subject, html: rendered.html, text: rendered.text };
 }

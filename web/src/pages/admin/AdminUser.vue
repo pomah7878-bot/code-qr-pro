@@ -23,7 +23,7 @@ const modal = reactive({ open: false, kind: '', title: '', busy: false, reason: 
 const diag = ref(null);
 const diagLoading = ref(false);
 const helpBusy = ref('');
-const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false });
+const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false, preview: '', previewBusy: false });
 const comp = reactive({ open: false, days: 3, reason: '', busy: false });
 
 const LOGIN_REASON = {
@@ -162,13 +162,26 @@ async function copyLink() {
 }
 
 async function openMail() {
-  Object.assign(mail, { open: true, loading: true, busy: false, subject: '', text: '' });
+  Object.assign(mail, { open: true, loading: true, busy: false, subject: '', text: '', preview: '' });
   try {
     if (!mail.templates.length) mail.templates = (await api.adminMailTemplates()).templates;
   } catch (e) {
     error.value = e.message;
   } finally {
     mail.loading = false;
+  }
+}
+
+async function previewMail() {
+  mail.previewBusy = true;
+  error.value = '';
+  try {
+    const r = await api.adminMailPreview(id.value, { template: mail.template, subject: mail.subject, text: mail.text });
+    mail.preview = r.html;
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    mail.previewBusy = false;
   }
 }
 
@@ -723,7 +736,16 @@ onMounted(load);
         <label class="label mt-3" for="mail-text">Текст</label>
         <textarea id="mail-text" v-model="mail.text" rows="6" maxlength="5000" class="input text-sm" placeholder="Здравствуйте! …"></textarea>
       </template>
-      <p v-else class="text-xs text-slate-500 mt-2">Текст шаблона подставится автоматически (имя клиента, срок PREMIUM).</p>
+      <p v-else class="text-xs text-slate-500 mt-2">Текст шаблона подставится автоматически (имя клиента, срок PREMIUM). Фирменное оформление — фирменный шаблон CODE QR PRO.</p>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="mail.previewBusy" @click="previewMail">
+          {{ mail.previewBusy ? 'Собираем…' : 'Предпросмотр письма' }}
+        </button>
+        <button v-if="mail.preview" class="text-xs text-slate-500 hover:underline" @click="mail.preview = ''">Скрыть предпросмотр</button>
+      </div>
+      <iframe v-if="mail.preview" :srcdoc="mail.preview" sandbox="" title="Предпросмотр письма" class="w-full h-[420px] mt-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white"></iframe>
+
       <div class="flex justify-end gap-2 mt-4">
         <button class="btn-ghost !py-2 !px-3 text-sm" @click="mail.open = false">Отмена</button>
         <button class="btn-primary !py-2 !px-4 text-sm" :disabled="mail.busy || mail.loading" @click="sendMailToClient">

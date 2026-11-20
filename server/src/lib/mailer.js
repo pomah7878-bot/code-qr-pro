@@ -1,6 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { getSetting, setSetting } from '../settings.js';
+import { publicUrl } from './public-url.js';
+import { renderBrandEmail } from './email-template.js';
+
+export { publicUrl };
 
 const setting = (key, env, fallback = '') => getSetting(key, process.env[env] || fallback);
 
@@ -82,24 +86,16 @@ export function readUnsubscribeToken(token) {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-const esc = (s) => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-export const publicUrl = () => getSetting('public_url', process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru');
-
 export function renderEmail(text, userId) {
   const link = userId ? `${publicUrl()}/api/email/unsubscribe?t=${encodeURIComponent(unsubscribeToken(userId))}` : '';
-  const bodyHtml = esc(text).replace(/\r?\n/g, '<br>');
-  const html = `<!doctype html><html><body style="margin:0;background:#f6f7fb;font-family:Inter,Arial,sans-serif;color:#0f172a">
-  <div style="max-width:560px;margin:24px auto;background:#ffffff;border-radius:16px;padding:28px">
-    <div style="font-weight:800;letter-spacing:.04em;color:#4f46e5;margin-bottom:18px">CODE QR PRO</div>
-    <div style="font-size:15px;line-height:1.6">${bodyHtml}</div>
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-    <div style="font-size:12px;color:#64748b">
-      CODE QR PRO · GS1 DataMatrix и маркировка «Честный ЗНАК»<br>
-      ${link ? `<a href="${link}" style="color:#64748b">Отписаться от рассылки</a>` : 'Это тестовое письмо.'}
-    </div>
-  </div></body></html>`;
-  const plain = `${text}\n\n---\nCODE QR PRO${link ? `\nОтписаться: ${link}` : ''}`;
-  return { html, text: plain };
+  const body = String(text || '').trim();
+  const firstLine = body.split(/\r?\n/).find((line) => line.trim()) || 'CODE QR PRO';
+  return renderBrandEmail({
+    title: 'CODE QR PRO',
+    preheader: firstLine.slice(0, 140),
+    intro: body,
+    unsubscribeUrl: link,
+    ctaLabel: 'Открыть кабинет',
+    ctaUrl: `${publicUrl()}/app`
+  });
 }

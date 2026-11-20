@@ -82,6 +82,7 @@ export const api = {
   adminClearRateLimits: (id, ip = '') => req('POST', `/api/admin/users/${id}/clear-rate-limits`, { ip }),
   adminLoginLink: (id) => req('POST', `/api/admin/users/${id}/login-link`),
   adminMailTemplates: () => req('GET', '/api/admin/mail-templates'),
+  adminMailPreview: (id, params) => req('GET', `/api/admin/users/${id}/mail-preview` + qs(params)),
   adminSendMessage: (id, b) => req('POST', `/api/admin/users/${id}/message`, b),
   adminCompensate: (id, days, reason) => req('POST', `/api/admin/users/${id}/compensate`, { days, reason }),
   adminRevokeApiKeys: (id) => req('POST', `/api/admin/users/${id}/revoke-api-keys`),

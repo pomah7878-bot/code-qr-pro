@@ -5,7 +5,7 @@ import { activatePremium } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { removeJobFiles } from './jobs.js';
 import { publicUrl } from './lib/mailer.js';
-import { sendClientMessage, mailTemplateList, notifyClient } from './lib/client-mail.js';
+import { sendClientMessage, mailTemplateList, notifyClient, previewClientMessage } from './lib/client-mail.js';
 import { createViewSession } from './lib/view-session.js';
 import { loginEventsFor } from './lib/auth-events.js';
 import { requireAdmin, requireStaff, paging, sendCsv, like, dateOnly } from './lib/admin.js';
@@ -316,6 +316,18 @@ export async function registerAdminUserRoutes(app) {
 
   // Шаблоны писем клиенту (для формы «Написать клиенту»).
   app.get('/api/admin/mail-templates', { preHandler: requireAdmin }, async () => ({ templates: mailTemplateList() }));
+
+  // Предпросмотр фирменного письма без отправки.
+  app.get('/api/admin/users/:id/mail-preview', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const preview = previewClientMessage(user, {
+      template: String(req.query?.template || 'custom'),
+      subject: String(req.query?.subject || '').slice(0, 200),
+      text: String(req.query?.text || '').slice(0, 5000)
+    });
+    return { subject: preview.subject, html: preview.html };
+  });
 
   // Письмо клиенту по шаблону или своё сообщение.
   app.post('/api/admin/users/:id/message', { preHandler: requireAdmin }, async (req, reply) => {

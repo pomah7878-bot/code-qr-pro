@@ -326,7 +326,28 @@ const MIGRATIONS = [
      created_by INTEGER,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX idx_login_links_user ON login_links(user_id, created_at);`
+   CREATE INDEX idx_login_links_user ON login_links(user_id, created_at);`,
+  // v21 — журнал приложения: серверные и клиентские ошибки для диагностики
+  `CREATE TABLE app_logs (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     level TEXT NOT NULL DEFAULT 'error',
+     source TEXT NOT NULL DEFAULT 'server',
+     event TEXT NOT NULL DEFAULT '',
+     message TEXT NOT NULL DEFAULT '',
+     stack TEXT NOT NULL DEFAULT '',
+     method TEXT NOT NULL DEFAULT '',
+     url TEXT NOT NULL DEFAULT '',
+     status INTEGER NOT NULL DEFAULT 0,
+     user_id INTEGER,
+     ip TEXT NOT NULL DEFAULT '',
+     request_id TEXT NOT NULL DEFAULT '',
+     meta TEXT NOT NULL DEFAULT '{}',
+     user_agent TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_app_logs_created ON app_logs(created_at);
+   CREATE INDEX idx_app_logs_level ON app_logs(level, created_at);
+   CREATE INDEX idx_app_logs_source ON app_logs(source, created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

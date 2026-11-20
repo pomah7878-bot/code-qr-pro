@@ -144,6 +144,29 @@ curl -s http://127.0.0.1:3100/api/health
 
 The database migrations run automatically on startup and are wrapped in transactions.
 
+## Logs and diagnostics
+
+Two layers:
+
+1. **Application journal in the database** (`app_logs`, admin → «Ошибки»):
+   - 5xx responses, unhandled exceptions, unhandled promise rejections;
+   - client-side errors reported by the browser (`window.onerror`, `unhandledrejection`, Vue `errorHandler`);
+   - slow requests (≥ 5 s).
+   Retention: 30 days / 20 000 rows, pruned hourly. Admin can filter, open a record
+   with stack trace, copy a diagnostics block or export CSV.
+
+2. **Full process log via journald** (pino, everything incl. 4xx and request timings):
+
+```bash
+journalctl -u code-qr -n 200 --no-pager
+journalctl -u code-qr --since "1 hour ago" -p err
+journalctl -u code-qr -f
+```
+
+To keep journald bounded, set in `/etc/systemd/journald.conf`:
+`SystemMaxUse=500M`, `SystemMaxFileSize=50M`, then `systemctl restart systemd-journald`.
+
+
 ## Never commit
 
 - `server/.env`

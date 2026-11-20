@@ -88,6 +88,11 @@ export const api = {
   adminLoginLocks: () => req('GET', '/api/admin/security/login-locks'),
   adminClearLoginLock: (email) => req('DELETE', '/api/admin/security/login-locks/' + encodeURIComponent(email)),
   adminClearAllLoginLocks: () => req('DELETE', '/api/admin/security/login-locks'),
+  // Журнал ошибок
+  adminLogs: (params) => req('GET', '/api/admin/logs' + qs(params)),
+  adminLogDetail: (id) => req('GET', '/api/admin/logs/' + id),
+  adminClearLogs: (days) => req('DELETE', '/api/admin/logs', { days }),
+  clientLog: (payload) => req('POST', '/api/logs/client', payload),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),
   adminOverview: (days = 30) => req('GET', '/api/admin/overview?days=' + days),
   adminSeries: (days = 30) => req('GET', '/api/admin/series?days=' + days),

@@ -5,4 +5,54 @@ import { initTheme } from './store.js';
 import './style.css';
 
 initTheme();
-createApp(App).use(router).mount('#app');
+
+const app = createApp(App);
+app.use(router);
+
+// Клиентские ошибки → /api/logs/client. Дедупликация и лимит, чтобы не спамить.
+const reportedErrors = new Set();
+function reportClientError(event, payload) {
+  try {
+    const message = String(payload?.message || 'Ошибка во фронтенде').slice(0, 500);
+    const key = `${event}|${message}|${payload?.url || ''}`;
+    if (reportedErrors.has(key) || reportedErrors.size > 30) return;
+    reportedErrors.add(key);
+    fetch('/api/logs/client', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        event,
+        message,
+        stack: String(payload?.stack || '').slice(0, 4000),
+        url: String(payload?.url || location.pathname).slice(0, 300),
+        route: location.pathname,
+        app: 'web',
+        line: payload?.line ? String(payload.line) : ''
+      })
+    }).catch(() => { /* сеть недоступна — не мешаем приложению */ });
+  } catch { /* никогда не ломаем приложение из-за логирования */ }
+}
+
+window.addEventListener('error', (e) => {
+  reportClientError('window_error', {
+    message: e.message,
+    stack: e.error?.stack,
+    url: e.filename || location.pathname,
+    line: e.lineno
+  });
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason;
+  reportClientError('unhandled_rejection', {
+    message: reason?.message || String(reason),
+    stack: reason?.stack
+  });
+});
+app.config.errorHandler = (err, _instance, info) => {
+  reportClientError('vue_error', { message: err?.message || String(err), stack: err?.stack, line: info });
+  console.error(err);
+};
+
+app.mount('#app');

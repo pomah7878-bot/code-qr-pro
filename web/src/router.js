@@ -22,6 +22,7 @@ import AdminUser from './pages/admin/AdminUser.vue';
 import AdminOrders from './pages/admin/AdminOrders.vue';
 import AdminJobs from './pages/admin/AdminJobs.vue';
 import AdminAudit from './pages/admin/AdminAudit.vue';
+import AdminLogs from './pages/admin/AdminLogs.vue';
 import AdminMarketing from './pages/admin/AdminMarketing.vue';
 import AdminSettings from './pages/admin/AdminSettings.vue';
 import AdminStorage from './pages/admin/AdminStorage.vue';
@@ -56,6 +57,7 @@ const router = createRouter({
         { path: 'orders', component: AdminOrders, meta: { adminOnly: true } },
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
+        { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },
         { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
         { path: 'ads', component: AdminAds, meta: { adminOnly: true } },
         { path: 'storage', component: AdminStorage, meta: { adminOnly: true } },

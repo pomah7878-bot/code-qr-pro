@@ -21,7 +21,7 @@ function walk(dir) {
     }
     if (!EXTS.has(path.extname(entry.name))) continue;
     // сами проверки содержат искомые последовательности в регулярках — их пропускаем
-    if (/(check-mojibake|mojibake-ui-check|ai-support-ui)/.test(entry.name)) continue;
+    if (/(check-mojibake|mojibake-ui-check|ai-support-ui|help-page-check)/.test(entry.name)) continue;
     const lines = fs.readFileSync(p, 'utf8').split(/\r?\n/);
     lines.forEach((line, i) => {
       if (MARKER.test(line)) rows.push({ file: p.replace(/\\/g, '/'), line: i + 1, text: line.trim().slice(0, 100) });

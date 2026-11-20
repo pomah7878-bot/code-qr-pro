@@ -6,6 +6,7 @@ import { parseKiz, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
+import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
@@ -794,6 +795,7 @@ async function printLabels() {
           </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
           <p class="text-xs text-slate-500">При печати выберите принтер этикеток и бумагу {{ currentFormat.w }}×{{ currentFormat.h }} мм. Adobe PDF/A4 добавит белые поля.</p>
+          <PrintHelp class="mt-2" />
           <a v-if="pdfUrl" :href="pdfUrl" download="reprint.pdf" target="_blank" rel="noopener" class="block text-center text-sm py-2 px-3 rounded-xl border border-brand-500/40 text-brand-400 font-medium">Открыть PDF ещё раз</a>
           <p v-if="result" class="text-xs text-slate-500">В PDF попадут только валидные коды.</p>
           <ValidHint v-if="result" class="mt-1" />

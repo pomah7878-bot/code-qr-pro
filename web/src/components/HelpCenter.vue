@@ -57,6 +57,12 @@ const open = ref(false);
             <p>Создайте ключ, передавайте его в заголовке <code class="text-xs">X-API-Key</code>. Генерация — <code class="text-xs">POST /api/v1/generate</code>, статус — <code class="text-xs">GET /api/v1/jobs/{id}</code>.</p>
           </div>
           <div>
+            <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="print" :size="17" />Печать с телефона</div>
+            <p><b>iPhone/iPad:</b> «Печать» или «PDF» → «Поделиться» → «Напечатать». Принтер находится сам через AirPrint, если он в той же Wi-Fi сети — драйверы и приложения не нужны.</p>
+            <p class="mt-1"><b>Android:</b> «Печать» открывает системное окно печати (Mopria / Default Print Service). Если не открылось — скачайте PDF и выберите в браузере меню ⋮ → «Печать».</p>
+            <p class="mt-1">В диалоге печати укажите размер бумаги этикетки (например, 58×40 мм), иначе масштаб съедет. Для старых принтеров на Android может понадобиться «Mopria Print Service» из Play Market.</p>
+          </div>
+          <div>
             <div class="flex items-center gap-2 font-semibold text-slate-800 dark:text-white"><BrandIcon name="cz" :size="17" />Честный ЗНАК</div>
             <p>Вставьте коды и нажмите «Проверить». «Валидный» — значит формат GS1 верный, но это не подтверждение подлинности в ГИС МТ.</p>
           </div>

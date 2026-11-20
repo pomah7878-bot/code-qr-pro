@@ -6,6 +6,7 @@ import { importPdf } from '../lib/pdfImport.js';
 import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSpreadsheet } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
@@ -923,6 +924,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels"><BrandIcon name="print" :size="15" class="inline-block mr-1 -mt-0.5" />Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
             <p class="text-xs text-slate-500">При печати из браузера выбери бумагу {{ tpl.widthMm }}×{{ tpl.heightMm }} мм; Adobe PDF/A4 добавит белые поля.</p>
+            <PrintHelp />
           </div>
 
           <div class="glass rounded-2xl p-5 space-y-3">

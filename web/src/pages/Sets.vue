@@ -5,6 +5,7 @@ import { store } from '../store.js';
 import { normalizeScanInput, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
+import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
@@ -397,6 +398,7 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>
           <p class="text-xs text-slate-500">При печати выбери бумагу {{ form.format.replace('x', '×') }} мм; Adobe PDF/A4 добавит белые поля.</p>
+          <PrintHelp />
           <a v-if="pdfUrl" :href="pdfUrl" download="nabor.pdf" target="_blank" rel="noopener" class="block text-center text-sm py-2 px-3 rounded-xl border border-brand-500/40 text-brand-400 font-medium">Открыть PDF ещё раз</a>
           <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>

@@ -267,10 +267,10 @@ onUnmounted(() => {
         </button>
       </transition>
 
-      <div class="ai-robot-float" aria-hidden="true">
+      <!-- на телефоне робот скрыт — остаётся только кнопка -->
+      <div class="ai-robot-float hidden sm:block" aria-hidden="true">
         <span class="ai-bot-halo"></span>
-        <RobotMascot class="hidden sm:block" :state="mascotState" :size="assistantUi.open ? 82 : 92" />
-        <RobotMascot class="sm:hidden" :state="mascotState" :size="78" />
+        <RobotMascot :state="mascotState" :size="assistantUi.open ? 82 : 92" />
       </div>
 
       <button
@@ -283,7 +283,7 @@ onUnmounted(() => {
         @mouseleave="hovering = false"
       >
         <span class="ai-shimmer" aria-hidden="true"></span>
-        <BrandIcon :name="assistantUi.open ? 'close' : 'help'" :size="22" class="sm:hidden" />
+        <BrandIcon :name="assistantUi.open ? 'close' : 'ai'" :size="24" class="sm:hidden" solid="#ffffff" />
         <span class="hidden sm:flex flex-col items-start leading-none text-left">
           <span class="text-[13px] font-semibold tracking-wide">{{ assistantUi.open ? 'Свернуть' : 'AI-помощник' }}</span>
           <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">{{ assistantUi.open ? 'ПРЕМИУМ · ОНЛАЙН' : 'ПРЕМИУМ · СПРОСИТЬ' }}</span>

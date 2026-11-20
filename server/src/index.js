@@ -103,6 +103,28 @@ if (existsSync(dist)) {
     reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');
     return reply.sendFile('index.html');
   });
+
+  // Понятные ответы вместо 500 на типовые ошибки клиентов и статики.
+  app.setErrorHandler((err, req, reply) => {
+    const code = String(err?.code || '');
+    const path = String(req.raw.url || '/').split('?')[0];
+    if (path.startsWith('/assets/') && (code === 'EACCES' || code === 'ENOENT')) {
+      // при деплое старый хеш ассета мог исчезнуть — отдаём 404, а не 500
+      return reply.code(404).send({ error: 'Not found' });
+    }
+    if (code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
+      return reply.code(415).send({ error: 'Неверный формат запроса: ожидается JSON' });
+    }
+    if (code === 'FST_ERR_CTP_EMPTY_JSON_BODY') {
+      return reply.code(400).send({ error: 'Пустое тело запроса' });
+    }
+    if (code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+      return reply.code(413).send({ error: 'Слишком большой запрос' });
+    }
+    const status = Number(err?.statusCode) >= 400 && Number(err?.statusCode) < 600 ? Number(err.statusCode) : 500;
+    if (status >= 500) req.log.error({ err }, 'request failed');
+    return reply.code(status).send({ error: status >= 500 ? 'Внутренняя ошибка сервера' : String(err?.message || 'Ошибка запроса') });
+  });
 }
 
 const port = Number(process.env.PORT || 3100);

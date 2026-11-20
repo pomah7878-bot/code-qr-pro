@@ -1,4 +1,4 @@
-﻿import { db } from '../db.js';
+import { db } from '../db.js';
 import { audit } from './audit.js';
 import { requireAdmin } from './admin.js';
 
@@ -84,6 +84,11 @@ export function installProcessLogHandlers() {
 /** Хуки Fastify: ошибки 5xx, ответы 5xx без исключения и медленные запросы. */
 export function installAppLogHooks(app, { slowMs = 5000 } = {}) {
   app.addHook('onError', async (request, reply, error) => {
+    const code = String(error?.code || '');
+    // Некорректный запрос клиента и протухшие ассеты — не ошибки сервера:
+    // на них есть понятные ответы (415/400/404), журнал ими не засоряем.
+    if (/^FST_ERR_CTP_/.test(code)) return;
+    if (String(request.raw?.url || '').startsWith('/assets/') && (code === 'EACCES' || code === 'ENOENT')) return;
     request.__appLogged = true;
     logEvent({
       level: 'error',
@@ -125,7 +130,7 @@ export function installAppLogHooks(app, { slowMs = 5000 } = {}) {
     const elapsed = Number(reply.elapsedTime || 0);
     // AI-разборы и выгрузки по своей природе долгие — не засоряем журнал «медленными запросами».
     const path = pathOf(request.url);
-    if (path.startsWith('/api/admin/ai/')) return;
+    if (path.startsWith('/api/admin/ai/') || path.startsWith('/api/assistant/')) return;
     if (status < 400 && elapsed >= slowMs) {
       logEvent({
         level: 'warn',

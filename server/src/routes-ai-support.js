@@ -193,7 +193,7 @@ export async function registerAiSupportRoutes(app) {
     ).run(user.id, subject, message, aiContext);
 
     logEvent({
-      level: 'warn', source: 'support', event: 'ticket_created',
+      level: 'info', source: 'support', event: 'ticket_created',
       message: `Обращение в поддержку #${info.lastInsertRowid} от ${user.email}`,
       userId: user.id, ip: req.ip, method: 'USER', url: req.url,
       meta: { subject: subject.slice(0, 120), ticketId: Number(info.lastInsertRowid) }

@@ -171,7 +171,7 @@ export async function askDsh({ system, user, timeoutMs = 90000 }) {
 }
 
 /** Бесплатная модель Kilo: без ключа, без оплаты. Возвращает null, если модель недоступна. */
-export async function askKiloFree({ system, user, model = 'kilo-auto/free', timeoutMs = 75000, maxTokens = 900 }) {
+export async function askKiloFree({ system, user, model = 'kilo-auto/free', timeoutMs = 45000, maxTokens = 900 }) {
   const attempt = async (tokens) => {
     const res = await fetch(`${KILO_BASE}/chat/completions`, {
       method: 'POST',

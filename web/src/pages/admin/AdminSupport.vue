@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { api } from '../../api.js';
 import { fmtDateTime } from '../../lib/format.js';
+import BrandIcon from '../../components/BrandIcon.vue';
 
 const tab = ref('tickets');
 const error = ref('');
@@ -14,6 +15,55 @@ const ticketsBusy = ref(false);
 const filter = ref('');
 const selectedTicket = ref(null);
 const ticketForm = reactive({ status: 'open', adminNote: '', busy: false });
+
+// AI-разбор обращения
+const aiBusy = ref(false);
+const aiResult = ref(null);
+const ACTION_LABELS = {
+  unlock_login: 'Разблокировать вход',
+  reset_2fa: 'Сбросить 2FA',
+  login_link: 'Ссылка для входа',
+  reset_usage: 'Обнулить лимит кодов',
+  clear_password_flag: 'Снять «сменить пароль»',
+  clear_rate_limits: 'Снять лимит запросов',
+  compensate: 'Компенсация',
+  revoke_api_keys: 'Отозвать API-ключи',
+  view_as_client: 'Смотреть как клиент',
+  send_email: 'Написать клиенту'
+};
+const actionLabel = (id) => ACTION_LABELS[id] || id;
+
+// Готовые шаблоны ответа клиенту
+const REPLY_TEMPLATES = [
+  {
+    label: 'Решено',
+    text: 'Здравствуйте! Проблема устранена — проверьте, пожалуйста, ещё раз. Если что-то осталось, ответьте на это сообщение, и мы продолжим разбор.'
+  },
+  {
+    label: 'Нужны детали',
+    text: 'Здравствуйте! Чтобы помочь быстрее, пришлите, пожалуйста: номер задания из «Истории», точный текст ошибки, устройство и браузер. Скриншот тоже поможет.'
+  },
+  {
+    label: 'Инструкция',
+    text: 'Здравствуйте! По вашей ситуации пошагово: 1) откройте нужный раздел кабинета; 2) повторите действие по инструкции; 3) если не получится — ответьте на это сообщение и приложите скриншот. Мы на связи.'
+  },
+  {
+    label: 'Передано инженеру',
+    text: 'Здравствуйте! Передали вопрос инженеру — вернёмся с ответом в течение рабочего дня. Спасибо за терпение.'
+  },
+  {
+    label: 'Компенсация',
+    text: 'Здравствуйте! Приносим извинения за неудобства. Мы продлили ваш тариф PREMIUM на 3 дня в качестве компенсации. Проверьте, пожалуйста, срок в разделе «Подписка».'
+  },
+  {
+    label: 'Оплата',
+    text: 'Здравствуйте! Вопрос по оплате разбираем вручную. Уточните, пожалуйста, номер заказа или дату платежа — проверим и вернёмся с ответом.'
+  }
+];
+function useTemplate(t) {
+  ticketForm.adminNote = t.text;
+  notice.value = `Шаблон «${t.label}» подставлен — можно отредактировать перед отправкой`;
+}
 
 async function loadTickets() {
   ticketsBusy.value = true;
@@ -33,8 +83,29 @@ function openTicket(t) {
   selectedTicket.value = t;
   ticketForm.status = t.status;
   ticketForm.adminNote = t.admin_note || '';
+  aiResult.value = null;
   error.value = '';
   notice.value = '';
+}
+
+async function askAiForTicket() {
+  if (!selectedTicket.value) return;
+  aiBusy.value = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    aiResult.value = await api.adminTicketAi(selectedTicket.value.id);
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    aiBusy.value = false;
+  }
+}
+
+function useAiReply() {
+  if (!aiResult.value?.reply) return;
+  ticketForm.adminNote = aiResult.value.reply;
+  notice.value = 'Ответ AI подставлен в поле ответа — проверьте и нажмите «Сохранить»';
 }
 
 async function saveTicket() {
@@ -174,13 +245,61 @@ onMounted(() => { loadTickets(); loadKb(); });
               <div class="text-[11px] text-slate-500 mb-1">Ответ AI-помощника клиенту</div>
               <p class="text-xs whitespace-pre-wrap text-slate-600 dark:text-slate-300 max-h-40 overflow-y-auto">{{ selectedTicket.ai_context }}</p>
             </div>
-            <div class="flex flex-wrap gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'open' ? '!border-brand-500/50 !text-brand-400' : ''" @click="ticketForm.status = 'open'">Открыто</button>
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'in_progress' ? '!border-amber-500/50 !text-amber-500' : ''" @click="ticketForm.status = 'in_progress'">В работе</button>
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'resolved' ? '!border-emerald-500/50 !text-emerald-500' : ''" @click="ticketForm.status = 'resolved'">Решено</button>
+              <button
+                class="btn-primary !py-1.5 !px-3 text-xs ml-auto inline-flex items-center gap-1.5"
+                :disabled="aiBusy" @click="askAiForTicket"
+              >
+                <BrandIcon name="ai" :size="15" solid="#ffffff" />
+                {{ aiBusy ? 'AI думает…' : 'Передать AI-помощнику' }}
+              </button>
+            </div>
+
+            <div v-if="aiResult" class="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3 space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <BrandIcon name="ai" :size="13" />
+                  Решение от AI · {{ aiResult.model }}
+                </div>
+                <div class="flex items-center gap-2">
+                  <button v-if="aiResult.reply" class="text-[11px] text-brand-400 underline" @click="useAiReply">Подставить в ответ</button>
+                  <button class="text-[11px] text-slate-400" @click="aiResult = null">скрыть</button>
+                </div>
+              </div>
+              <div v-if="aiResult.diagnosis">
+                <div class="text-[11px] text-slate-500 mb-0.5">Диагноз</div>
+                <p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{{ aiResult.diagnosis }}</p>
+              </div>
+              <div v-if="aiResult.steps?.length">
+                <div class="text-[11px] text-slate-500 mb-0.5">Что сделать</div>
+                <ol class="list-decimal pl-5 text-sm space-y-1 text-slate-700 dark:text-slate-200">
+                  <li v-for="(s, i) in aiResult.steps" :key="i">{{ s }}</li>
+                </ol>
+              </div>
+              <div v-if="aiResult.reply">
+                <div class="text-[11px] text-slate-500 mb-0.5">Ответ клиенту</div>
+                <p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{{ aiResult.reply }}</p>
+              </div>
+              <div v-if="aiResult.actions?.length || selectedTicket.user_id" class="flex flex-wrap items-center gap-1.5 pt-1">
+                <span v-for="a in aiResult.actions" :key="a" class="text-[11px] px-2 py-0.5 rounded border border-slate-200 dark:border-white/10 text-slate-500">{{ actionLabel(a) }}</span>
+                <router-link :to="`/app/admin/users/${selectedTicket.user_id}`" class="text-[11px] text-brand-400 underline ml-auto">Открыть карточку клиента →</router-link>
+              </div>
+              <div v-if="aiResult.needHuman" class="text-[11px] text-amber-500">AI считает, что нужен ручной разбор администратора.</div>
             </div>
             <div>
-              <label class="label !text-xs" for="t-note">Ответ клиенту (увидит в кабинете)</label>
+              <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1">
+                <label class="label !text-xs !mb-0" for="t-note">Ответ клиенту (увидит в кабинете)</label>
+                <div class="flex flex-wrap gap-1">
+                  <button
+                    v-for="tpl in REPLY_TEMPLATES" :key="tpl.label"
+                    class="text-[10px] px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 text-slate-500 hover:border-brand-500/40 hover:text-brand-400"
+                    @click="useTemplate(tpl)"
+                  >{{ tpl.label }}</button>
+                </div>
+              </div>
               <textarea id="t-note" v-model="ticketForm.adminNote" rows="4" maxlength="3000" class="input text-sm" placeholder="Что сделали / что ответить"></textarea>
             </div>
             <div class="flex justify-end">

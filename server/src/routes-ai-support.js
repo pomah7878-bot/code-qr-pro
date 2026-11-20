@@ -8,6 +8,26 @@ import { searchKnowledge, kbContext, markKbCalls, listKbArticles, saveKbArticle,
 import { planOf } from './plans.js';
 import { notifySupportTicket } from './notify.js';
 import { publicUrl } from './lib/public-url.js';
+import { buildAiContext, formatAiContext } from './lib/ai-context.js';
+
+/** Действия, которые админ может выполнить по обращению (кнопками в карточке клиента). */
+const SUPPORT_ACTIONS = [
+  'unlock_login', 'reset_2fa', 'login_link', 'reset_usage', 'clear_password_flag',
+  'clear_rate_limits', 'compensate', 'revoke_api_keys', 'view_as_client', 'send_email'
+];
+
+const SUPPORT_SOLVER_SYSTEM = `Ты — старший инженер поддержки CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток).
+Администратор прислал обращение клиента. Проанализируй его вместе с фактами аккаунта и предложи решение.
+
+Правила:
+1. Поставь точный диагноз по фактам, не выдумывай.
+2. Дай 2–5 конкретных шагов для администратора: что проверить и что сделать.
+3. Предложи готовый ответ клиенту (2–4 предложения, вежливо, от имени команды CODE QR PRO).
+4. Действия выбирай только из списка: ${SUPPORT_ACTIONS.join(', ')}. Финансы (скидки, возвраты) не решай — предложи вежливый ответ и ручное решение.
+5. Не проси у клиента пароль, коды 2FA или API-ключи.
+
+Верни строго JSON без markdown:
+{"diagnosis":"1–3 предложения","steps":["шаг 1","шаг 2"],"reply":"готовый ответ клиенту","actions":["unlock_login"],"needHuman":true|false}`;
 
 /**
  * Клиентский AI-помощник: база знаний + бесплатные модели.
@@ -288,6 +308,89 @@ export async function registerAiSupportRoutes(app) {
       });
     }
     return { ok: true, id, status, adminNote: note };
+  });
+
+  // Отправить обращение AI-помощнику: он изучает тикет + факты аккаунта и предлагает решение.
+  app.post('/api/admin/tickets/:id/ai', { preHandler: requireAdmin }, async (req, reply) => {
+    const id = Number(req.params.id);
+    const ticket = db.prepare(
+      'SELECT id, user_id, subject, message, ai_context, status, created_at FROM support_tickets WHERE id = ?'
+    ).get(id);
+    if (!ticket) return reply.code(404).send({ error: 'Обращение не найдено' });
+
+    const cfg = aiConfig();
+    if (!cfg.enabled) return reply.code(400).send({ error: 'AI-помощник выключен. Включите его в «Настройки → AI-помощник».' });
+    if (!aiConfigured(cfg)) return reply.code(400).send({ error: 'AI не настроен: добавьте ключ или установите DSH.' });
+
+    const limit = bumpLimit(`ai-ticket-ai:u${req.user.id}`, 30);
+    if (!limit.ok) return reply.code(429).send({ error: 'Лимит AI-запросов: 30 в час. Попробуйте позже.' });
+
+    const ctx = buildAiContext(ticket.user_id);
+    if (!ctx) return reply.code(404).send({ error: 'Клиент обращения не найден' });
+    const client = db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(ticket.user_id);
+
+    const started = Date.now();
+    let result = null;
+    let error = '';
+    let model = cfg.model;
+    try {
+      const facts = formatAiContext(ctx);
+      const res = await askAi({
+        system: SUPPORT_SOLVER_SYSTEM,
+        user: [
+          `Обращение #${ticket.id} от ${client?.email || 'клиент'}${client?.name ? ' (' + client.name + ')' : ''}`,
+          `Тема: ${ticket.subject}`,
+          `Текст клиента: ${ticket.message}`,
+          ticket.ai_context ? `Что ответил клиентский AI-помощник: ${ticket.ai_context}` : '',
+          '',
+          `Факты аккаунта:\n${facts.length > 1800 ? facts.slice(0, 1800) + '…' : facts}`
+        ].filter(Boolean).join('\n'),
+        cfg,
+        freeMaxTokens: 1200
+      });
+      model = String(res.model || cfg.model).slice(0, 120);
+      const parsed = res.parsed || {};
+      const actions = (Array.isArray(parsed.actions) ? parsed.actions : []).filter((a) => SUPPORT_ACTIONS.includes(a)).slice(0, 5);
+      const steps = (Array.isArray(parsed.steps) ? parsed.steps : []).slice(0, 6).map((s) => String(s).slice(0, 400));
+      const diagnosis = String(parsed.diagnosis || (res.parsed ? '' : res.content) || '').slice(0, 1500);
+      let reply = String(parsed.reply || parsed.draft || '').slice(0, 3000);
+      if (!reply) {
+        // модель иногда пропускает поле reply — собираем ответ из диагноза и шагов
+        const parts = [];
+        if (diagnosis) parts.push(`Здравствуйте! ${diagnosis}`);
+        if (steps.length) parts.push('Что мы делаем: ' + steps.map((s, i) => `${i + 1}) ${s}`).join(' '));
+        parts.push('Если вопрос остаётся — ответьте на это сообщение, и мы продолжим разбор.');
+        reply = parts.join('\n\n').slice(0, 3000);
+      }
+      result = {
+        diagnosis,
+        steps,
+        reply,
+        actions,
+        needHuman: Boolean(parsed.needHuman)
+      };
+      if (!result.diagnosis && !result.reply) throw new Error('AI не вернул решение');
+    } catch (e) {
+      error = String(e?.message || e).slice(0, 400);
+      logEvent({
+        level: 'warn', source: 'ai', event: 'ticket_ai_failed',
+        message: `AI по обращению #${id}: ${error}`,
+        userId: ticket.user_id, ip: req.ip, method: 'ADMIN', url: req.url, meta: { ticketId: id }
+      });
+    }
+
+    const durationMs = Date.now() - started;
+    db.prepare(
+      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms, via) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+    ).run(
+      ticket.user_id, req.user.id, `Обращение #${id}: ${String(ticket.subject).slice(0, 160)}`,
+      JSON.stringify(result ? { diagnosis: result.diagnosis, steps: result.steps, draft: result.reply, confidence: 'medium' } : {}),
+      JSON.stringify(result?.actions || []), model, cfg.backend, error ? 'error' : 'ok', error, durationMs, ''
+    );
+    audit(req, 'support.ticket_ai', 'support_ticket', id, { status: error ? 'error' : 'ok', model, durationMs });
+
+    if (error) return reply.code(502).send({ error, ticketId: id });
+    return { ok: true, ticketId: id, ...result, model, backend: cfg.backend, durationMs };
   });
 
   // --- база знаний: просмотр для админа ---

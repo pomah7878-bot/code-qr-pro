@@ -1,4 +1,4 @@
-import { db } from '../db.js';
+﻿import { db } from '../db.js';
 import { audit } from './audit.js';
 import { requireAdmin } from './admin.js';
 
@@ -125,7 +125,7 @@ export function installAppLogHooks(app, { slowMs = 5000 } = {}) {
     const elapsed = Number(reply.elapsedTime || 0);
     // AI-разборы и выгрузки по своей природе долгие — не засоряем журнал «медленными запросами».
     const path = pathOf(request.url);
-    if (path.startsWith('/api/admin/ai/ask')) return;
+    if (path.startsWith('/api/admin/ai/')) return;
     if (status < 400 && elapsed >= slowMs) {
       logEvent({
         level: 'warn',

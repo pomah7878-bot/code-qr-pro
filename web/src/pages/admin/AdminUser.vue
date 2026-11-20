@@ -23,7 +23,7 @@ const modal = reactive({ open: false, kind: '', title: '', busy: false, reason: 
 const diag = ref(null);
 const diagLoading = ref(false);
 const helpBusy = ref('');
-const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false, preview: '', previewBusy: false });
+const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false, preview: '', previewBusy: false, note: '', aiBusy: false });
 const ai = reactive({ open: false, question: '', busy: false, error: '', answer: null, history: [], showHistory: false, historyLoading: false });
 const AI_QUESTIONS = [
   'Клиент не может войти — в чём причина?',
@@ -208,8 +208,25 @@ async function previewMail() {
   }
 }
 
-async function sendMailToClient() {
-  mail.busy = true;
+async function draftMailWithAi() {
+  mail.aiBusy = true;
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminAiDraft(id.value, mail.note || ai.question || '');
+    mail.template = 'custom';
+    mail.subject = r.subject;
+    mail.text = r.text;
+    mail.preview = '';
+    notice.value = 'AI подготовил письмо — проверьте текст и отправьте';
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    mail.aiBusy = false;
+  }
+}
+
+async function sendMailToClient() {  mail.busy = true;
   error.value = '';
   notice.value = '';
   try {
@@ -821,6 +838,18 @@ onMounted(load);
 
     <Modal :open="mail.open" title="Письмо клиенту" @close="mail.open = false">
       <p class="text-sm text-slate-500">Письмо уходит на {{ user?.email }}. Если SMTP не настроен — будет ошибка.</p>
+
+      <div class="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+        <div class="text-xs font-medium text-brand-400 mb-1">AI напишет письмо — вы только проверите</div>
+        <textarea v-model="mail.note" rows="2" maxlength="1000" class="input text-sm" placeholder="Что случилось / что сделали: например, разблокировали вход и сбросили 2FA"></textarea>
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          <button class="btn-primary !py-1.5 !px-3 text-xs" :disabled="mail.aiBusy" @click="draftMailWithAi">
+            {{ mail.aiBusy ? 'Пишем письмо…' : 'Сформировать письмо (AI)' }}
+          </button>
+          <span class="text-[11px] text-slate-500">Тема и текст появятся ниже — их можно отредактировать.</span>
+        </div>
+      </div>
+
       <label class="label mt-3" for="mail-template">Шаблон</label>
       <select id="mail-template" v-model="mail.template" class="input text-sm">
         <option v-for="t in mail.templates" :key="t.id" :value="t.id">{{ t.title }}</option>

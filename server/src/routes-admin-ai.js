@@ -43,6 +43,21 @@ const safeParse = (value) => {
   try { return JSON.parse(value); } catch { return null; }
 };
 
+const SYSTEM_DRAFT = `Ты — помощник поддержки CODE QR PRO (маркировка «Честный ЗНАК», DataMatrix, печать этикеток).
+Составь готовое письмо клиенту по проблеме, которую описал администратор, и по фактам аккаунта.
+
+Требования:
+1. Пиши на «вы», вежливо и по делу, 3–6 коротких предложений.
+2. Структура: приветствие (по имени, если известно) → суть → что сделано/что нужно от клиента → при необходимости ссылка на раздел кабинета.
+3. Без markdown, без эмодзи, без рекламы и лишних извинений.
+4. Не выдумывай факты, которых нет в данных. Не обещай того, чего не произошло.
+5. Подпись — «Команда CODE QR PRO».
+6. Тема письма — до 80 символов.
+7. Не упоминай e-mail, IP, ID аккаунта и другие технические детали — пиши человеческим языком.
+
+Верни строго JSON без markdown:
+{"subject":"тема письма","text":"полный текст письма с приветствием и подписью"}`;
+
 export async function registerAdminAiRoutes(app) {
   app.get('/api/admin/ai/settings', { preHandler: requireAdmin }, async () => {
     const cfg = aiConfig();
@@ -155,6 +170,71 @@ export async function registerAdminAiRoutes(app) {
 
     if (status === 'error') return reply.code(502).send({ error, id: info.lastInsertRowid });
     return { id: info.lastInsertRowid, ...answer, actions, model, backend: cfg.backend, durationMs };
+  });
+
+  // AI сам пишет письмо клиенту: админ только проверяет и отправляет.
+  app.post('/api/admin/ai/draft-message', { preHandler: requireAdmin }, async (req, reply) => {
+    const cfg = aiConfig();
+    if (!cfg.enabled) return reply.code(400).send({ error: 'AI-помощник выключен. Включите его в «Настройки → AI-помощник».' });
+    if (!aiConfigured(cfg)) return reply.code(400).send({ error: 'AI не настроен: добавьте API-ключ в настройках или установите DSH на сервер.' });
+
+    const userId = Number(req.body?.userId);
+    const note = String(req.body?.note || '').trim().slice(0, 1000);
+    const hint = String(req.body?.hint || '').trim().slice(0, 1500);
+    if (!userId) return reply.code(400).send({ error: 'Не передан клиент' });
+
+    const used = db.prepare(
+      "SELECT COUNT(*) c FROM ai_queries WHERE admin_id=? AND created_at > datetime('now','-1 hour')"
+    ).get(req.user.id).c;
+    if (used >= 30) return reply.code(429).send({ error: 'Лимит AI-запросов: 30 в час. Попробуйте позже.' });
+
+    const ctx = buildAiContext(userId);
+    if (!ctx) return reply.code(404).send({ error: 'Клиент не найден' });
+
+    const started = Date.now();
+    let subject = '';
+    let text = '';
+    let model = cfg.model;
+    let error = '';
+    try {
+      const res = await askAi({
+        system: SYSTEM_DRAFT,
+        user: [
+          note ? `Что случилось / что сделано (со слов администратора): ${note}` : 'Администратор не дал пояснений — опирайся только на факты аккаунта.',
+          hint ? `Дополнительный контекст (предыдущий разбор): ${hint}` : '',
+          '',
+          'Факты аккаунта:',
+          // контакты и технические id в письмо попадать не должны
+          formatAiContext(ctx).replace(/[a-z0-9]\*+@[a-z0-9.-]+/gi, 'клиент')
+        ].filter(Boolean).join('\n'),
+        cfg
+      });
+      model = String(res.model || cfg.model).slice(0, 120);
+      const parsed = res.parsed || {};
+      subject = String(parsed.subject || '').trim().slice(0, 120);
+      text = String(parsed.text || '').trim().slice(0, 5000);
+      if (!subject || !text) throw new Error('AI не вернул письмо, попробуйте ещё раз');
+    } catch (e) {
+      error = String(e?.message || e).slice(0, 400);
+      logEvent({
+        level: 'warn', source: 'ai', event: 'ai_draft_failed',
+        message: `AI-письмо: ${error}`, userId, ip: req.ip, method: 'ADMIN', url: req.url,
+        meta: { note: note.slice(0, 120), model: cfg.model, backend: cfg.backend }
+      });
+    }
+
+    const durationMs = Date.now() - started;
+    const info = db.prepare(
+      'INSERT INTO ai_queries (user_id, admin_id, question, answer, actions, model, backend, status, error, duration_ms) VALUES (?,?,?,?,?,?,?,?,?,?)'
+    ).run(
+      userId, req.user.id, `Черновик письма: ${note || 'без пояснений'}`.slice(0, 2000),
+      JSON.stringify({ diagnosis: '', steps: [], draft: text, subject, confidence: 'medium' }),
+      '[]', model, cfg.backend, error ? 'error' : 'ok', error, durationMs
+    );
+
+    audit(req, 'ai.draft_message', 'user', userId, { status: error ? 'error' : 'ok', model, durationMs, note: note.slice(0, 120) });
+    if (error) return reply.code(502).send({ error, id: info.lastInsertRowid });
+    return { id: info.lastInsertRowid, subject, text, model, backend: cfg.backend, durationMs };
   });
 
   app.get('/api/admin/ai/history', { preHandler: requireAdmin }, async (req) => {

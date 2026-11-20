@@ -3,6 +3,7 @@ import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { api } from '../../api.js';
 import { fmtDateTime } from '../../lib/format.js';
 import BrandIcon from '../../components/BrandIcon.vue';
+import Modal from '../../components/admin/Modal.vue';
 
 const search = ref('');
 const users = ref([]);
@@ -17,6 +18,7 @@ const aiState = reactive({ configured: false, checked: false });
 const historyLoading = ref(false);
 const chatEl = ref(null);
 const actionBusy = ref('');
+const send = reactive({ open: false, aiBusy: false, busy: false, subject: '', text: '', error: '' });
 
 const QUICK = [
   'Клиент не может войти — в чём причина?',
@@ -172,8 +174,37 @@ async function runAction(action) {
   }
 }
 
-function copyDraft(answer) {
-  navigator.clipboard.writeText(answer.draft || '').then(
+async function openSend(answer) {
+  if (!selected.value) return;
+  Object.assign(send, { open: true, aiBusy: true, busy: false, subject: '', text: '', error: '' });
+  const hint = [answer?.diagnosis, ...(answer?.steps || [])].filter(Boolean).join('\n');
+  try {
+    const r = await api.adminAiDraft(selected.value.id, '', hint);
+    send.subject = r.subject;
+    send.text = r.text;
+  } catch (e) {
+    send.error = e.message;
+  } finally {
+    send.aiBusy = false;
+  }
+}
+
+async function sendMail() {
+  if (!selected.value || !send.subject.trim() || !send.text.trim()) return;
+  send.busy = true;
+  send.error = '';
+  try {
+    await api.adminSendMessage(selected.value.id, { template: 'custom', subject: send.subject, text: send.text });
+    send.open = false;
+    notice.value = 'Письмо отправлено клиенту';
+  } catch (e) {
+    send.error = e.message;
+  } finally {
+    send.busy = false;
+  }
+}
+
+function copyDraft(answer) {  navigator.clipboard.writeText(answer.draft || '').then(
     () => { notice.value = 'Черновик письма скопирован'; },
     () => { error.value = 'Не удалось скопировать'; }
   );
@@ -276,7 +307,10 @@ onMounted(checkAi);
                 <div v-if="m.answer?.draft">
                   <div class="flex items-center justify-between gap-2">
                     <div class="text-[11px] text-slate-500">Черновик письма</div>
-                    <button class="text-[11px] text-brand-400" @click="copyDraft(m.answer)">Копировать</button>
+                    <div class="flex items-center gap-2">
+                      <button class="text-[11px] text-brand-400" @click="copyDraft(m.answer)">Копировать</button>
+                      <button class="text-[11px] text-emerald-500" @click="openSend(m.answer)">Проверить и отправить</button>
+                    </div>
                   </div>
                   <p class="whitespace-pre-wrap mt-1 text-slate-600 dark:text-slate-300">{{ m.answer.draft }}</p>
                 </div>
@@ -310,5 +344,21 @@ onMounted(checkAi);
         </template>
       </div>
     </div>
+
+    <Modal :open="send.open" title="Проверить и отправить письмо" max-width="max-w-2xl" @close="send.open = false">
+      <p class="text-sm text-slate-500">Письмо уйдёт на {{ selected?.email }}. Проверьте текст — можно отредактировать.</p>
+      <p v-if="send.aiBusy" class="text-xs text-slate-500 mt-2">AI пишет письмо…</p>
+      <p v-if="send.error" class="text-sm text-red-500 mt-2">{{ send.error }}</p>
+      <label class="label mt-3" for="ai-send-subject">Тема</label>
+      <input id="ai-send-subject" v-model="send.subject" class="input text-sm" maxlength="200">
+      <label class="label mt-3" for="ai-send-text">Текст</label>
+      <textarea id="ai-send-text" v-model="send.text" rows="10" maxlength="5000" class="input text-sm"></textarea>
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="send.open = false">Отмена</button>
+        <button class="btn-primary !py-2 !px-4 text-sm"
+          :disabled="send.busy || send.aiBusy || !send.subject.trim() || !send.text.trim()"
+          @click="sendMail">{{ send.busy ? 'Отправляем…' : 'Отправить' }}</button>
+      </div>
+    </Modal>
   </div>
 </template>

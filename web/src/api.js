@@ -108,6 +108,7 @@ export const api = {
   adminAiSaveSettings: (b) => req('PUT', '/api/admin/ai/settings', b),
   adminAiTest: () => req('POST', '/api/admin/ai/test'),
   adminAiAsk: (userId, question) => req('POST', '/api/admin/ai/ask', { userId, question }),
+  adminAiDraft: (userId, note, hint) => req('POST', '/api/admin/ai/draft-message', { userId, note, hint }),
   adminAiHistory: (userId) => req('GET', '/api/admin/ai/history' + qs({ userId })),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),
   adminOverview: (days = 30) => req('GET', '/api/admin/overview?days=' + days),

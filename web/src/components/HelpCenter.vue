@@ -28,6 +28,16 @@ const open = ref(false);
           <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none" aria-label="Закрыть" @click="open = false"><BrandIcon name="close" :size="18" /></button>
         </div>
 
+        <div class="mt-4 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="text-sm font-semibold">AI-помощник</div>
+              <div class="text-xs text-slate-500">Отвечает по «Честному ЗНАКу» и работе сервиса. Сложные вопросы передаёт администратору.</div>
+            </div>
+            <router-link to="/app/assistant" class="btn-primary !py-1.5 !px-3 text-xs" @click="open = false">Спросить</router-link>
+          </div>
+        </div>
+
         <div class="mt-4 rounded-xl border border-slate-200 dark:border-white/10 p-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>

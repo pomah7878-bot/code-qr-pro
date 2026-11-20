@@ -1,0 +1,232 @@
+<script setup>
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
+import { api } from '../api.js';
+import { store } from '../store.js';
+import BrandIcon from '../components/BrandIcon.vue';
+import Modal from '../components/admin/Modal.vue';
+import SideNav from '../components/SideNav.vue';
+
+const messages = ref([]);
+const question = ref('');
+const busy = ref(false);
+const error = ref('');
+const notice = ref('');
+const chatEl = ref(null);
+const tickets = ref([]);
+const ticketsLoading = ref(false);
+const support = reactive({ open: false, busy: false, subject: '', message: '', error: '' });
+
+const isPremium = computed(() => {
+  const id = store.plan?.id || store.plan?.key || '';
+  return id === 'premium' || store.user?.role === 'admin' || store.user?.role === 'support';
+});
+
+const QUICK = [
+  'Как сгенерировать GS1 DataMatrix?',
+  'Почему PDF не скачивается с телефона?',
+  'Как проверить код в «Честном ЗНАК»?',
+  'Код не читается сканером',
+  'Не получается войти, включена 2FA',
+  'Как работает повторная печать?'
+];
+
+function scrollChat() {
+  nextTick(() => {
+    if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight;
+  });
+}
+
+async function ask() {
+  const text = question.value.trim();
+  if (!text || busy.value) return;
+  error.value = '';
+  notice.value = '';
+  messages.value.push({ role: 'q', text });
+  question.value = '';
+  busy.value = true;
+  scrollChat();
+  try {
+    const r = await api.assistantChat(text);
+    messages.value.push({
+      role: 'a',
+      text: r.answer,
+      sources: r.sources || [],
+      needHuman: Boolean(r.needHuman),
+      reason: r.reason || '',
+      model: r.model
+    });
+  } catch (e) {
+    error.value = e.message;
+    messages.value.pop();
+    question.value = text;
+  } finally {
+    busy.value = false;
+    scrollChat();
+  }
+}
+
+async function loadTickets() {
+  ticketsLoading.value = true;
+  try {
+    const r = await api.assistantTickets();
+    tickets.value = r.tickets || [];
+  } catch {
+    /* обращения не критичны */
+  } finally {
+    ticketsLoading.value = false;
+  }
+}
+
+function openSupport() {
+  const lastQ = [...messages.value].reverse().find((m) => m.role === 'q')?.text || '';
+  const lastA = [...messages.value].reverse().find((m) => m.role === 'a')?.text || '';
+  support.subject = lastQ.slice(0, 120);
+  support.message = lastQ;
+  support.aiContext = lastA.slice(0, 3000);
+  support.error = '';
+  support.open = true;
+}
+
+async function submitSupport() {
+  if (!support.message.trim()) return;
+  support.busy = true;
+  support.error = '';
+  try {
+    const r = await api.assistantCreateTicket({
+      subject: support.subject || support.message.slice(0, 80),
+      message: support.message,
+      aiContext: support.aiContext
+    });
+    support.open = false;
+    notice.value = `Обращение #${r.id} создано — администратор увидит его в поддержке.`;
+    await loadTickets();
+  } catch (e) {
+    support.error = e.message;
+  } finally {
+    support.busy = false;
+  }
+}
+
+const statusLabel = (s) => ({ open: 'в работе', in_progress: 'проверяем', resolved: 'решено' }[s] || s);
+const statusClass = (s) => (s === 'resolved'
+  ? 'text-emerald-500 border-emerald-500/30 bg-emerald-500/10'
+  : s === 'in_progress'
+    ? 'text-amber-500 border-amber-500/30 bg-amber-500/10'
+    : 'text-brand-400 border-brand-500/30 bg-brand-500/10');
+
+onMounted(() => {
+  if (!isPremium.value) return;
+  loadTickets();
+});
+</script>
+
+<template>
+  <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
+    <SideNav active="/app/assistant" />
+    <div class="space-y-4">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 class="font-display font-bold text-2xl">AI-помощник</h1>
+        <p class="text-sm text-slate-500 mt-1">
+          Отвечает по работе сервиса и маркировке «Честный ЗНАК». Если не решит — передаст вопрос администратору.
+        </p>
+      </div>
+      <span class="chip-soon" :class="isPremium ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'">
+        {{ isPremium ? 'PREMIUM · доступен' : 'только PREMIUM' }}
+      </span>
+    </div>
+
+    <div v-if="!isPremium" class="glass rounded-2xl p-6 text-center">
+      <BrandIcon name="star" :size="30" class="mx-auto text-brand-400" />
+      <h2 class="font-display font-semibold mt-3">Помощник входит в PREMIUM</h2>
+      <p class="text-sm text-slate-500 mt-1 max-w-lg mx-auto">
+        Он разбирается в GS1 DataMatrix, «Честном ЗНАКе», печати этикеток и работе сервиса, а сложные вопросы передаёт администратору.
+      </p>
+      <router-link to="/app/billing" class="btn-primary inline-block mt-4 !py-2.5 !px-5 text-sm">Оформить PREMIUM</router-link>
+    </div>
+
+    <template v-else>
+      <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
+      <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
+
+      <div class="glass rounded-2xl p-4 flex flex-col min-h-[460px]">
+        <div ref="chatEl" class="flex-1 overflow-y-auto space-y-3 max-h-[440px] pb-2">
+          <p v-if="!messages.length" class="text-sm text-slate-500">
+            Задайте вопрос — например, «почему код не читается сканером» или «как перепечатать этикетки».
+          </p>
+
+          <template v-for="(m, i) in messages" :key="i">
+            <div v-if="m.role === 'q'" class="flex justify-end">
+              <div class="max-w-[85%] rounded-2xl rounded-br-md bg-brand-500/15 border border-brand-500/25 px-3 py-2 text-sm whitespace-pre-wrap">{{ m.text }}</div>
+            </div>
+            <div v-else class="rounded-2xl border border-slate-200 dark:border-white/10 p-3 text-sm bg-white/40 dark:bg-white/[0.03]">
+              <p class="whitespace-pre-wrap">{{ m.text }}</p>
+              <div v-if="m.sources?.length" class="flex flex-wrap items-center gap-1.5 mt-2">
+                <span class="text-[11px] text-slate-500">Источники:</span>
+                <span v-for="s in m.sources" :key="s.slug" class="text-[11px] px-2 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 text-slate-500">{{ s.title }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 mt-2">
+                <span v-if="m.needHuman" class="text-[11px] text-amber-500">{{ m.reason || 'Похоже, нужен администратор' }}</span>
+                <button v-if="m.needHuman" class="btn-primary !py-1.5 !px-3 text-[11px]" @click="openSupport">Передать в поддержку</button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="busy" class="text-xs text-slate-500">Помощник ищет ответ в базе знаний…</div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 dark:border-white/10 space-y-2">
+          <div class="flex flex-wrap gap-1.5">
+            <button v-for="q in QUICK" :key="q"
+              class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-slate-500 hover:border-brand-500/40"
+              @click="question = q">{{ q }}</button>
+          </div>
+          <div class="flex items-end gap-2">
+            <textarea v-model="question" rows="2" maxlength="1500" class="input text-sm flex-1"
+              placeholder="Ваш вопрос по сервису или маркировке…" @keydown.enter.exact.prevent="ask"></textarea>
+            <button class="btn-primary !py-2.5 !px-4 text-sm shrink-0" :disabled="busy || !question.trim()" @click="ask">
+              {{ busy ? 'Ищем…' : 'Спросить' }}
+            </button>
+          </div>
+          <button class="text-[11px] text-slate-500 underline" @click="openSupport">Не помогло — передать вопрос администратору</button>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="font-display font-semibold text-sm">Мои обращения в поддержку</h2>
+          <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="ticketsLoading" @click="loadTickets">
+            {{ ticketsLoading ? 'Обновляем…' : 'Обновить' }}
+          </button>
+        </div>
+        <p v-if="!tickets.length" class="text-xs text-slate-500 mt-2">Обращений пока нет.</p>
+        <div v-else class="mt-2 space-y-2">
+          <div v-for="t in tickets" :key="t.id" class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="text-sm font-medium truncate">{{ t.subject }}</div>
+              <span class="chip-soon" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{{ t.message }}</p>
+            <p v-if="t.admin_note" class="text-xs text-emerald-500 mt-1 whitespace-pre-wrap">Ответ: {{ t.admin_note }}</p>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <Modal :open="support.open" title="Передать вопрос в поддержку" @close="support.open = false">
+      <p class="text-sm text-slate-500">Администратор увидит вопрос и ответ помощника. Опишите проблему подробно.</p>
+      <p v-if="support.error" class="text-sm text-red-500 mt-2">{{ support.error }}</p>
+      <label class="label mt-3" for="sup-subject">Тема</label>
+      <input id="sup-subject" v-model="support.subject" class="input text-sm" maxlength="200">
+      <label class="label mt-3" for="sup-message">Проблема</label>
+      <textarea id="sup-message" v-model="support.message" rows="5" maxlength="4000" class="input text-sm"></textarea>
+      <div class="flex justify-end gap-2 mt-4">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="support.open = false">Отмена</button>
+        <button class="btn-primary !py-2 !px-4 text-sm" :disabled="support.busy || !support.message.trim()" @click="submitSupport">
+          {{ support.busy ? 'Отправляем…' : 'Отправить в поддержку' }}
+        </button>
+      </div>
+    </Modal>
+    </div>
+  </div>
+</template>

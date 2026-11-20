@@ -34,6 +34,8 @@ const AdminSettings = () => import('./pages/admin/AdminSettings.vue');
 const AdminStorage = () => import('./pages/admin/AdminStorage.vue');
 const AdminAds = () => import('./pages/admin/AdminAds.vue');
 const NotFound = () => import('./pages/NotFound.vue');
+const Assistant = () => import('./pages/Assistant.vue');
+const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
 
 const router = createRouter({
   history: createWebHistory(),
@@ -52,6 +54,7 @@ const router = createRouter({
     { path: '/app/reviews', component: Reviews, meta: { auth: true } },
     { path: '/app/security', component: Security, meta: { auth: true } },
     { path: '/app/history', component: History, meta: { auth: true } },
+    { path: '/app/assistant', component: Assistant, meta: { auth: true } },
     {
       path: '/app/admin',
       component: AdminLayout,
@@ -64,6 +67,7 @@ const router = createRouter({
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
         { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },
+        { path: 'support', component: AdminSupport, meta: { adminOnly: true } },
         { path: 'ai', component: AdminAi, meta: { adminOnly: true } },
         { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
         { path: 'ads', component: AdminAds, meta: { adminOnly: true } },

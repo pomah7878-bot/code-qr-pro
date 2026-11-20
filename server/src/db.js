@@ -400,7 +400,33 @@ const MIGRATIONS = [
   `ALTER TABLE ai_queries ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE ai_queries ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE ai_queries ADD COLUMN via TEXT NOT NULL DEFAULT '';
-   CREATE INDEX idx_ai_queries_created ON ai_queries(created_at);`
+   CREATE INDEX idx_ai_queries_created ON ai_queries(created_at);`,
+  // v26 — база знаний и обращения клиентов в поддержку
+  `CREATE TABLE kb_articles (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     slug TEXT NOT NULL UNIQUE,
+     title TEXT NOT NULL,
+     summary TEXT NOT NULL DEFAULT '',
+     body TEXT NOT NULL DEFAULT '',
+     tags TEXT NOT NULL DEFAULT '',
+     published INTEGER NOT NULL DEFAULT 1,
+     calls INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE TABLE support_tickets (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL,
+     subject TEXT NOT NULL DEFAULT '',
+     message TEXT NOT NULL DEFAULT '',
+     ai_context TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'open',
+     admin_note TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_support_tickets_user ON support_tickets(user_id, created_at);
+   CREATE INDEX idx_support_tickets_status ON support_tickets(status, created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

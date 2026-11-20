@@ -38,13 +38,38 @@ export const aiConfigured = (cfg = aiConfig()) => {
 
 function extractJson(text) {
   const raw = String(text || '').trim();
-  try { return JSON.parse(raw); } catch { /* ниже попробуем вытащить объект */ }
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(raw.slice(start, end + 1)); } catch { /* ignore */ }
+  const fenced = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  for (const candidate of [raw, fenced]) {
+    try { return JSON.parse(candidate); } catch { /* ниже попробуем вытащить объект */ }
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try { return JSON.parse(candidate.slice(start, end + 1)); } catch { /* ignore */ }
+    }
   }
-  return null;
+  // Модель иногда отдаёт почти-JSON (переносы строк внутри строк, лишний текст).
+  // Достаём поля регулярками, чтобы не терять ответ.
+  const obj = {};
+  const str = (name) => {
+    const m = new RegExp(`"${name}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(raw);
+    if (!m) return null;
+    try { return JSON.parse(`"${m[1]}"`); } catch { return m[1].replace(/\\n/g, '\n'); }
+  };
+  for (const key of ['diagnosis', 'draft', 'confidence', 'subject', 'text', 'answer', 'reason']) {
+    const v = str(key);
+    if (v !== null) obj[key] = v;
+  }
+  const arr = (name) => {
+    const m = new RegExp(`"${name}"\\s*:\\s*(\\[[\\s\\S]*?\\])`).exec(raw);
+    if (!m) return null;
+    try { return JSON.parse(m[1]); } catch { return null; }
+  };
+  for (const key of ['steps', 'actions', 'sources']) {
+    const v = arr(key);
+    if (v) obj[key] = v;
+  }
+  if (/"needHuman"\s*:\s*true/.test(raw)) obj.needHuman = true;
+  return Object.keys(obj).length ? obj : null;
 }
 
 /** Вызов OpenAI-совместимого /chat/completions. JSON-режим с фолбэком на обычный. */

@@ -379,7 +379,23 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );`,
   // v23 — напоминание об окончании PREMIUM (чтобы не отправлять письмо каждый день)
-  `ALTER TABLE users ADD COLUMN premium_notice_at TEXT;`
+  `ALTER TABLE users ADD COLUMN premium_notice_at TEXT;`,
+  // v24 — журнал запросов к AI-помощнику в админке
+  `CREATE TABLE ai_queries (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER,
+     admin_id INTEGER,
+     question TEXT NOT NULL DEFAULT '',
+     answer TEXT NOT NULL DEFAULT '',
+     actions TEXT NOT NULL DEFAULT '[]',
+     model TEXT NOT NULL DEFAULT '',
+     backend TEXT NOT NULL DEFAULT 'api',
+     status TEXT NOT NULL DEFAULT 'ok',
+     error TEXT NOT NULL DEFAULT '',
+     duration_ms INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_ai_queries_user ON ai_queries(user_id, created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

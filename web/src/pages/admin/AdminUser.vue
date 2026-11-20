@@ -24,6 +24,29 @@ const diag = ref(null);
 const diagLoading = ref(false);
 const helpBusy = ref('');
 const mail = reactive({ open: false, template: 'access_restored', templates: [], subject: '', text: '', busy: false, loading: false, preview: '', previewBusy: false });
+const ai = reactive({ open: false, question: '', busy: false, error: '', answer: null, history: [], showHistory: false, historyLoading: false });
+const AI_QUESTIONS = [
+  'Клиент не может войти — в чём причина?',
+  'Не скачивается PDF или ошибка печати',
+  'Исчерпан дневной лимит кодов',
+  'Оплата не прошла, PREMIUM не активировался',
+  'Проверь общее состояние аккаунта'
+];
+const AI_ACTION_LABELS = {
+  unlock_login: 'Разблокировать вход',
+  reset_2fa: 'Сбросить 2FA',
+  login_link: 'Ссылка для входа',
+  reset_usage: 'Обнулить лимит кодов',
+  clear_password_flag: 'Снять «сменить пароль»',
+  clear_rate_limits: 'Снять лимит запросов',
+  compensate: 'Компенсация',
+  revoke_api_keys: 'Отозвать API-ключи',
+  view_as_client: 'Смотреть как клиент',
+  send_email: 'Написать клиенту'
+};
+const aiActionLabel = (id) => AI_ACTION_LABELS[id] || id;
+const confidenceLabel = (c) => ({ high: 'уверен', medium: 'средняя уверенность', low: 'мало данных' }[c] || c);
+const aiState = reactive({ configured: false, checked: false });
 const comp = reactive({ open: false, days: 3, reason: '', busy: false });
 
 const LOGIN_REASON = {
@@ -252,6 +275,77 @@ async function viewAsClient() {
 }
 
 const loginReason = (r) => LOGIN_REASON[r] || r || '—';
+
+function openAi() {
+  Object.assign(ai, { open: true, question: '', error: '', answer: null, history: [], showHistory: false });
+  aiState.checked = false;
+  api.adminAiSettings()
+    .then((s) => { aiState.configured = Boolean(s.configured); })
+    .catch(() => { aiState.configured = false; })
+    .finally(() => { aiState.checked = true; });
+  loadAiHistory();
+}
+
+async function loadAiHistory() {
+  ai.historyLoading = true;
+  try {
+    const r = await api.adminAiHistory(id.value);
+    ai.history = r.queries || [];
+  } catch {
+    ai.history = [];
+  } finally {
+    ai.historyLoading = false;
+  }
+}
+
+async function askAi() {
+  if (!ai.question.trim()) return;
+  ai.busy = true;
+  ai.error = '';
+  ai.answer = null;
+  try {
+    ai.answer = await api.adminAiAsk(id.value, ai.question.trim());
+    loadAiHistory();
+  } catch (e) {
+    ai.error = e.message;
+  } finally {
+    ai.busy = false;
+  }
+}
+
+function showAiHistoryItem(q) {
+  ai.answer = { ...q.answer, actions: q.actions || [], model: q.model, durationMs: q.duration_ms, id: q.id };
+  ai.question = q.question;
+}
+
+async function copyAiDraft() {
+  if (!ai.answer?.draft) return;
+  try {
+    await navigator.clipboard.writeText(ai.answer.draft);
+    notice.value = 'Черновик письма скопирован';
+  } catch {
+    error.value = 'Не удалось скопировать';
+  }
+}
+
+function runAiAction(action) {
+  const map = {
+    unlock_login: unlockLogin,
+    reset_2fa: reset2fa,
+    login_link: makeLoginLink,
+    reset_usage: resetUsage,
+    clear_password_flag: clearPasswordFlag,
+    clear_rate_limits: clearRateLimits,
+    compensate: openCompensate,
+    revoke_api_keys: revokeApiKeys,
+    view_as_client: viewAsClient,
+    send_email: openMail
+  };
+  const fn = map[action];
+  if (!fn) return;
+  ai.open = false;
+  fn();
+}
 
 async function grant() {
   error.value = '';
@@ -512,6 +606,7 @@ onMounted(load);
         </div>
 
         <div class="flex flex-wrap gap-2 mt-3">
+          <button class="btn-primary !py-2 !px-3 text-sm" :disabled="ai.busy" @click="openAi">Спросить ИИ</button>
           <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'unlock' || !diag || (!diag.locked && !diag.fails)" @click="unlockLogin">
             {{ helpBusy === 'unlock' ? 'Снимаем…' : 'Разблокировать вход' }}
           </button>
@@ -763,6 +858,80 @@ onMounted(load);
       <div class="flex justify-end gap-2 mt-4">
         <button class="btn-ghost !py-2 !px-3 text-sm" @click="comp.open = false">Отмена</button>
         <button class="btn-primary !py-2 !px-4 text-sm" :disabled="comp.busy" @click="doCompensate">{{ comp.busy ? 'Продлеваем…' : 'Продлить и уведомить' }}</button>
+      </div>
+    </Modal>
+    <Modal :open="ai.open" title="AI-помощник" max-width="max-w-2xl" @close="ai.open = false">
+      <p class="text-sm text-slate-500">Опишите проблему — помощник посмотрит факты об аккаунте и предложит шаги и действия. Ничего не меняет сам: действия запускает человек.</p>
+      <p v-if="aiState.checked && !aiState.configured" class="text-sm text-amber-500 mt-2">
+        AI-помощник не настроен. <router-link to="/app/admin/settings" class="underline" @click="ai.open = false">Настройки → AI-помощник</router-link>
+      </p>
+      <div class="flex flex-wrap gap-1.5 mt-3">
+        <button v-for="q in AI_QUESTIONS" :key="q"
+          class="text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-slate-500 hover:border-brand-500/40"
+          @click="ai.question = q">{{ q }}</button>
+      </div>
+      <textarea v-model="ai.question" rows="3" maxlength="2000" class="input text-sm mt-3"
+        placeholder="Например: клиент пишет, что не может войти, 2FA включена, телефон потерял"></textarea>
+      <div class="flex flex-wrap justify-end gap-2 mt-3">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="ai.showHistory = !ai.showHistory">
+          История{{ ai.history.length ? ` (${ai.history.length})` : '' }}
+        </button>
+        <button class="btn-primary !py-2 !px-4 text-sm" :disabled="ai.busy || !ai.question.trim()" @click="askAi">
+          {{ ai.busy ? 'Думаем…' : 'Получить разбор' }}
+        </button>
+      </div>
+      <p v-if="ai.error" class="text-sm text-red-500 mt-3">{{ ai.error }}</p>
+      <p v-if="ai.busy" class="text-xs text-slate-500 mt-3">Модель изучает аккаунт… обычно 5–20 секунд.</p>
+
+      <div v-if="ai.answer" class="mt-4 space-y-3 text-sm">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="chip-soon"
+            :class="ai.answer.confidence === 'high' ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10'
+              : ai.answer.confidence === 'low' ? '!text-amber-500 !border-amber-500/30 !bg-amber-500/10' : ''">
+            {{ confidenceLabel(ai.answer.confidence) }}
+          </span>
+          <span v-if="ai.answer.model" class="text-slate-500">{{ ai.answer.model }}</span>
+          <span v-if="ai.answer.durationMs" class="text-slate-500">· {{ (ai.answer.durationMs / 1000).toFixed(1) }} с</span>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+          <div class="text-xs text-slate-500 mb-1">Диагноз</div>
+          <p class="whitespace-pre-wrap">{{ ai.answer.diagnosis }}</p>
+        </div>
+
+        <div v-if="ai.answer.steps?.length" class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+          <div class="text-xs text-slate-500 mb-1">Что сделать</div>
+          <ol class="list-decimal pl-5 space-y-1">
+            <li v-for="(s, i) in ai.answer.steps" :key="i">{{ s }}</li>
+          </ol>
+        </div>
+
+        <div v-if="ai.answer.draft" class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-xs text-slate-500">Черновик письма клиенту</div>
+            <button class="text-xs text-brand-400" @click="copyAiDraft">Копировать</button>
+          </div>
+          <p class="whitespace-pre-wrap mt-1">{{ ai.answer.draft }}</p>
+        </div>
+
+        <div v-if="ai.answer.actions?.length" class="flex flex-wrap gap-2">
+          <button v-for="a in ai.answer.actions" :key="a" class="btn-ghost !py-2 !px-3 text-sm" @click="runAiAction(a)">
+            {{ aiActionLabel(a) }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="ai.showHistory" class="mt-4 pt-3 border-t border-slate-200 dark:border-white/10">
+        <div class="text-xs text-slate-500 mb-1">Предыдущие запросы</div>
+        <p v-if="ai.historyLoading" class="text-xs text-slate-500">Загрузка…</p>
+        <p v-else-if="!ai.history.length" class="text-xs text-slate-500">Пока пусто.</p>
+        <ul v-else class="text-xs space-y-1 max-h-40 overflow-y-auto">
+          <li v-for="q in ai.history" :key="q.id">
+            <button class="text-left hover:underline" @click="showAiHistoryItem(q)">
+              {{ fmtDateTime(q.created_at) }} · {{ q.question }}<span v-if="q.status !== 'ok'" class="text-red-500"> (ошибка)</span>
+            </button>
+          </li>
+        </ul>
       </div>
     </Modal>
   </div>

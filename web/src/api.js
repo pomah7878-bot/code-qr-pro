@@ -103,6 +103,12 @@ export const api = {
   adminLogDetail: (id) => req('GET', '/api/admin/logs/' + id),
   adminClearLogs: (days) => req('DELETE', '/api/admin/logs', { days }),
   clientLog: (payload) => req('POST', '/api/logs/client', payload),
+  // AI-помощник админки
+  adminAiSettings: () => req('GET', '/api/admin/ai/settings'),
+  adminAiSaveSettings: (b) => req('PUT', '/api/admin/ai/settings', b),
+  adminAiTest: () => req('POST', '/api/admin/ai/test'),
+  adminAiAsk: (userId, question) => req('POST', '/api/admin/ai/ask', { userId, question }),
+  adminAiHistory: (userId) => req('GET', '/api/admin/ai/history' + qs({ userId })),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),
   adminOverview: (days = 30) => req('GET', '/api/admin/overview?days=' + days),
   adminSeries: (days = 30) => req('GET', '/api/admin/series?days=' + days),

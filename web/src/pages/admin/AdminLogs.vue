@@ -11,6 +11,8 @@ const error = ref('');
 const notice = ref('');
 const filters = reactive({ level: '', source: '', q: '', days: 7, page: 1 });
 const detail = reactive({ open: false, log: null, busy: false });
+const clearDays = ref(30);
+const clearing = ref(false);
 
 const levelClass = (level) => (level === 'error' ? 'text-red-500 border-red-500/30 bg-red-500/10'
   : level === 'warn' ? 'text-amber-500 border-amber-500/30 bg-amber-500/10'
@@ -99,15 +101,52 @@ async function exportCsv() {
 }
 
 async function clearOld() {
-  const days = Number(prompt('Удалить записи старше, дней:', '30'));
-  if (!Number.isFinite(days) || days < 1) return;
+  const days = Number(clearDays.value) || 30;
   if (!window.confirm(`Удалить записи журнала старше ${days} дн.?`)) return;
+  clearing.value = true;
+  error.value = '';
   try {
     const r = await api.adminClearLogs(days);
     notice.value = `Удалено записей: ${r.removed}`;
     await load();
   } catch (e) {
     error.value = e.message;
+  } finally {
+    clearing.value = false;
+  }
+}
+
+async function clearAll() {
+  if (!window.confirm('Удалить ВСЕ записи журнала ошибок? Действие необратимо.')) return;
+  clearing.value = true;
+  error.value = '';
+  try {
+    const r = await api.adminClearLogs('all');
+    notice.value = `Журнал очищен. Удалено записей: ${r.removed}`;
+    filters.page = 1;
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    clearing.value = false;
+  }
+}
+
+async function deleteEntry(log) {
+  if (!log) return;
+  if (!window.confirm('Удалить эту запись из журнала?')) return;
+  detail.busy = true;
+  error.value = '';
+  try {
+    await api.adminDeleteLog(log.id);
+    detail.open = false;
+    detail.log = null;
+    notice.value = 'Запись удалена';
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    detail.busy = false;
   }
 }
 
@@ -126,7 +165,19 @@ onMounted(load);
       <div class="flex flex-wrap gap-2">
         <button class="btn-ghost !py-2 !px-3 text-sm" @click="load" :disabled="loading">{{ loading ? 'Обновляем…' : 'Обновить' }}</button>
         <button class="btn-ghost !py-2 !px-3 text-sm" @click="exportCsv">CSV за {{ filters.days }} дн.</button>
-        <button class="btn-ghost !py-2 !px-3 text-sm text-red-500" @click="clearOld">Очистить старые</button>
+        <div class="flex items-center gap-1.5">
+          <span class="text-xs text-slate-500">старше</span>
+          <select v-model.number="clearDays" class="input !py-2 !px-2 text-sm w-auto" :disabled="clearing" aria-label="Удалить записи старше">
+            <option :value="1">1 дн.</option>
+            <option :value="7">7 дн.</option>
+            <option :value="30">30 дн.</option>
+            <option :value="90">90 дн.</option>
+          </select>
+          <button class="btn-ghost !py-2 !px-3 text-sm text-red-500" :disabled="clearing" @click="clearOld">Очистить</button>
+        </div>
+        <button class="btn-ghost !py-2 !px-3 text-sm !border-red-500/40 text-red-500" :disabled="clearing" @click="clearAll">
+          {{ clearing ? 'Удаляем…' : 'Очистить всё' }}
+        </button>
       </div>
     </div>
 
@@ -239,7 +290,10 @@ onMounted(load);
           <div class="label !text-xs">Дополнительно</div>
           <pre class="text-[11px] whitespace-pre-wrap break-all rounded-xl bg-slate-100 dark:bg-ink-900 p-3 max-h-40 overflow-auto">{{ detail.log.meta }}</pre>
         </div>
-        <div class="flex justify-end gap-2 pt-2">
+        <div class="flex flex-wrap justify-end gap-2 pt-2">
+          <button class="btn-ghost !py-2 !px-3 text-sm text-red-500 mr-auto" :disabled="detail.busy" @click="deleteEntry(detail.log)">
+            {{ detail.busy ? 'Удаляем…' : 'Удалить запись' }}
+          </button>
           <button class="btn-ghost !py-2 !px-3 text-sm" @click="copyDiagnostics">Скопировать диагностику</button>
           <button class="btn-primary !py-2 !px-4 text-sm" @click="detail.open = false">Закрыть</button>
         </div>

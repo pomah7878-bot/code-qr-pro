@@ -234,10 +234,27 @@ export async function registerLogRoutes(app) {
     return { log: row };
   });
 
+  // Удаление журнала: всё или только записи старше N дней.
   app.delete('/api/admin/logs', { preHandler: requireAdmin }, async (req, reply) => {
-    const days = Math.min(365, Math.max(1, Number(req.body?.days || req.query?.days) || 30));
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const all = body.all === true || req.query?.all === '1' || String(body.scope || req.query?.scope || '') === 'all';
+    if (all) {
+      const r = db.prepare('DELETE FROM app_logs').run();
+      audit(req, 'logs.clear', 'app_logs', '', { scope: 'all', removed: r.changes });
+      return { ok: true, removed: r.changes, scope: 'all' };
+    }
+    const days = Math.min(365, Math.max(1, Number(body.days ?? req.query?.days) || 30));
     const r = db.prepare("DELETE FROM app_logs WHERE created_at < datetime('now', ?)").run(`-${days} days`);
     audit(req, 'logs.clear', 'app_logs', '', { days, removed: r.changes });
+    return { ok: true, removed: r.changes, scope: `older ${days}d` };
+  });
+
+  // Удаление одной записи журнала.
+  app.delete('/api/admin/logs/:id', { preHandler: requireAdmin }, async (req, reply) => {
+    const id = Number(req.params.id) || 0;
+    const r = db.prepare('DELETE FROM app_logs WHERE id = ?').run(id);
+    if (!r.changes) return reply.code(404).send({ error: 'Запись не найдена' });
+    audit(req, 'logs.delete', 'app_logs', String(id), {});
     return { ok: true, removed: r.changes };
   });
 

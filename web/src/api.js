@@ -101,7 +101,8 @@ export const api = {
   // Журнал ошибок
   adminLogs: (params) => req('GET', '/api/admin/logs' + qs(params)),
   adminLogDetail: (id) => req('GET', '/api/admin/logs/' + id),
-  adminClearLogs: (days) => req('DELETE', '/api/admin/logs', { days }),
+  adminClearLogs: (days) => req('DELETE', '/api/admin/logs', days === 'all' ? { all: true } : { days }),
+  adminDeleteLog: (id) => req('DELETE', '/api/admin/logs/' + id),
   clientLog: (payload) => req('POST', '/api/logs/client', payload),
   // AI-помощник админки
   adminAiSettings: () => req('GET', '/api/admin/ai/settings'),

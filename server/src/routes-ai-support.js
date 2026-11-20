@@ -93,15 +93,40 @@ function cleanAnswer(text) {
   return s.replace(/["}\]]+\s*$/, '').trim().slice(0, 3000);
 }
 
+/** Компактные факты аккаунта: помогают отвечать по конкретной ситуации клиента. */
+function clientFacts(userId) {
+  try {
+    const ctx = buildAiContext(userId);
+    if (!ctx) return '';
+    const lines = [];
+    lines.push(ctx.subscription
+      ? `Подписка: ${ctx.subscription.plan} до ${ctx.subscription.expires_at}.`
+      : 'Активной подписки нет.');
+    lines.push(`Использовано сегодня: ${ctx.usageToday} кодов (лимит ${ctx.planLimits.codesPerDay}).`);
+    if (ctx.user.blockedAt) lines.push(`Аккаунт заблокирован: ${ctx.user.blockedReason || 'причина не указана'}.`);
+    lines.push(`2FA: ${ctx.user.twoFactorEnabled ? 'включена' : 'выключена'}; требуется смена пароля: ${ctx.user.mustChangePassword ? 'да' : 'нет'}.`);
+    if (ctx.loginLock.locked) lines.push(`Вход временно заблокирован до ${ctx.loginLock.lockedUntil} (неудачных попыток: ${ctx.loginLock.fails}).`);
+    const jobs = ctx.jobs.recent.slice(0, 3).map((j) => `#${j.id} ${j.status}${j.error ? ' — ' + String(j.error).slice(0, 70) : ''}`);
+    if (jobs.length) lines.push(`Последние задания: ${jobs.join('; ')}.`);
+    if (ctx.jobs.failedLast24h) lines.push(`Ошибок заданий за сутки: ${ctx.jobs.failedLast24h}.`);
+    const logs = ctx.appLogs.slice(0, 3).map((l) => `${l.level}/${l.source} ${String(l.message || '').slice(0, 80)}`);
+    if (logs.length) lines.push(`Журнал ошибок: ${logs.join(' | ')}.`);
+    if (ctx.mailErrors.length) lines.push(`Ошибки почты: ${String(ctx.mailErrors[0].message || '').slice(0, 100)}.`);
+    lines.push(`Активных сессий: ${ctx.sessions.length}; API-ключей: ${ctx.apiKeysCount}.`);
+    return lines.join('\n').slice(0, 1200);
+  } catch { return ''; }
+}
+
 const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток). Помогаешь клиентам прямо в личном кабинете.
 Клиент находится в разделе кабинета: {{PAGE}}.
 Данные клиента: {{PLAN}}.
+Факты аккаунта: {{FACTS}}.
 
 Главное правило: РЕШАЙ проблему, а не переспрашивай. Дай конкретные шаги, что проверить и что сделать.
 Уточняющий вопрос допустим РОВНО ОДИН раз и только если сообщение клиента — одно-два слова без контекста («не работает», «помогите») и в диалоге ещё не было ответов. Если клиент уже что-то уточнил, если это продолжение диалога или вопрос понятен — сразу отвечай по делу, без вопросов. Никогда не задавай второй уточняющий вопрос подряд.
 
 Правила:
-1. Отвечай по-русски, шагами, 3–7 предложений или короткий список. Без markdown-заголовков. Весь ответ — до 700 символов.
+1. Отвечай по-русски, по делу: 2–3 вероятные причины, затем шаги (до 7), затем что делать, если не помогло. Без markdown-заголовков. Весь ответ — до 900 символов.
 2. Опирайся на статьи базы знаний ниже. Если в базе нет точного ответа — дай общий безопасный совет и предложи поддержку.
 3. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
 4. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
@@ -110,6 +135,8 @@ const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (мар�
 7. Называй точные разделы и кнопки кабинета («Генерация», «Этикетки», «Повторная печать», «Подписка», «История», «API», «Честный ЗНАК», «Безопасность»), чтобы клиент сразу нашёл нужное.
 8. Учитывай новые возможности: карточка товара из «Честного ЗНАКа» и фото товара в «Повторной печати», EAN-13 для OZON и Wildberries, режимы результатов «Основная/Все поля/Компактная», статус кода и криптозащита, печать с телефона (AirPrint/Mopria).
 9. Если вопрос про лимиты — используй данные клиента выше (тариф и остаток на сегодня), не выдумывай цифры.
+10. Если проблема связана с аккаунтом (вход, лимиты, задания, почта, оплата), используй «Факты аккаунта»: назови конкретную причину, если она видна (например, задание #123 с ошибкой или блокировка входа), и предложи следующий шаг.
+11. Покрывай проблему целиком: сначала самое вероятное решение, затем альтернативы и крайний шаг — «Передать в поддержку».
 
 Верни строго JSON без markdown:
 {"answer":"ответ по шагам или (только один раз) уточняющий вопрос","clarify":true|false,"needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
@@ -130,6 +157,7 @@ export async function registerAiSupportRoutes(app) {
     const pageKey = Object.prototype.hasOwnProperty.call(PAGES, String(req.body?.page || '')) ? String(req.body.page) : 'overview';
     const page = PAGES[pageKey];
     const plan = planOf(user);
+    const facts = clientFacts(user.id);
     const planLine = [
       `тариф ${plan.title}`,
       `коды в день: ${plan.codesPerDay}`,
@@ -153,8 +181,9 @@ export async function registerAiSupportRoutes(app) {
     if (!limit.ok) return reply.code(429).send({ error: 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.' });
 
     // ищем по вопросу, добавляя ключевые слова текущего раздела — ответ будет про то меню, где клиент
-    const articles = searchKnowledge(`${message} ${page.keywords}`, 5);
-    const context = kbContext(articles, 3200);
+    let articles = searchKnowledge(`${message} ${page.keywords}`, 6);
+    if (!articles.length) articles = searchKnowledge(`ошибка не работает ${page.keywords}`, 3);
+    const context = kbContext(articles, 3600);
     const started = Date.now();
     let answer = '';
     let clarify = false;
@@ -167,6 +196,7 @@ export async function registerAiSupportRoutes(app) {
       history.length ? `Предыдущий диалог:\n${history.map((h) => `${h.role}: ${h.text}`).join('\n')}` : '',
       `Раздел: ${page.label}`,
       `Тариф и лимиты клиента: ${planLine}`,
+      facts ? `Факты аккаунта:\n${facts}` : '',
       `Вопрос клиента: ${message}`,
       `База знаний:\n${context || '(подходящих статей не найдено)'}`,
       hadDialogue ? 'Это продолжение диалога: уточняющие вопросы ЗАПРЕЩЕНЫ, отвечай конкретными шагами.' : '',
@@ -175,10 +205,10 @@ export async function registerAiSupportRoutes(app) {
 
     const runAsk = async (extra) => {
       const res = await askAi({
-        system: SYSTEM.replace('{{PAGE}}', page.label).replace('{{PLAN}}', planLine),
+        system: SYSTEM.replace('{{PAGE}}', page.label).replace('{{PLAN}}', planLine).replace('{{FACTS}}', facts || 'нет данных'),
         user: askPrompt(extra),
         cfg,
-        freeMaxTokens: 1300
+        freeMaxTokens: 1400
       });
       const parsed = res.parsed || {};
       return {

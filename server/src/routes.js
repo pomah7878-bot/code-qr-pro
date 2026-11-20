@@ -52,6 +52,21 @@ function clearLoginFails(email) {
   db.prepare('DELETE FROM login_attempts WHERE email=?').run(email);
 }
 
+// Простая страница для ошибок одноразовой ссылки входа.
+function linkPage(title, text) {
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${esc(title)} — CODE QR PRO</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070b18;color:#e2e8f0;font-family:-apple-system,Arial,sans-serif">
+<div style="max-width:420px;padding:32px 24px;text-align:center">
+<h1 style="font-size:22px;margin:0 0 12px">${esc(title)}</h1>
+<p style="color:#94a3b8;line-height:1.5;margin:0 0 20px">${esc(text)}</p>
+<a href="/login" style="display:inline-block;padding:10px 18px;border-radius:12px;background:#3b82f6;color:#fff;text-decoration:none">Перейти ко входу</a>
+</div></body></html>`;
+}
+
 function notifyLoginBlocked(user, ip) {
   if (!user || !smtpConfigured()) return;
   sendMail({
@@ -139,8 +154,40 @@ export async function registerRoutes(app) {
     return { user: publicUser(user) };
   });
 
-  app.post('/api/auth/forgot', async (req, reply) => {
-    if (!rateLimit(req.ip, 5, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+  // Одноразовая ссылка входа, которую выдаёт админ для быстрой помощи клиенту.
+  // Ссылка действует 15 минут и позволяет войти без пароля (2FA тоже обходится —
+  // поэтому выдаётся только администратором и попадает в журнал аудита).
+  app.get('/api/auth/link/:token', async (req, reply) => {
+    const token = String(req.params?.token || '');
+    if (!/^[a-f0-9]{64}$/.test(token)) return reply.code(400).type('text/html; charset=utf-8')
+      .send(linkPage('Ссылка недействительна', 'Попросите администратора выдать новую ссылку.'));
+    const hash = createHash('sha256').update(token).digest('hex');
+    const row = db.prepare(`
+      SELECT l.id, l.user_id, l.expires_at, u.status, u.email
+      FROM login_links l JOIN users u ON u.id = l.user_id
+      WHERE l.token_hash = ?
+    `).get(hash);
+    if (!row) return reply.code(404).type('text/html; charset=utf-8')
+      .send(linkPage('Ссылка недействительна', 'Попросите администратора выдать новую ссылку.'));
+    const expired = db.prepare("SELECT ? <= datetime('now') AS e").get(row.expires_at).e;
+    if (expired) return reply.code(410).type('text/html; charset=utf-8')
+      .send(linkPage('Срок ссылки истёк', 'Ссылка действует 15 минут. Попросите администратора выдать новую.'));
+    if (row.status === 'blocked') return reply.code(403).type('text/html; charset=utf-8')
+      .send(linkPage('Аккаунт заблокирован', 'Обратитесь в поддержку.'));
+    const user = db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id);
+    if (!user) return reply.code(404).type('text/html; charset=utf-8')
+      .send(linkPage('Пользователь не найден', 'Обратитесь в поддержку.'));
+    db.prepare("UPDATE login_links SET used_at=coalesce(used_at, datetime('now')) WHERE id=?").run(row.id);
+    clearLoginFails(user.email.toLowerCase());
+    db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
+    const { token: sessionToken, expires } = createSession(user.id, {
+      ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
+    });
+    reply.setCookie(COOKIE, sessionToken, cookieOpts(new Date(expires)));
+    return reply.redirect('/app', 302);
+  });
+
+  app.post('/api/auth/forgot', async (req, reply) => {    if (!rateLimit(req.ip, 5, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
     if (!smtpConfigured()) return reply.code(503).send({ error: 'Отправка почты не настроена. Обратитесь в поддержку.' });

@@ -3,6 +3,7 @@ import BrandIcon from '../../components/BrandIcon.vue';
 import { onMounted, ref } from 'vue';
 import { api } from '../../api.js';
 import TwoFactorCard from '../../components/admin/TwoFactorCard.vue';
+import SecurityLimitsCard from '../../components/admin/SecurityLimitsCard.vue';
 import PlanLimitsCard from '../../components/admin/PlanLimitsCard.vue';
 import SmtpCard from '../../components/admin/SmtpCard.vue';
 import StorageCard from '../../components/admin/StorageCard.vue';
@@ -123,6 +124,8 @@ onMounted(load);
     <PlanLimitsCard />
 
     <TwoFactorCard />
+
+    <SecurityLimitsCard />
 
     <SmtpCard />
 

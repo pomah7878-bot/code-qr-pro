@@ -1,9 +1,10 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { db, today } from './db.js';
 import { hashPassword } from './auth.js';
 import { activatePremium } from './billing.js';
 import { notifyStatusChange } from './notify.js';
 import { removeJobFiles } from './jobs.js';
+import { publicUrl } from './lib/mailer.js';
 import { requireAdmin, requireStaff, paging, sendCsv, like, dateOnly } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 
@@ -29,7 +30,8 @@ const publicAdminUser = (u) => ({
   blockedAt: u.blocked_at,
   blockedReason: u.blocked_reason,
   note: u.note,
-  mustChangePassword: Boolean(u.must_change_password)
+  mustChangePassword: Boolean(u.must_change_password),
+  twoFactorEnabled: Boolean(u.totp_enabled)
 });
 
 function tempPassword(len = 12) {
@@ -262,6 +264,133 @@ export async function registerAdminUserRoutes(app) {
   });
 
   // Р—Р°РІРµСЂС€РёС‚СЊ РєРѕРЅРєСЂРµС‚РЅСѓСЋ СЃРµСЃСЃРёСЋ
+  // ── Быстрая помощь клиенту ─────────────────────────────────────────────
+  app.get('/api/admin/users/:id/diagnostics', { preHandler: requireStaff }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const email = user.email.toLowerCase();
+    const attempts = db.prepare('SELECT fails, locked_until, last_at FROM login_attempts WHERE email=?').get(email) || null;
+    const locked = attempts?.locked_until
+      ? Boolean(db.prepare("SELECT ? > datetime('now') AS locked").get(attempts.locked_until).locked)
+      : false;
+    const sessions = db.prepare(
+      "SELECT public_id, ip, user_agent, created_at, last_used_at FROM sessions WHERE user_id=? AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 10"
+    ).all(user.id);
+    const ips = [...new Set(sessions.map((s) => s.ip).filter(Boolean))];
+    const rateLimits = ips.length
+      ? db.prepare(`SELECT key, count, window_start FROM rate_limits WHERE key IN (${ips.map(() => '?').join(',')})`)
+        .all(...ips.map((ip) => 'ip:' + ip))
+        .map((r) => ({ ip: String(r.key).replace(/^ip:/, ''), count: r.count, windowStart: r.window_start }))
+      : [];
+    const usage = db.prepare('SELECT codes_generated FROM usage_daily WHERE user_id=? AND day=?').get(user.id, today());
+    const lastActions = db.prepare(
+      "SELECT action, meta, ip, created_at FROM audit_log WHERE target_type='user' AND target_id=? ORDER BY id DESC LIMIT 10"
+    ).all(String(user.id));
+    const loginLinks = db.prepare(
+      "SELECT created_at, expires_at, used_at FROM login_links WHERE user_id=? ORDER BY id DESC LIMIT 5"
+    ).all(user.id);
+    return {
+      locked,
+      fails: attempts?.fails || 0,
+      lockedUntil: locked ? attempts.locked_until : null,
+      lastFailAt: attempts?.last_at || null,
+      twoFactorEnabled: Boolean(user.totp_enabled),
+      mustChangePassword: Boolean(user.must_change_password),
+      status: user.status,
+      plan: user.plan,
+      usageToday: usage?.codes_generated || 0,
+      sessions,
+      ips,
+      rateLimits,
+      loginLinks,
+      lastActions
+    };
+  });
+
+  // Снять блокировку входа после неудачных попыток.
+  app.post('/api/admin/users/:id/unlock-login', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const before = db.prepare('SELECT fails, locked_until FROM login_attempts WHERE email=?').get(user.email.toLowerCase());
+    db.prepare('DELETE FROM login_attempts WHERE email=?').run(user.email.toLowerCase());
+    audit(req, 'user.unlock_login', 'user', user.id, { fails: before?.fails || 0, lockedUntil: before?.locked_until || null });
+    return { ok: true, clearedFails: before?.fails || 0 };
+  });
+
+  // Сброс 2FA: клиент потерял телефон. Сессии завершаются, вход — по паролю.
+  app.post('/api/admin/users/:id/reset-2fa', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Свою 2FA отключайте в разделе «Безопасность»' });
+    if (!user.totp_enabled) return reply.code(400).send({ error: 'У клиента 2FA не включена' });
+    db.transaction(() => {
+      db.prepare("UPDATE users SET totp_enabled=0, totp_secret=NULL, totp_backup='[]' WHERE id=?").run(user.id);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    })();
+    notifyStatusChange(user, 'Администратор сбросил двухфакторную аутентификацию — включите её заново в разделе «Безопасность».');
+    audit(req, 'user.reset_2fa', 'user', user.id, {});
+    return { ok: true, user: publicAdminUser(getUser(user.id)) };
+  });
+
+  // Обнулить дневной лимит кодов (клиенту нужно срочно продолжить работу).
+  app.post('/api/admin/users/:id/reset-usage', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const before = db.prepare('SELECT codes_generated FROM usage_daily WHERE user_id=? AND day=?').get(user.id, today());
+    db.prepare('DELETE FROM usage_daily WHERE user_id=? AND day=?').run(user.id, today());
+    audit(req, 'user.reset_usage', 'user', user.id, { codesToday: before?.codes_generated || 0 });
+    return { ok: true, usageToday: 0, cleared: before?.codes_generated || 0 };
+  });
+
+  // Снять требование сменить пароль при входе.
+  app.post('/api/admin/users/:id/clear-password-flag', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Для себя флаг не снимается' });
+    if (!user.must_change_password) return reply.code(400).send({ error: 'Флаг и так снят' });
+    db.prepare('UPDATE users SET must_change_password=0 WHERE id=?').run(user.id);
+    audit(req, 'user.clear_password_flag', 'user', user.id, {});
+    return { ok: true, user: publicAdminUser(getUser(user.id)) };
+  });
+
+  // Сбросить rate-limit для IP, с которых клиент заходил (ошибка 429).
+  app.post('/api/admin/users/:id/clear-rate-limits', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    const ips = db.prepare("SELECT DISTINCT ip FROM sessions WHERE user_id=? AND ip <> ''").all(user.id).map((r) => r.ip);
+    const extra = String(req.body?.ip || '').trim().slice(0, 60);
+    if (extra) ips.push(extra);
+    const unique = [...new Set(ips)].slice(0, 50);
+    let removed = 0;
+    for (const ip of unique) removed += db.prepare('DELETE FROM rate_limits WHERE key=?').run('ip:' + ip).changes;
+    audit(req, 'user.clear_rate_limits', 'user', user.id, { ips: unique, removed });
+    return { ok: true, removed, ips: unique };
+  });
+
+  // Одноразовая ссылка входа: админ копирует и отправляет клиенту.
+  app.post('/api/admin/users/:id/login-link', { preHandler: requireAdmin }, async (req, reply) => {
+    const user = getUser(req.params.id);
+    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
+    if (user.id === req.user.id) return reply.code(400).send({ error: 'Для себя ссылку выдавать не нужно' });
+    if (user.status === 'blocked') return reply.code(400).send({ error: 'Аккаунт заблокирован — сначала разблокируйте' });
+    const token = randomBytes(32).toString('hex');
+    const hash = createHash('sha256').update(token).digest('hex');
+    const expires = db.prepare("SELECT datetime('now','+15 minutes') t").get().t;
+    db.transaction(() => {
+      db.prepare('DELETE FROM login_links WHERE user_id=? AND used_at IS NULL').run(user.id);
+      db.prepare('INSERT INTO login_links (user_id, token_hash, expires_at, created_by) VALUES (?,?,?,?)')
+        .run(user.id, hash, expires, req.user.id);
+    })();
+    audit(req, 'user.login_link', 'user', user.id, { expiresAt: expires });
+    return {
+      ok: true,
+      url: `${publicUrl().replace(/\/$/, '')}/api/auth/link/${token}`,
+      expiresAt: expires,
+      warning: 'Ссылка действует 15 минут и заменяет пароль и 2FA — отправляйте только владельцу аккаунта.'
+    };
+  });
+
+  // Завершить конкретную сессию
   app.delete('/api/admin/sessions/:publicId', { preHandler: requireAdmin }, async (req, reply) => {
     const publicId = String(req.params.publicId || '');
     if (!SESSION_RE.test(publicId)) return reply.code(400).send({ error: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ СЃРµСЃСЃРёРё' });

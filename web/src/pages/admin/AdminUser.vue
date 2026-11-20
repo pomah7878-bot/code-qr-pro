@@ -19,7 +19,29 @@ const grantDays = ref(30);
 const noteDraft = ref('');
 const roleDraft = ref('');
 const savingNote = ref(false);
-const modal = reactive({ open: false, kind: '', title: '', busy: false, reason: '', email: '', password: '' });
+const modal = reactive({ open: false, kind: '', title: '', busy: false, reason: '', email: '', password: '', link: '', linkExpires: '' });
+const diag = ref(null);
+const diagLoading = ref(false);
+const helpBusy = ref('');
+
+const ACTION_LABELS = {
+  'user.grant': 'Выдан PREMIUM',
+  'user.revoke': 'Снят PREMIUM',
+  'user.block': 'Блокировка',
+  'user.unblock': 'Разблокировка',
+  'user.role': 'Смена роли',
+  'user.password_reset': 'Сброс пароля',
+  'user.reset_2fa': 'Сброс 2FA',
+  'user.unlock_login': 'Разблокировка входа',
+  'user.reset_usage': 'Сброс лимита кодов',
+  'user.clear_password_flag': 'Снят флаг смены пароля',
+  'user.clear_rate_limits': 'Снят лимит запросов',
+  'user.login_link': 'Выдана ссылка входа',
+  'user.delete': 'Удаление клиента',
+  'session.kill': 'Завершена сессия',
+  'session.kill_all': 'Завершены все сессии'
+};
+const actionLabel = (a) => ACTION_LABELS[a] || a;
 
 const user = computed(() => data.value?.user || null);
 const premiumUntil = computed(() => data.value?.premiumUntil || null);
@@ -52,6 +74,79 @@ async function load() {
     error.value = e.message;
   } finally {
     loading.value = false;
+  }
+  if (isAdmin.value) loadDiagnostics();
+}
+
+async function loadDiagnostics() {
+  if (!isAdmin.value) return;
+  diagLoading.value = true;
+  try {
+    diag.value = await api.adminUserDiagnostics(id.value);
+  } catch {
+    diag.value = null;
+  } finally {
+    diagLoading.value = false;
+  }
+}
+
+async function helpAction(kind, fn, okText) {
+  helpBusy.value = kind;
+  error.value = '';
+  notice.value = '';
+  try {
+    const result = await fn();
+    notice.value = typeof okText === 'function' ? okText(result) : okText;
+    await Promise.all([load(), loadDiagnostics()]);
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    helpBusy.value = '';
+  }
+}
+
+function unlockLogin() {
+  helpAction('unlock', () => api.adminUnlockLogin(id.value), (r) => `Вход разблокирован (было неудачных попыток: ${r.clearedFails})`);
+}
+
+function reset2fa() {
+  if (!window.confirm('Сбросить 2FA? Клиент войдёт по паролю, все его сессии завершатся.')) return;
+  helpAction('2fa', () => api.adminReset2fa(id.value), '2FA сброшена, сессии завершены');
+}
+
+function resetUsage() {
+  helpAction('usage', () => api.adminResetUsage(id.value), (r) => `Дневной лимит кодов обнулён (было ${r.cleared})`);
+}
+
+function clearPasswordFlag() {
+  helpAction('pwdflag', () => api.adminClearPasswordFlag(id.value), 'Требование сменить пароль при входе снято');
+}
+
+function clearRateLimits() {
+  helpAction('ratelimit', () => api.adminClearRateLimits(id.value), (r) => `Снято лимитов запросов: ${r.removed}`);
+}
+
+async function makeLoginLink() {
+  helpBusy.value = 'link';
+  error.value = '';
+  notice.value = '';
+  try {
+    const r = await api.adminLoginLink(id.value);
+    Object.assign(modal, { open: true, kind: 'link', title: 'Ссылка для входа', busy: false, link: r.url, linkExpires: r.expiresAt });
+    await loadDiagnostics();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    helpBusy.value = '';
+  }
+}
+
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(modal.link);
+    notice.value = 'Ссылка скопирована';
+  } catch {
+    error.value = 'Не удалось скопировать — выделите ссылку вручную';
   }
 }
 
@@ -283,6 +378,67 @@ onMounted(load);
         </div>
       </div>
 
+      <!-- Быстрая помощь -->
+      <div v-if="isAdmin" class="glass rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-display font-semibold">Быстрая помощь</h3>
+          <span class="text-xs text-slate-500">{{ diagLoading ? 'Собираем диагностику…' : 'снять защитные ограничения' }}</span>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">
+          Возвращает клиента в работу без ожидания: разблокировка входа, сброс 2FA, лимиты кодов и запросов.
+          Все действия попадают в журнал аудита.
+        </p>
+
+        <div v-if="diag" class="grid sm:grid-cols-3 gap-2 mt-3 text-xs">
+          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+            <div class="text-slate-500">Вход</div>
+            <div class="font-semibold" :class="diag.locked ? 'text-red-500' : 'text-emerald-500'">{{ diag.locked ? 'заблокирован' : 'открыт' }}</div>
+            <div class="text-slate-500 mt-1">неудачных попыток: {{ diag.fails }}</div>
+            <div v-if="diag.lockedUntil" class="text-slate-500">до {{ fmtDateTime(diag.lockedUntil) }}</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+            <div class="text-slate-500">2FA</div>
+            <div class="font-semibold" :class="diag.twoFactorEnabled ? 'text-emerald-500' : 'text-slate-400'">{{ diag.twoFactorEnabled ? 'включена' : 'выключена' }}</div>
+            <div v-if="diag.mustChangePassword" class="text-amber-500 mt-1">просит сменить пароль</div>
+          </div>
+          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3">
+            <div class="text-slate-500">Коды сегодня</div>
+            <div class="font-semibold">{{ diag.usageToday }}</div>
+            <div class="text-slate-500 mt-1">тариф {{ String(diag.plan || '').toUpperCase() }}</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mt-3">
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'unlock' || !diag || (!diag.locked && !diag.fails)" @click="unlockLogin">
+            {{ helpBusy === 'unlock' ? 'Снимаем…' : 'Разблокировать вход' }}
+          </button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === '2fa' || !diag?.twoFactorEnabled" @click="reset2fa">
+            {{ helpBusy === '2fa' ? 'Сбрасываем…' : 'Сбросить 2FA' }}
+          </button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'usage' || !diag" @click="resetUsage">
+            {{ helpBusy === 'usage' ? 'Обнуляем…' : 'Обнулить лимит кодов' }}
+          </button>
+          <button v-if="diag?.mustChangePassword" class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'pwdflag'" @click="clearPasswordFlag">
+            Снять «сменить пароль»
+          </button>
+          <button class="btn-primary !py-2 !px-3 text-sm" :disabled="helpBusy === 'link' || user.status === 'blocked'" @click="makeLoginLink">
+            {{ helpBusy === 'link' ? 'Готовим…' : 'Ссылка для входа' }}
+          </button>
+          <button v-if="diag?.rateLimits?.length" class="btn-ghost !py-2 !px-3 text-sm text-amber-500" :disabled="helpBusy === 'ratelimit'" @click="clearRateLimits">
+            Снять лимит запросов ({{ diag.rateLimits.length }})
+          </button>
+        </div>
+
+        <div v-if="diag?.lastActions?.length" class="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
+          <div class="text-xs text-slate-500 mb-1">Последние действия по клиенту</div>
+          <ul class="text-xs text-slate-500 space-y-0.5 max-h-40 overflow-y-auto">
+            <li v-for="a in diag.lastActions" :key="a.created_at + a.action">
+              {{ fmtDateTime(a.created_at) }} · {{ actionLabel(a.action) }}<span v-if="a.ip"> · {{ a.ip }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Заметка -->
       <div v-if="isAdmin" class="glass rounded-2xl p-5">
         <label class="label" for="admin-user-note">Заметка администратора</label>
@@ -420,6 +576,18 @@ onMounted(load);
         <div class="flex justify-end gap-2 mt-4">
           <button class="btn-ghost !py-2 !px-3 text-sm" @click="modal.open = false">Отмена</button>
           <button class="btn-primary !py-2 !px-4 text-sm !from-red-600 !to-red-500" :disabled="modal.busy" @click="doDelete">{{ modal.busy ? 'Удаляем…' : 'Удалить навсегда' }}</button>
+        </div>
+      </template>
+
+      <template v-else-if="modal.kind === 'link'">
+        <p class="text-sm">Отправьте ссылку клиенту. Она войдёт в аккаунт без пароля и 2FA и действует 15 минут.</p>
+        <div class="mt-3 flex items-center gap-2">
+          <code class="flex-1 rounded-xl border border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-ink-900 px-3 py-2 font-mono text-xs break-all">{{ modal.link }}</code>
+          <button class="btn-ghost !py-2 !px-3 text-sm shrink-0" @click="copyLink">Копировать</button>
+        </div>
+        <p class="text-xs mt-2 text-amber-500">Не публикуйте ссылку: любой, кто её откроет, получит доступ к аккаунту клиента.</p>
+        <div class="flex justify-end mt-4">
+          <button class="btn-primary !py-2 !px-4 text-sm" @click="modal.open = false">Готово</button>
         </div>
       </template>
 

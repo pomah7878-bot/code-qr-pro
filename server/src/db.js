@@ -315,7 +315,18 @@ const MIGRATIONS = [
   // v19 — публичный идентификатор сессии вместо выдачи raw-токена в админке
   `ALTER TABLE sessions ADD COLUMN public_id TEXT;
    UPDATE sessions SET public_id = lower(hex(randomblob(16))) WHERE public_id IS NULL;
-   CREATE UNIQUE INDEX idx_sessions_public_id ON sessions(public_id);`
+   CREATE UNIQUE INDEX idx_sessions_public_id ON sessions(public_id);`,
+  // v20 — одноразовые ссылки входа: админ быстро помогает клиенту, который не может войти
+  `CREATE TABLE login_links (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     token_hash TEXT NOT NULL UNIQUE,
+     expires_at TEXT NOT NULL,
+     used_at TEXT,
+     created_by INTEGER,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_login_links_user ON login_links(user_id, created_at);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

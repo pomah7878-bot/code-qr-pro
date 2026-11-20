@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from './db.js';
 import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice, archiveAddon } from './plans.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
+import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
@@ -169,6 +170,12 @@ export async function checkOrder(order) {
     redeemPromo(paid);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
     notifyPayment(paid, u);
+    if (order.plan !== 'archive') {
+      const sub = db.prepare(
+        "SELECT expires_at FROM subscriptions WHERE user_id=? AND status='active' ORDER BY expires_at DESC LIMIT 1"
+      ).get(order.user_id);
+      notifyClient(u, 'premium_renewed', { until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' }).catch(() => {});
+    }
   } else if (data.status === 'canceled') {
     db.prepare("UPDATE orders SET status='canceled' WHERE id=?").run(order.id);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
@@ -196,18 +203,50 @@ export async function refundPayment(paymentId, amount) {
 
 export function expireSubscriptions() {
   // кого переводим на FREE — для уведомления
-  const expiring = db.prepare("SELECT id, email FROM users WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").all();
+  const expiring = db.prepare(`
+    SELECT u.id, u.email, u.name,
+      (SELECT expires_at FROM subscriptions s WHERE s.user_id=u.id AND s.plan='premium' ORDER BY expires_at DESC LIMIT 1) AS last_expires
+    FROM users u
+    WHERE u.plan='premium' AND u.id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))
+  `).all();
   db.prepare("UPDATE subscriptions SET status='expired' WHERE status='active' AND expires_at <= datetime('now')").run();
   db.prepare("UPDATE users SET plan='free' WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").run();
-  for (const u of expiring) notifyStatusChange(u, 'Подписка PREMIUM истекла → FREE');
+  for (const u of expiring) {
+    notifyStatusChange(u, 'Подписка PREMIUM истекла → FREE');
+    notifyClient(u, 'premium_expired', { until: u.last_expires ? String(u.last_expires).slice(0, 10) : '' }).catch(() => {});
+  }
+}
+
+// Напоминание за N дней до окончания PREMIUM: не чаще одного письма в 3 дня на клиента.
+export function notifyExpiringSoon(days = 3) {
+  const rows = db.prepare(`
+    SELECT u.id, u.email, u.name, s.expires_at
+    FROM users u JOIN subscriptions s ON s.user_id = u.id
+    WHERE u.plan='premium' AND u.status='active' AND s.status='active'
+      AND s.expires_at > datetime('now')
+      AND s.expires_at <= datetime('now', ?)
+      AND (u.premium_notice_at IS NULL OR u.premium_notice_at < datetime('now','-3 days'))
+    ORDER BY s.expires_at ASC
+    LIMIT 200
+  `).all(`+${Math.max(1, Number(days) || 3)} days`);
+  for (const u of rows) {
+    db.prepare("UPDATE users SET premium_notice_at=datetime('now') WHERE id=?").run(u.id);
+    notifyClient(u, 'premium_expiring', { until: String(u.expires_at).slice(0, 10) }).catch(() => {});
+  }
+  return rows.length;
 }
 
 let sweeping = false;
+let lastExpiringNotice = 0;
 async function sweep() {
   if (sweeping) return;
   sweeping = true;
   try {
     expireSubscriptions();
+    if (Date.now() - lastExpiringNotice > 6 * 3600_000) {
+      lastExpiringNotice = Date.now();
+      try { notifyExpiringSoon(3); } catch { /* письма не должны ломать свипер */ }
+    }
     if (!providerConfigured()) return;
     const pending = db.prepare("SELECT * FROM orders WHERE status='pending' AND external_id IS NOT NULL AND created_at > datetime('now', '-1 day') ORDER BY id LIMIT 20").all();
     for (const o of pending) {
@@ -218,5 +257,7 @@ async function sweep() {
 
 export function startBillingSweeper() {
   expireSubscriptions();
+  // Напоминания об окончании PREMIUM — не сразу после рестарта, а через 10 минут.
+  setTimeout(() => { try { notifyExpiringSoon(3); } catch { /* ignore */ } }, 10 * 60_000).unref();
   setInterval(sweep, 30000).unref();
 }

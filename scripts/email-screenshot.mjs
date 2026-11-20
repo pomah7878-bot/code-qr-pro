@@ -7,6 +7,7 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const FILE = process.argv[2];
 const OUT = process.argv[3];
 const WIDTH = Number(process.argv[4] || 390);
+const DARK = process.argv[5] === 'dark';
 const PORT = 9401;
 
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome-mail-'));
@@ -43,9 +44,15 @@ const send = (method, params = {}) => new Promise((resolve) => {
 await send('Page.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: 900, deviceScaleFactor: 2, mobile: true });
 await send('Page.navigate', { url: `file:///${FILE.replace(/\\/g, '/')}` });
-await sleep(1500);
+await sleep(1200);
+if (true) {
+  // Тему задаём явно: иначе Chrome наследует тёмную тему Windows и «светлый» снимок будет тёмным.
+  await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: DARK ? 'dark' : 'light' }] });
+  await sleep(600);
+}
+await sleep(400);
 const metrics = await send('Runtime.evaluate', {
-  expression: 'JSON.stringify({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth })',
+  expression: 'JSON.stringify({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, dark: matchMedia("(prefers-color-scheme: dark)").matches, bodyBg: getComputedStyle(document.body).backgroundColor })',
   returnByValue: true
 });
 console.log('metrics:', metrics.result?.result?.value);

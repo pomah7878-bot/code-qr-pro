@@ -47,7 +47,9 @@ export async function registerAdminMailRoutes(app) {
     return {
       host: c.host, port: c.port, secure: c.secure, user: c.user,
       fromName: c.fromName, fromEmail: c.fromEmail,
-      configured: smtpConfigured(), hasPassword: Boolean(c.pass)
+      configured: smtpConfigured(), hasPassword: Boolean(c.pass),
+      logoMode: getSetting('email_logo_mode', 'image') || 'image',
+      logoUrl: getSetting('email_logo_url', '') || ''
     };
   });
 
@@ -68,7 +70,9 @@ export async function registerAdminMailRoutes(app) {
       ['smtp_host', b.host], ['smtp_port', b.port],
       ['smtp_secure', b.secure !== undefined ? (b.secure ? '1' : '0') : undefined],
       ['smtp_user', b.user], ['smtp_pass', b.pass],
-      ['smtp_from_name', b.fromName], ['smtp_from_email', b.fromEmail]
+      ['smtp_from_name', b.fromName], ['smtp_from_email', b.fromEmail],
+      ['email_logo_mode', ['image', 'mark'].includes(b.logoMode) ? b.logoMode : undefined],
+      ['email_logo_url', b.logoUrl !== undefined ? String(b.logoUrl).trim().slice(0, 300) : undefined]
     ];
     for (const [key, value] of pairs) {
       if (value === undefined || (key === 'smtp_pass' && value === '')) continue;

@@ -5,7 +5,7 @@ import { store } from '../../store.js';
 
 const form = reactive({
   host: '', port: 465, secure: true, user: '', pass: '',
-  fromName: 'CODE QR PRO', fromEmail: ''
+  fromName: 'CODE QR PRO', fromEmail: '', logoMode: 'image', logoUrl: ''
 });
 const state = reactive({ configured: false, hasPassword: false });
 const testTo = ref(store.user?.email || '');
@@ -59,7 +59,8 @@ async function load() {
     const d = await api.adminSmtp();
     Object.assign(form, {
       host: d.host || '', port: d.port || 465, secure: Boolean(d.secure),
-      user: d.user || '', pass: '', fromName: d.fromName || 'CODE QR PRO', fromEmail: d.fromEmail || ''
+      user: d.user || '', pass: '', fromName: d.fromName || 'CODE QR PRO', fromEmail: d.fromEmail || '',
+      logoMode: d.logoMode || 'image', logoUrl: d.logoUrl || ''
     });
     state.configured = d.configured;
     state.hasPassword = d.hasPassword;
@@ -150,7 +151,22 @@ onMounted(load);
         <label class="label !text-xs" for="smtp-from-email">Email отправителя</label>
         <input id="smtp-from-email" v-model="form.fromEmail" type="email" class="input !py-2 text-sm" placeholder="noreply@code-qr.stockcity.ru" @change="guessProvider">
       </div>
+      <div>
+        <label class="label !text-xs" for="smtp-logo-mode">Логотип в письмах</label>
+        <select id="smtp-logo-mode" v-model="form.logoMode" class="input !py-2 text-sm">
+          <option value="image">Логотип (картинка с сайта)</option>
+          <option value="mark">QR-марка (без картинки)</option>
+        </select>
+      </div>
+      <div>
+        <label class="label !text-xs" for="smtp-logo-url">Свой логотип (URL, необязательно)</label>
+        <input id="smtp-logo-url" v-model="form.logoUrl" class="input !py-2 text-sm" placeholder="https://code-qr.stockcity.ru/icon-192.png">
+      </div>
     </div>
+    <p class="text-xs text-slate-500 mt-2">
+      Письма уходят в фирменном шаблоне: шапка с логотипом, кнопка действия, подвал с сайтом и поддержкой.
+      «QR-марка» — запасной вариант для клиентов, которые блокируют картинки.
+    </p>
 
     <div class="flex flex-wrap items-end gap-2 mt-4">
       <button class="btn-primary !py-2 !px-4 text-sm" :disabled="busy" @click="save">{{ busy ? 'Сохраняем…' : 'Сохранить' }}</button>

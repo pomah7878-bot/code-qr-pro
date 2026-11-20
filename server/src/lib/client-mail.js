@@ -16,6 +16,9 @@ export const MAIL_TEMPLATES = [
   { id: 'twofa_reset', title: '2FA сброшена', subject: 'Двухфакторная аутентификация отключена администратором' },
   { id: 'password_reset', title: 'Пароль сброшен', subject: 'Пароль CODE QR PRO сброшен администратором' },
   { id: 'premium_granted', title: 'PREMIUM активирован', subject: 'PREMIUM в CODE QR PRO активирован' },
+  { id: 'premium_renewed', title: 'Подписка продлена', subject: 'Подписка PREMIUM в CODE QR PRO продлена' },
+  { id: 'premium_expiring', title: 'PREMIUM скоро закончится', subject: 'Напоминание: PREMIUM в CODE QR PRO заканчивается' },
+  { id: 'premium_expired', title: 'PREMIUM закончился', subject: 'PREMIUM в CODE QR PRO закончился' },
   { id: 'compensation', title: 'Компенсация за инцидент', subject: 'Компенсация: PREMIUM в CODE QR PRO продлён' },
   { id: 'payment_failed', title: 'Оплата не прошла', subject: 'Оплата в CODE QR PRO не прошла' },
   { id: 'account_blocked', title: 'Аккаунт заблокирован', subject: 'Аккаунт CODE QR PRO заблокирован' },
@@ -57,6 +60,34 @@ const TEMPLATES = {
     intro: `Здравствуйте!\n\nАдминистратор активировал тариф PREMIUM${vars.until ? ' до ' + vars.until : ''}. Открыты редактор этикеток, наборы с КИН, печать PDF, Print Bridge и API.`,
     ctaLabel: 'Открыть кабинет',
     ctaUrl: `${site()}/app`
+  }),
+  premium_renewed: (u, vars) => ({
+    subject: 'Подписка PREMIUM в CODE QR PRO продлена',
+    badge: 'PREMIUM',
+    title: 'Подписка продлена',
+    intro: `Здравствуйте!\n\nОплата получена, PREMIUM продлён${vars.until ? ' до ' + vars.until : ''}. Спасибо, что пользуетесь CODE QR PRO!`,
+    ctaLabel: 'Открыть кабинет',
+    ctaUrl: `${site()}/app`
+  }),
+  premium_expiring: (u, vars) => ({
+    subject: 'Напоминание: PREMIUM в CODE QR PRO заканчивается',
+    badge: 'Напоминание',
+    title: vars.until ? `PREMIUM заканчивается ${vars.until}` : 'PREMIUM скоро закончится',
+    intro: `Здравствуйте!\n\nПодписка PREMIUM${vars.until ? ' заканчивается ' + vars.until : ' скоро заканчивается'}.\nПродлите её заранее — генерация кодов, наборы и печать этикеток продолжат работать без перерыва.`,
+    notice: 'На тарифе FREE доступны только базовые лимиты: без редактора этикеток, наборов и API.',
+    noticeTone: 'warn',
+    ctaLabel: 'Продлить PREMIUM',
+    ctaUrl: `${site()}/app/billing`
+  }),
+  premium_expired: (u, vars) => ({
+    subject: 'PREMIUM в CODE QR PRO закончился',
+    badge: 'Тариф',
+    title: 'PREMIUM закончился',
+    intro: `Здравствуйте!\n\nСрок действия PREMIUM${vars.until ? ' (' + vars.until + ')' : ''} истёк — аккаунт переведён на FREE.`,
+    notice: 'Редактор этикеток, наборы с КИН, Print Bridge и API недоступны на FREE. Данные и история сохранены.',
+    noticeTone: 'warn',
+    ctaLabel: 'Продлить PREMIUM',
+    ctaUrl: `${site()}/app/billing`
   }),
   compensation: (u, vars) => ({
     subject: 'Компенсация: PREMIUM в CODE QR PRO продлён',

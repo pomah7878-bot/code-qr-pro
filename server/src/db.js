@@ -377,7 +377,9 @@ const MIGRATIONS = [
      note TEXT NOT NULL DEFAULT '',
      created_by INTEGER,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-   );`
+   );`,
+  // v23 — напоминание об окончании PREMIUM (чтобы не отправлять письмо каждый день)
+  `ALTER TABLE users ADD COLUMN premium_notice_at TEXT;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

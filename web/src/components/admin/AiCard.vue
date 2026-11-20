@@ -159,6 +159,7 @@ onMounted(load);
       <button class="btn-primary !py-2 !px-4 text-sm" :disabled="saving" @click="save">{{ saving ? 'Сохраняем…' : 'Сохранить' }}</button>
       <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="testing || !state.configured" @click="test">{{ testing ? 'Проверяем…' : 'Проверить подключение' }}</button>
       <span class="text-xs text-slate-500">Лимит: 30 запросов в час на администратора.</span>
+      <router-link to="/app/admin/ai" class="text-xs text-brand-400 underline">Открыть AI-помощника →</router-link>
     </div>
   </div>
 </template>

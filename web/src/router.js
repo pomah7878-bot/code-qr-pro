@@ -28,6 +28,7 @@ const AdminOrders = () => import('./pages/admin/AdminOrders.vue');
 const AdminJobs = () => import('./pages/admin/AdminJobs.vue');
 const AdminAudit = () => import('./pages/admin/AdminAudit.vue');
 const AdminLogs = () => import('./pages/admin/AdminLogs.vue');
+const AdminAi = () => import('./pages/admin/AdminAi.vue');
 const AdminMarketing = () => import('./pages/admin/AdminMarketing.vue');
 const AdminSettings = () => import('./pages/admin/AdminSettings.vue');
 const AdminStorage = () => import('./pages/admin/AdminStorage.vue');
@@ -63,6 +64,7 @@ const router = createRouter({
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
         { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },
+        { path: 'ai', component: AdminAi, meta: { adminOnly: true } },
         { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
         { path: 'ads', component: AdminAds, meta: { adminOnly: true } },
         { path: 'storage', component: AdminStorage, meta: { adminOnly: true } },

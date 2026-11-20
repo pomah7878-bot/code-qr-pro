@@ -7,7 +7,7 @@ import { codeLinesFromText, kizRows, normalizeScanInput, readDataFile, readSprea
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { openPrintWindow } from '../lib/print.js';
+import { downloadBlob, openPrintWindow } from '../lib/print.js';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -606,16 +606,6 @@ function newTemplate() {
   selectedId.value = null;
 }
 
-async function downloadBlob(url, body, filename) {
-  const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Ошибка экспорта'); }
-  const blob = await res.blob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
 async function exportPdf() {
   error.value = '';
   if (!dataRows.value.length) { error.value = 'Загрузите коды КИЗ или данные BarTender'; return; }

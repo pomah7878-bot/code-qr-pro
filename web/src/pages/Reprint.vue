@@ -7,7 +7,7 @@ import SideNav from '../components/SideNav.vue';
 import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { openPrintWindow } from '../lib/print.js';
+import { downloadBlob, openPrintWindow, isMobile } from '../lib/print.js';
 
 const MAX = 1000;
 const categories = [
@@ -615,29 +615,14 @@ async function downloadPdf() {
     }));
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
-    const res = await fetch('/api/labels/pdf', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template, rows, single: true, source: 'reprint' }),
-      signal: controller.signal
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Не удалось сформировать PDF');
+    const blobUrl = await downloadBlob('/api/labels/pdf', { template, rows, single: true, source: 'reprint' }, `reprint-${rows.length}.pdf`);
+    if (isMobile()) {
+      notice.value = 'PDF открыт в новой вкладке — нажмите «…» → «Скачать файл».';
+    } else {
+      notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     }
-    const blob = await res.blob();
-    const head = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
-    if (head !== '%PDF-') throw new Error('Сервер вернул не PDF. Попробуйте ещё раз или уменьшите число кодов.');
     if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
-    pdfUrl.value = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = pdfUrl.value;
-    a.download = `reprint-${rows.length}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
+    pdfUrl.value = blobUrl;
   } catch (e) {
     error.value = e.name === 'AbortError' ? 'PDF формируется слишком долго. Уменьшите число кодов и попробуйте снова.' : e.message;
   } finally {
@@ -650,14 +635,12 @@ async function printLabels() {
   error.value = ''; notice.value = '';
   if (!premium.value) { error.value = 'Печать доступна на тарифе PREMIUM'; return; }
   if (!codesCount.value) { error.value = 'Вставьте коды — по одному на строку'; return; }
-  const win = window.open('', '_blank');
-  if (!win) { error.value = 'Разрешите всплывающие окна, чтобы открыть печать'; return; }
   busy.value = true;
   try {
     if (!result.value?.valid.length) {
       await checkCodes();
       busy.value = true;
-      if (!result.value?.valid.length) { win.close(); return; }
+      if (!result.value?.valid.length) return;
     }
     const barcode = String(product.barcode || '').trim();
     const numericFormats = ['ean13', 'ean8', 'upca', 'itf14'];
@@ -675,10 +658,9 @@ async function printLabels() {
       expiry: String(product.expiry || '').trim(), date: String(product.date || '').trim(),
       composition: String(product.composition || '').trim(), manufacturer: String(product.manufacturer || '').trim()
     }));
-    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' }, win);
+    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' });
     notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
   } catch (e) {
-    try { win.close(); } catch { /* ignore */ }
     error.value = e.message;
   } finally { busy.value = false; }
 }

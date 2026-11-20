@@ -6,7 +6,7 @@ import { normalizeScanInput, readDataFile } from '../lib/labelData.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { openPrintWindow } from '../lib/print.js';
+import { downloadBlob, openPrintWindow, isMobile } from '../lib/print.js';
 
 const plan = computed(() => store.plan || {});
 const premium = computed(() => Boolean(plan.value.labelEditor));
@@ -227,26 +227,14 @@ async function downloadPdf() {
     };
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
-    const res = await fetch('/api/sets/pdf', {
-      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: controller.signal
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'Не удалось сформировать PDF');
+    const blobUrl = await downloadBlob('/api/sets/pdf', payload, `nabor-${setCount.value}.pdf`);
+    if (isMobile()) {
+      notice.value = 'PDF открыт в новой вкладке — нажмите «…» → «Скачать файл».';
+    } else {
+      notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     }
-    const blob = await res.blob();
-    const head = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
-    if (head !== '%PDF-') throw new Error('Сервер вернул не PDF');
     if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
-    pdfUrl.value = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = pdfUrl.value;
-    a.download = `nabor-${setCount.value}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    notice.value = 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
+    pdfUrl.value = blobUrl;
   } catch (e) {
     error.value = e.name === 'AbortError' ? 'PDF формируется слишком долго — уменьшите количество наборов' : e.message;
   } finally {

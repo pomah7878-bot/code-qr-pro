@@ -1,7 +1,12 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
+import dns from 'node:dns';
 import { existsSync } from 'node:fs';
+
+// У VPS нет рабочего IPv6, а DNS отдаёт AAAA первым: Node ходил по IPv6 и падал
+// (например, уведомления в Telegram). Принудительно используем IPv4.
+dns.setDefaultResultOrder('ipv4first');
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';

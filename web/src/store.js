@@ -3,6 +3,7 @@ import { api } from './api.js';
 
 export const store = reactive({
   user: null, plan: null, usage: null, ready: false, impersonated: false,
+  supportOpen: 0,
   async load() {
     try {
       const d = await api.me();

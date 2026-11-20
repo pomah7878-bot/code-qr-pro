@@ -6,6 +6,8 @@ import { logEvent } from './lib/app-log.js';
 import { aiConfig, aiConfigured, askAi } from './lib/ai-client.js';
 import { searchKnowledge, kbContext, markKbCalls, listKbArticles, saveKbArticle, deleteKbArticle } from './lib/kb.js';
 import { planOf } from './plans.js';
+import { notifySupportTicket } from './notify.js';
+import { publicUrl } from './lib/public-url.js';
 
 /**
  * Клиентский AI-помощник: база знаний + бесплатные модели.
@@ -220,7 +222,24 @@ export async function registerAiSupportRoutes(app) {
     });
     audit(req, 'support.ticket_create', 'support_ticket', Number(info.lastInsertRowid), { subject: subject.slice(0, 120) });
 
+    // Уведомляем администратора: Telegram + живой счётчик в админке (см. /api/admin/tickets/count)
+    notifySupportTicket(
+      { id: Number(info.lastInsertRowid), subject, message },
+      user,
+      `${publicUrl()}/app/admin/support`
+    );
+
     return { ok: true, id: Number(info.lastInsertRowid), status: 'open' };
+  });
+
+  // Быстрый счётчик для бейджа в админке (опрашивается раз в 30 секунд).
+  app.get('/api/admin/tickets/count', { preHandler: requireAdmin }, async () => {
+    const open = db.prepare("SELECT COUNT(*) c FROM support_tickets WHERE status = 'open'").get().c;
+    const inProgress = db.prepare("SELECT COUNT(*) c FROM support_tickets WHERE status = 'in_progress'").get().c;
+    const latest = db.prepare(
+      "SELECT t.id, t.subject, t.created_at, u.email FROM support_tickets t LEFT JOIN users u ON u.id = t.user_id WHERE t.status = 'open' ORDER BY t.id DESC LIMIT 1"
+    ).get();
+    return { open, inProgress, latest: latest || null };
   });
 
   app.get('/api/assistant/tickets', { preHandler: requireAuth }, async (req) => {

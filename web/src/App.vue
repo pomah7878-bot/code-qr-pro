@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 import { api } from './api.js';
@@ -13,6 +13,52 @@ const menuOpen = ref(false);
 const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app'));
 const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
+
+// Уведомление админу о новом обращении в поддержку: бейдж + всплывающая карточка
+const supportToast = ref(null);
+let supportPoll = 0;
+let supportToastTimer = 0;
+let prevSupportOpen = null;
+
+async function pollSupport() {
+  if (store.user?.role !== 'admin') {
+    store.supportOpen = 0;
+    return;
+  }
+  try {
+    const r = await api.adminTicketsCount();
+    const now = Number(r.open) || 0;
+    if (prevSupportOpen !== null && now > prevSupportOpen) {
+      const latest = r.latest || {};
+      supportToast.value = {
+        id: latest.id,
+        subject: latest.subject || 'Новое обращение',
+        email: latest.email || ''
+      };
+      window.clearTimeout(supportToastTimer);
+      supportToastTimer = window.setTimeout(() => { supportToast.value = null; }, 15000);
+    }
+    prevSupportOpen = now;
+    store.supportOpen = now;
+  } catch { /* уведомление не критично */ }
+}
+
+onMounted(() => {
+  pollSupport();
+  supportPoll = window.setInterval(pollSupport, 30000);
+});
+onUnmounted(() => {
+  window.clearInterval(supportPoll);
+  window.clearTimeout(supportToastTimer);
+});
+watch(() => store.user?.role, (role) => {
+  if (role === 'admin') pollSupport();
+  else {
+    prevSupportOpen = null;
+    store.supportOpen = 0;
+    supportToast.value = null;
+  }
+});
 
 async function logout() { await store.logout(); menuOpen.value = false; router.push('/'); }
 async function exitViewMode() {
@@ -147,10 +193,41 @@ async function changePassword() {
       </div>
     </Teleport>
     <AssistantWidget v-if="showAssistant" />
+
+    <!-- Уведомление админу о новом обращении в поддержку -->
+    <Teleport to="body">
+      <transition name="sup-toast">
+        <div v-if="supportToast" class="fixed top-20 right-4 z-[90] w-[min(340px,calc(100vw-2rem))]">
+          <div class="glass rounded-2xl p-4 border border-red-500/40 shadow-2xl">
+            <div class="flex items-start gap-3">
+              <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/15 text-red-400 flex-none">
+                <BrandIcon name="help" :size="20" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold">Новое обращение в поддержку</div>
+                <div class="text-xs text-slate-500 mt-0.5 truncate">
+                  <span v-if="supportToast.email">{{ supportToast.email }}: </span>{{ supportToast.subject }}
+                </div>
+                <router-link to="/app/admin/support" class="inline-block mt-2 text-xs text-brand-400 underline" @click="supportToast = null">
+                  Открыть обращение →
+                </router-link>
+              </div>
+              <button class="text-slate-400 hover:text-slate-700 dark:hover:text-white flex-none" aria-label="Закрыть" @click="supportToast = null">
+                <BrandIcon name="close" :size="16" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
 .menu-enter-active, .menu-leave-active { transition: opacity .2s ease, transform .2s ease; }
 .menu-enter-from, .menu-leave-to { opacity: 0; transform: translateY(-8px); }
+.sup-toast-enter-active,
+.sup-toast-leave-active { transition: opacity .2s ease, transform .2s ease; }
+.sup-toast-enter-from,
+.sup-toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

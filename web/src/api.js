@@ -115,6 +115,7 @@ export const api = {
   assistantTickets: () => req('GET', '/api/assistant/tickets'),
   assistantCreateTicket: (payload) => req('POST', '/api/assistant/tickets', payload),
   adminTickets: (params) => req('GET', '/api/admin/tickets' + qs(params)),
+  adminTicketsCount: () => req('GET', '/api/admin/tickets/count'),
   adminTicketUpdate: (id, payload) => req('PATCH', '/api/admin/tickets/' + id, payload),
   adminKb: () => req('GET', '/api/admin/kb'),
   adminKbSave: (payload) => req('PUT', '/api/admin/kb', payload),

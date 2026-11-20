@@ -49,6 +49,10 @@ const isActive = (to) => (to === '/app/admin' ? route.path === '/app/admin' : ro
             ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 border-brand-500/40 font-semibold text-slate-800 dark:text-white'
             : 'border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'">
           {{ l.label }}
+          <span
+            v-if="l.to === '/app/admin/support' && store.supportOpen > 0"
+            class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold align-middle"
+          >{{ store.supportOpen }}</span>
         </router-link>
       </nav>
 

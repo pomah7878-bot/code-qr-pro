@@ -167,6 +167,41 @@ To keep journald bounded, set in `/etc/systemd/journald.conf`:
 `SystemMaxUse=500M`, `SystemMaxFileSize=50M`, then `systemctl restart systemd-journald`.
 
 
+## AI assistant on DSH (optional)
+
+The admin panel has an «Ask AI» button. Backend options: an OpenAI-compatible API
+(any provider) or **DSH headless on the same server**. The DSH path needs Node 24:
+
+```bash
+# 1) Node 24 into /opt/node24 (system Node for the site stays untouched)
+bash scripts/install-node24-dsh.sh        # local helper from the repo
+# or manually: download node-v24.*-linux-x64.tar.xz, extract to /opt/node24
+
+# 2) DSH into /opt/dsh + wrapper /usr/local/bin/dsh
+bash scripts/install-dsh.sh
+
+# 3) Sandboxed profile without file/shell tools
+install -d -o codeqr -g codeqr /opt/code-qr/server/data/dsh-home/profiles/ai-support
+install -o codeqr -g codeqr deploy/dsh-profile/* \
+  /opt/code-qr/server/data/dsh-home/profiles/ai-support/
+
+# 4) Model key + DSH_HOME in server/.env (chmod 600)
+#    DEEPSEEK_API_KEY=sk-...
+#    DSH_HOME=/opt/code-qr/server/data/dsh-home
+#    DSH_PROFILE=ai-support
+
+systemctl restart code-qr
+```
+
+Then in **Admin → Settings → AI assistant** choose backend `dsh` and enable it.
+The agent receives only a facts pack (no passwords/tokens), runs with all tools
+disabled (`deploy/dsh-profile/cordis.patch.yml`), and can only *suggest* actions
+from a fixed allowlist — the admin executes them.
+
+Security notes: the API key lives only in `server/.env` (root, 600); the sandbox
+profile cannot read files or run commands; requests are limited to 30/hour per
+admin and recorded in `ai_queries`.
+
 ## Never commit
 
 - `server/.env`

@@ -2,6 +2,13 @@ const esc = (value) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+// PNG приходит буфером (из воркеров штрихкодов) или готовой base64-строкой
+// (совместимость со старыми вызовами, например наборы из sets.js).
+function pngBase64(el) {
+  if (el.pngBuffer) return Buffer.from(el.pngBuffer).toString('base64');
+  return el.pngBase64 || '';
+}
+
 function elementHtml(el) {
   const style = [
     `left:${Number(el.x) || 0}mm`,
@@ -11,8 +18,9 @@ function elementHtml(el) {
     `text-align:${['left', 'center', 'right'].includes(el.align) ? el.align : 'left'}`,
     `font-size:${Math.max(4, Number(el.fontSize) || 8)}pt`
   ].join(';');
-  if (el.pngBase64) {
-    return `<div class="el" style="${style}"><img class="bc" alt="" src="data:image/png;base64,${el.pngBase64}"></div>`;
+  const b64 = pngBase64(el);
+  if (b64) {
+    return `<div class="el" style="${style}"><img class="bc" alt="" src="data:image/png;base64,${b64}"></div>`;
   }
   if (el.text) {
     return `<div class="el txt" style="${style}">${esc(el.text)}</div>`;

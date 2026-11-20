@@ -1,0 +1,24 @@
+# Профиль DSH для AI-помощника админки.
+# Агент отвечает только по фактам из промпта: инструменты, дающие доступ
+# к файлам и консоли, отключены, чтобы клиентские данные и секреты
+# не могли попасть в ответ даже при попытке prompt injection.
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+- id: tool-jobs
+  disabled: true
+- id: tool-working-directory
+  disabled: true
+- id: tool-skill
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true

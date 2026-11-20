@@ -1,13 +1,53 @@
 import { db } from './db.js';
 import { planOf } from './plans.js';
 import { requireAuth } from './routes.js';
-import { resolveElements, renderLabelsPdf } from './labels.js';
+import { resolveElements, resolveElementsMany, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
+import { createHash } from 'node:crypto';
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
 import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
 
 const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'itf14', 'gs1_128', 'pdf417', 'qrcode', 'text', 'field'];
+
+// Готовый PDF одного и того же пакета (шаблон + строки) отдаём из памяти:
+// повторное «Скачать PDF» на /app/reprint раньше заново кодировало все
+// DataMatrix — секунды ожидания без всякой пользы.
+const PDF_CACHE_TTL_MS = 10 * 60 * 1000;
+const PDF_CACHE_MAX_ENTRIES = 24;
+const PDF_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+const pdfCache = new Map(); // key -> { buffer, at }
+
+function pdfCacheKey(template, rows, single) {
+  return createHash('sha256')
+    .update(JSON.stringify({ template, rows, single: Boolean(single) }))
+    .digest('hex');
+}
+
+function pdfCachePrune() {
+  const now = Date.now();
+  for (const [key, item] of pdfCache) {
+    if (now - item.at > PDF_CACHE_TTL_MS) pdfCache.delete(key);
+  }
+}
+
+function pdfCacheGet(key) {
+  pdfCachePrune();
+  const item = pdfCache.get(key);
+  if (!item) return null;
+  item.at = Date.now(); // продлеваем жизнь часто запрашиваемого файла
+  return item.buffer;
+}
+
+function pdfCacheSet(key, buffer) {
+  if (!buffer || buffer.length > PDF_CACHE_MAX_BYTES) return;
+  pdfCachePrune();
+  if (pdfCache.size >= PDF_CACHE_MAX_ENTRIES) {
+    const oldest = pdfCache.keys().next();
+    if (!oldest.done) pdfCache.delete(oldest.value);
+  }
+  pdfCache.set(key, { buffer, at: Date.now() });
+}
 
 function validateTemplate(t) {
   if (!t || typeof t !== 'object') return 'Шаблон не передан';
@@ -97,7 +137,11 @@ export async function registerLabelRoutes(app) {
       if (!item || !item.normalized) return reply.code(404).send({ error: 'Строка задания не найдена' });
       d = { code: item.normalized, gtin: item.gtin, serial: item.serial, row: item.row_index + 1 };
     }
-    const elements = await resolveElements(template, d);
+    const elements = (await resolveElements(template, d)).map((el) => {
+      // В JSON отдаём привычный pngBase64 (Buffer внутри элемента не сериализуется).
+      const { pngBuffer, ...rest } = el;
+      return pngBuffer ? { ...rest, pngBase64: pngBuffer.toString('base64') } : rest;
+    });
     return { widthMm: Number(template.widthMm), heightMm: Number(template.heightMm), dpi: Number(template.dpi), elements };
   });
 
@@ -145,6 +189,16 @@ export async function registerLabelRoutes(app) {
     return Buffer.concat(chunks);
   }
 
+  // Один PDF на одинаковый запрос не собираем повторно (см. pdfCache выше).
+  async function cachedLabelsPdf(template, dataRows, singlePage) {
+    const key = pdfCacheKey(template, dataRows, singlePage);
+    const cached = pdfCacheGet(key);
+    if (cached) return { pdf: cached, cached: true };
+    const pdf = await buildLabelsPdf(template, dataRows, singlePage);
+    pdfCacheSet(key, pdf);
+    return { pdf, cached: false };
+  }
+
   // PDF-лист А4 с сеткой этикеток по всем сгенерированным строкам задания
   app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
@@ -155,20 +209,17 @@ export async function registerLabelRoutes(app) {
     const singlePage = single === true;
     const dataRows = resolvePdfRows(req.user, req.body, reply);
     if (!dataRows) return reply;
-    const K = 72 / 25.4;
-    const pageSize = singlePage ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
-    reply.hijack();
-    reply.raw.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="labels.pdf"` });
-    const doc = new PDFDocument({ size: pageSize, margin: 0 });
-    doc.pipe(reply.raw);
-    await renderLabelsPdf(doc, template, dataRows, { single: singlePage });
-    doc.end();
+    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
     logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
       total: dataRows.length,
       ok: dataRows.length,
       meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: req.body?.jobId ?? null }
     });
-    return reply;
+    reply.header('Content-Type', 'application/pdf');
+    reply.header('Content-Disposition', 'attachment; filename="labels.pdf"');
+    reply.header('Content-Length', String(pdf.length));
+    reply.header('Cache-Control', 'private, no-store');
+    return reply.send(pdf);
   });
 
   // PDF через короткоживущую ссылку: нужен для iOS Safari, который не умеет
@@ -182,7 +233,7 @@ export async function registerLabelRoutes(app) {
     const dataRows = resolvePdfRows(req.user, req.body, reply);
     if (!dataRows) return reply;
     const singlePage = single === true;
-    const pdf = await buildLabelsPdf(template, dataRows, singlePage);
+    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
     const name = req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf';
     const id = putPdfTicket(req.user.id, pdf, name);
     if (!id) return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество этикеток' });
@@ -225,7 +276,13 @@ export async function registerLabelRoutes(app) {
     }
     if (dataRows.length > 1000) return reply.code(400).send({ error: 'Для печати из браузера — до 1000 этикеток' });
     const labels = [];
-    for (const row of dataRows) labels.push(labelHtml(await resolveElements(template, row), Number(template.widthMm), Number(template.heightMm)));
+    // Штрихкоды пачки кодируются параллельно в воркерах: окно печати готовится
+    // заметно быстрее, а сервер не замирает на время подготовки макета.
+    const CHUNK = Math.max(20, Number(process.env.LABELS_PRINT_CHUNK || 120));
+    for (let start = 0; start < dataRows.length; start += CHUNK) {
+      const resolved = await resolveElementsMany(template, dataRows.slice(start, start + CHUNK));
+      for (const els of resolved) labels.push(labelHtml(els, Number(template.widthMm), Number(template.heightMm)));
+    }
     logActivity(req.user, 'labels_print', 'Печать этикеток из браузера', {
       total: dataRows.length, ok: dataRows.length,
       meta: { widthMm: template.widthMm, heightMm: template.heightMm, jobId: jobId ?? null }

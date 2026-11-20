@@ -97,7 +97,7 @@ export async function askDsh({ system, user, timeoutMs = 90000 }) {
   try {
     const result = await new Promise((resolve, reject) => {
       const child = spawn('dsh', [
-        '--profile', 'headless', '--json',
+        '--profile', process.env.DSH_PROFILE || 'ai-support', '--json',
         '--approval-policy', 'never', '--permission-mode', 'read-only',
         '-'
       ], { cwd: dir, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });

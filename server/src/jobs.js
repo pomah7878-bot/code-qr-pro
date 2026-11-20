@@ -1,4 +1,3 @@
-﻿import bwipjs from 'bwip-js';
 import archiver from 'archiver';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, rmSync, createWriteStream, createReadStream, existsSync, statSync, renameSync, unlinkSync } from 'node:fs';
@@ -7,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
 import { planOf } from './plans.js';
+import { renderBarcode } from './lib/barcode-pool.js';
 import { artifactKey, ensureArtifactDir, removeArtifact } from './lib/artifacts.js';
 import { s3Configured, uploadArtifact, deleteArtifact } from './lib/s3.js';
 
@@ -18,6 +18,10 @@ db.prepare("UPDATE generation_jobs SET status='error', error='РџСЂРµСЂР
 
 const queue = [];
 let running = false;
+
+// Сколько PNG кодируем параллельно за один заход: пул воркеров загружает ядра,
+// а память остаётся небольшой (файлы сразу пишутся на диск).
+const RENDER_BATCH = Math.max(4, Number(process.env.JOBS_RENDER_BATCH || 32));
 
 export function enqueue(jobId) {
   queue.push(jobId);
@@ -51,7 +55,15 @@ function bwipOpts(item, mode) {
 }
 
 export async function renderPNG(item, mode) {
-  return bwipjs.toBuffer(bwipOpts(item, mode));
+  return renderBarcode(bwipOpts(item, mode), 'png');
+}
+
+export async function renderSVG(item, mode) {
+  return renderBarcode(bwipOpts(item, mode), 'svg');
+}
+
+function renderBatch(items, mode, kind) {
+  return Promise.all(items.map((item) => renderBarcode(bwipOpts(item, mode), kind)));
 }
 
 async function processJob(jobId) {
@@ -62,15 +74,18 @@ async function processJob(jobId) {
   const dir = join(JOBS_DIR, String(jobId));
   mkdirSync(dir, { recursive: true });
   let done = 0;
-  for (const item of items) {
-    const png = await renderPNG(item, job.mode);
-    writeFileSync(join(dir, item.row_index + '.png'), png);
-    db.prepare("UPDATE job_items SET status='generated' WHERE id=?").run(item.id);
-    done++;
-    if (done % 10 === 0) {
-      db.prepare('UPDATE generation_jobs SET done=? WHERE id=?').run(done, jobId);
-      await new Promise(r => setImmediate(r));
+  // Штрихкоды пачки кодируются параллельно в воркерах; сам пакет не блокирует
+  // event loop, поэтому сервер отвечает на запросы во время генерации.
+  for (let start = 0; start < items.length; start += RENDER_BATCH) {
+    const batch = items.slice(start, start + RENDER_BATCH);
+    const pngs = await renderBatch(batch, job.mode, 'png');
+    for (let i = 0; i < batch.length; i++) {
+      writeFileSync(join(dir, batch[i].row_index + '.png'), pngs[i]);
+      db.prepare("UPDATE job_items SET status='generated' WHERE id=?").run(batch[i].id);
     }
+    done += batch.length;
+    db.prepare('UPDATE generation_jobs SET done=? WHERE id=?').run(done, jobId);
+    await new Promise(r => setImmediate(r));
   }
   const user = db.prepare('SELECT plan FROM users WHERE id=?').get(job.user_id);
   const days = Math.max(1, Number(planOf({ id: job.user_id, plan: user?.plan }).historyDays) || 7);
@@ -132,15 +147,24 @@ export async function archiveJob(jobId) {
     archive.on('error', reject);
   });
   archive.pipe(output);
+  // Файлы обычно уже на диске; на случай уборки/перезапуска недостающие PNG
+  // добираем пачкой — тоже через пул воркеров, а не по одному в основном потоке.
+  const missing = [];
   for (const item of items) {
     const ext = job.format === 'svg' ? 'svg' : 'png';
     const name = `${item.row_index}.${ext}`;
-    if (ext === 'svg') archive.append(await renderSVG(item, job.mode), { name });
-    else {
-      const p = join(JOBS_DIR, String(job.id), item.row_index + '.png');
-      if (existsSync(p)) archive.file(p, { name });
-      else archive.append(await renderPNG(item, job.mode), { name });
+    if (ext === 'svg') {
+      missing.push({ item, name, kind: 'svg' });
+      continue;
     }
+    const p = join(JOBS_DIR, String(job.id), item.row_index + '.png');
+    if (existsSync(p)) archive.file(p, { name });
+    else missing.push({ item, name, kind: 'png' });
+  }
+  for (let start = 0; start < missing.length; start += RENDER_BATCH) {
+    const batch = missing.slice(start, start + RENDER_BATCH);
+    const rendered = await Promise.all(batch.map((x) => renderBarcode(bwipOpts(x.item, job.mode), x.kind)));
+    for (let i = 0; i < batch.length; i++) archive.append(rendered[i], { name: batch[i].name });
   }
   await archive.finalize();
   await finished;
@@ -178,10 +202,6 @@ export async function archiveJob(jobId) {
   return { key, size, sha, backend };
 }
 
-export async function renderSVG(item, mode) {
-  return bwipjs.toSVG(bwipOpts(item, mode));
-}
-
 export async function removeJobFiles(jobId) {
   const job = db.prepare('SELECT artifact_key, artifact_backend FROM generation_jobs WHERE id=?').get(jobId);
   if (job?.artifact_key) {
@@ -205,6 +225,3 @@ export async function cleanupExpiredJobs() {
     console.error('history cleanup failed:', e?.message || e);
   }
 }
-
-
-

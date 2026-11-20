@@ -1,4 +1,4 @@
-import bwipjs from 'bwip-js';
+import { renderBarcode, renderBarcodeMany } from './lib/barcode-pool.js';
 import PDFDocument from 'pdfkit';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -113,18 +113,46 @@ export function validateSetPayload(p) {
   return '';
 }
 
-export async function dataMatrixPng(code) {
+function dataMatrixOpts(code) {
   const raw = toRawGs1(code || '');
-  const text = gs1BarcodeText(raw);
-  return bwipjs.toBuffer({
+  return {
     bcid: 'datamatrix',
-    text,
+    text: gs1BarcodeText(raw),
     parsefnc: true,
     scale: 6,
     paddingwidth: 12,
     paddingheight: 12,
     includetext: false
-  });
+  };
+}
+
+export async function dataMatrixPng(code) {
+  return renderBarcode(dataMatrixOpts(code), 'png');
+}
+
+// Все DataMatrix набора кодируются одним заходом через пул воркеров:
+// пакет на 100 наборов со вложениями раньше считался последовательно и
+// держал event loop сервера занятым на всё время подготовки PDF.
+export async function prefetchSetBarcodes(p) {
+  const tasks = [];
+  const map = (code) => {
+    tasks.push({ opts: dataMatrixOpts(code), kind: 'png' });
+    return tasks.length - 1;
+  };
+  const setIndex = p.setCodes.map(map);
+  const compIndex = [];
+  if (!p.onlySet) {
+    for (let c = 0; c < p.components.length; c++) {
+      const need = p.setCodes.length * p.components[c].qty;
+      const codes = (p.componentCodes[c]?.codes || []).slice(0, need);
+      compIndex.push(codes.map(map));
+    }
+  }
+  const rendered = tasks.length ? await renderBarcodeMany(tasks) : [];
+  return {
+    setPngs: setIndex.map((i) => rendered[i]),
+    compPngs: compIndex
+  };
 }
 
 function fitText(doc, text, x, y, width, height, size = 8) {
@@ -156,9 +184,11 @@ export async function renderSetsPdf(payload) {
     doc.on('error', reject);
   });
 
+  const { setPngs, compPngs } = await prefetchSetBarcodes(p);
+
   for (let s = 0; s < p.setCodes.length; s++) {
     const setCode = p.setCodes[s];
-    const png = await dataMatrixPng(setCode);
+    const png = setPngs[s];
     doc.addPage({ size: [W, H], margin: 0 });
     const qrSize = Math.min(W - m * 2, H * 0.52);
     doc.image(png, (W - qrSize) / 2, m, { width: qrSize, height: qrSize });
@@ -179,7 +209,8 @@ export async function renderSetsPdf(payload) {
         for (let q = 0; q < comp.qty; q++) {
           const code = codes[start + q];
           if (!code) continue;
-          const cpng = await dataMatrixPng(code);
+          const cpng = compPngs[c]?.[start + q];
+          if (!cpng) continue;
           doc.addPage({ size: [W, H], margin: 0 });
           const cs = Math.min(W - m * 2, H * 0.55);
           doc.image(cpng, (W - cs) / 2, m, { width: cs, height: cs });

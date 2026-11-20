@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { planOf } from './plans.js';
-import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin, dataMatrixPng } from './sets.js';
+import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin, prefetchSetBarcodes } from './sets.js';
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
 import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
@@ -122,8 +122,10 @@ export async function registerSetRoutes(app) {
     const [wMm, hMm] = p.format === '58x40' ? [58, 40] : p.format === '40x58' ? [40, 58] : p.format === '43x25' ? [43, 25] : [58, 80];
     const m = 2;
     const labels = [];
+    // Штрихкоды набора готовим параллельно (пул воркеров), а не по одному.
+    const { setPngs, compPngs } = await prefetchSetBarcodes(p);
     for (let s = 0; s < p.setCodes.length; s++) {
-      const png = (await dataMatrixPng(p.setCodes[s])).toString('base64');
+      const png = setPngs[s].toString('base64');
       const qrSize = Math.min(wMm - m * 2, hMm * 0.52);
       const elements = [
         { x: (wMm - qrSize) / 2, y: m, w: qrSize, h: qrSize, pngBase64: png, type: 'datamatrix' },
@@ -142,7 +144,7 @@ export async function registerSetRoutes(app) {
           for (let q = 0; q < comp.qty; q++) {
             const code = p.componentCodes[c]?.codes?.[s * comp.qty + q];
             if (!code) continue;
-            const cpng = (await dataMatrixPng(code)).toString('base64');
+            const cpng = (compPngs[c]?.[s * comp.qty + q] || Buffer.alloc(0)).toString('base64');
             const cs = Math.min(wMm - m * 2, hMm * 0.55);
             labels.push(labelHtml([
               { x: (wMm - cs) / 2, y: m, w: cs, h: cs, pngBase64: cpng, type: 'datamatrix' },

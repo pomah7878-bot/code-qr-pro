@@ -252,8 +252,8 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <!-- Кнопка вызова окна -->
-    <div class="fixed z-40 right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:right-5 sm:bottom-24 print:hidden">
+    <!-- Кнопка вызова окна: робот стоит НАД кнопкой -->
+    <div class="fixed z-40 right-4 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] sm:right-5 sm:bottom-6 print:hidden flex flex-col items-center sm:items-end">
       <transition name="ai-pop">
         <button
           v-if="idleHint && !assistantUi.open"
@@ -267,8 +267,14 @@ onUnmounted(() => {
         </button>
       </transition>
 
+      <div class="ai-robot-float" aria-hidden="true">
+        <span class="ai-bot-halo"></span>
+        <RobotMascot class="hidden sm:block" :state="mascotState" :size="92" />
+        <RobotMascot class="sm:hidden" :state="mascotState" :size="78" />
+      </div>
+
       <button
-        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white right-0 bottom-0 w-16 h-16 p-0 sm:w-auto sm:h-auto sm:pl-1.5 sm:pr-4 sm:py-1.5 sm:gap-3"
+        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white w-14 h-14 p-0 sm:w-auto sm:h-auto sm:pl-4 sm:pr-5 sm:py-2.5 sm:gap-2"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
         aria-label="Открыть AI-помощника"
         :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
@@ -277,9 +283,7 @@ onUnmounted(() => {
         @mouseleave="hovering = false"
       >
         <span class="ai-shimmer" aria-hidden="true"></span>
-        <span class="ai-bot-disc">
-          <RobotMascot :state="mascotState" :size="56" crop="head" />
-        </span>
+        <BrandIcon name="help" :size="22" class="sm:hidden" />
         <span class="hidden sm:flex flex-col items-start leading-none text-left">
           <span class="text-[13px] font-semibold tracking-wide">AI-помощник</span>
           <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">PREMIUM · СПРОСИТЬ</span>
@@ -536,16 +540,24 @@ onUnmounted(() => {
   animation: ai-idle-bob 5.5s ease-in-out infinite;
   transform-origin: 50% 90%;
 }
-.ai-bot-disc {
-  width: 56px;
-  height: 56px;
+.ai-robot-float {
+  position: relative;
+  margin-bottom: -26px;
+  pointer-events: none;
+  filter: drop-shadow(0 14px 22px rgba(20, 12, 50, .55));
+  z-index: 2;
+}
+.ai-bot-halo {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  translate: -50% -50%;
+  width: 90%;
+  height: 70%;
   border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: #0e0b1c;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .22), 0 6px 16px -6px rgba(0, 0, 0, .6);
-  flex: none;
+  background: radial-gradient(circle, rgba(124, 58, 237, .55), rgba(217, 70, 239, .2) 55%, transparent 74%);
+  filter: blur(12px);
+  z-index: -1;
 }
 .ai-head-avatar {
   width: 40px;

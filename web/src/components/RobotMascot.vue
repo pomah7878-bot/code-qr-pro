@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
   state: { type: String, default: 'idle' },
@@ -14,6 +14,7 @@ let removeMove = null;
 
 // Голова занимает 170px из 260 — для аватара кадрируем по ней.
 const k = () => (props.crop === 'head' ? props.size / 170 : props.size / 260);
+const frameHeight = computed(() => (props.crop === 'head' ? props.size : Math.round(props.size * (322 / 260))));
 
 function onMove(e) {
   const el = root.value;
@@ -68,8 +69,8 @@ onBeforeUnmount(() => {
   <div
     ref="root"
     class="rb-frame"
-    :class="`rb-crop-${crop}`"
-    :style="{ width: size + 'px', height: size + 'px' }"
+    :class="[`rb-crop-${crop}`, crop === 'full' ? 'rb-overflow-visible' : '']"
+    :style="{ width: size + 'px', height: frameHeight + 'px' }"
   >
     <div
       class="rb-robot"
@@ -114,6 +115,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   flex: none;
 }
+.rb-overflow-visible { overflow: visible; }
 .rb-crop-head { border-radius: 50%; }
 
 .rb-robot {

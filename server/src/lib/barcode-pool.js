@@ -126,7 +126,9 @@ export function renderBarcode(opts, kind = 'png') {
     if (!states && !inlineFallback) spawn();
     pump();
   }).then((data) => {
-    const value = kind === 'svg' ? String(data) : data;
+    // Из worker'а Buffer приходит как Uint8Array (structured clone) — возвращаем
+    // настоящий Buffer: его ждут PDFKit и вызовы .toString('base64').
+    const value = kind === 'svg' ? String(data) : (Buffer.isBuffer(data) ? data : Buffer.from(data));
     memoSet(key, value);
     return value;
   });

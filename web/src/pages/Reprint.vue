@@ -1176,7 +1176,7 @@ async function printLabels() {
         id="reprint"
         title="Повторная печать за 3 шага"
         :steps="[
-          'Вставьте коды в поле «Коды маркировки» — по одному на строку. Можно отсканировать камерой или COM-сканером.',
+          'Вставьте коды в поле «Коды маркировки» — по одному на строку. Можно отсканировать камерой.',
           'Выберите формат этикетки. Галочка «Только DataMatrix» подходит для большинства случаев; данные товара заполнять необязательно.',
           'Нажмите «Скачать PDF». Проверка кодов запустится автоматически — отдельно нажимать «Проверить» не нужно.'
         ]"
@@ -1229,8 +1229,8 @@ async function printLabels() {
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>
           <div class="flex flex-wrap items-center gap-2">
             <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCamera"><BrandIcon name="camera" :size="16" class="inline-block mr-1 -mt-0.5" />Камера</button>
-            <button class="btn-ghost !py-2 !px-3 text-sm" @click="connectSerial">{{ serialConnected ? 'COM подключён' : 'COM-сканер' }}</button>
-            <button class="btn-ghost !py-2 !px-2.5 text-sm" title="Настройки сканера" aria-label="Настройки сканера" @click="openSettings"><BrandIcon name="settings" :size="16" /></button>
+            <button class="btn-ghost !py-2 !px-3 text-sm hidden sm:inline-flex" @click="connectSerial">{{ serialConnected ? 'COM подключён' : 'COM-сканер' }}</button>
+            <button class="btn-ghost !py-2 !px-2.5 text-sm hidden sm:inline-flex" title="Настройки сканера" aria-label="Настройки сканера" @click="openSettings"><BrandIcon name="settings" :size="16" /></button>
           </div>
           <p v-if="cameraError" class="text-xs text-red-500">{{ cameraError }}</p>
           <p v-if="serialError" class="text-xs text-amber-500">{{ serialError }}</p>

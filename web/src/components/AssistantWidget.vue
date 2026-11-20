@@ -252,8 +252,8 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <!-- Кнопка вызова окна: робот стоит НАД кнопкой -->
-    <div class="fixed z-40 right-4 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] sm:right-5 sm:bottom-6 print:hidden flex flex-col items-center sm:items-end">
+    <!-- Кнопка вызова окна: робот стоит НАД кнопкой и уезжает влево, когда открыт диалог -->
+    <div class="ai-dock fixed z-40 print:hidden flex flex-col items-center sm:items-end" :class="{ 'is-open': assistantUi.open }">
       <transition name="ai-pop">
         <button
           v-if="idleHint && !assistantUi.open"
@@ -269,24 +269,24 @@ onUnmounted(() => {
 
       <div class="ai-robot-float" aria-hidden="true">
         <span class="ai-bot-halo"></span>
-        <RobotMascot class="hidden sm:block" :state="mascotState" :size="92" />
+        <RobotMascot class="hidden sm:block" :state="mascotState" :size="assistantUi.open ? 82 : 92" />
         <RobotMascot class="sm:hidden" :state="mascotState" :size="78" />
       </div>
 
       <button
         class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white w-14 h-14 p-0 sm:w-auto sm:h-auto sm:pl-4 sm:pr-5 sm:py-2.5 sm:gap-2"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
-        aria-label="Открыть AI-помощника"
+        :aria-label="assistantUi.open ? 'Свернуть AI-помощника' : 'Открыть AI-помощника'"
         :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
         @click="toggleOpen"
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
       >
         <span class="ai-shimmer" aria-hidden="true"></span>
-        <BrandIcon name="help" :size="22" class="sm:hidden" />
+        <BrandIcon :name="assistantUi.open ? 'close' : 'help'" :size="22" class="sm:hidden" />
         <span class="hidden sm:flex flex-col items-start leading-none text-left">
-          <span class="text-[13px] font-semibold tracking-wide">AI-помощник</span>
-          <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">PREMIUM · СПРОСИТЬ</span>
+          <span class="text-[13px] font-semibold tracking-wide">{{ assistantUi.open ? 'Свернуть' : 'AI-помощник' }}</span>
+          <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">{{ assistantUi.open ? 'ПРЕМИУМ · ОНЛАЙН' : 'ПРЕМИУМ · СПРОСИТЬ' }}</span>
         </span>
         <span class="ai-notify-dot" :class="{ 'is-on': idleHint }" aria-hidden="true"></span>
       </button>
@@ -539,6 +539,28 @@ onUnmounted(() => {
   isolation: isolate;
   animation: ai-idle-bob 5.5s ease-in-out infinite;
   transform-origin: 50% 90%;
+}
+.ai-dock {
+  right: 1rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  transition: right .28s ease, bottom .28s ease;
+}
+@media (min-width: 640px) {
+  .ai-dock {
+    right: 1.25rem;
+    bottom: 1.5rem;
+  }
+  /* диалог открыт: робот уезжает влево от окна и остаётся целиком виден */
+  .ai-dock.is-open {
+    right: calc(430px + 1.25rem + 44px);
+    bottom: 10rem;
+  }
+}
+@media (max-width: 639px) {
+  /* на телефоне окно занимает весь экран — робот в шапке окна */
+  .ai-dock.is-open {
+    display: none;
+  }
 }
 .ai-robot-float {
   position: relative;

@@ -1,6 +1,7 @@
 <script setup>
 import { store } from '../store.js';
 import BrandIcon from './BrandIcon.vue';
+import { openAssistant } from '../lib/assistant-ui.js';
 defineProps({ active: String });
 const items = [
   { icon: 'overview', t: 'Обзор', to: '/app' },
@@ -13,10 +14,13 @@ const items = [
   { icon: 'api', t: 'API', to: '/app/apikeys' },
   { icon: 'cz', t: 'Честный ЗНАК', to: '/app/cz' },
   { icon: 'star', t: 'Отзывы', to: '/app/reviews' },
-  { icon: 'help', t: 'AI-помощник', to: '/app/assistant' },
+  { icon: 'help', t: 'AI-помощник', action: 'assistant' },
   { icon: 'lock', t: 'Безопасность', to: '/app/security' },
   ...(['admin', 'support'].includes(store.user?.role) ? [{ icon: 'settings', t: 'Админка', to: '/app/admin' }] : [])
 ];
+function onClick(n) {
+  if (n.action === 'assistant') openAssistant();
+}
 </script>
 
 <template>
@@ -28,6 +32,10 @@ const items = [
           class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap border border-slate-200 dark:border-white/10 text-slate-500">
           <BrandIcon :name="n.icon" :size="18" class="shrink-0" /><span>{{ n.t }} ↗</span>
         </a>
+        <button v-else-if="n.action" type="button" @click="onClick(n)"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap border border-brand-500/30 text-brand-400">
+          <BrandIcon :name="n.icon" :size="18" class="shrink-0" /><span>{{ n.t }}</span>
+        </button>
         <router-link v-else :to="n.to"
           class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium whitespace-nowrap border transition"
           :class="active === n.to ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 border-brand-500/40 text-slate-800 dark:text-white' : 'border-slate-200 dark:border-white/10 text-slate-500'">
@@ -49,6 +57,10 @@ const items = [
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">
           <BrandIcon :name="n.icon" :size="18" class="shrink-0" /><span>{{ n.t }} ↗</span>
         </a>
+        <button v-else-if="n.action" type="button" @click="onClick(n)"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition text-brand-400 hover:bg-brand-500/10 border border-brand-500/20">
+          <BrandIcon :name="n.icon" :size="18" class="shrink-0" /><span>{{ n.t }}</span>
+        </button>
         <router-link v-else :to="n.to"
           class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
           :class="active === n.to ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 font-semibold border border-brand-500/30' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'">

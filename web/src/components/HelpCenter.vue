@@ -2,8 +2,13 @@
 import { ref } from 'vue';
 import { hints } from '../lib/hints.js';
 import BrandIcon from './BrandIcon.vue';
+import { openAssistant } from '../lib/assistant-ui.js';
 
 const open = ref(false);
+function askAi() {
+  open.value = false;
+  openAssistant();
+}
 </script>
 
 <template>
@@ -34,7 +39,7 @@ const open = ref(false);
               <div class="text-sm font-semibold">AI-помощник</div>
               <div class="text-xs text-slate-500">Отвечает по «Честному ЗНАКу» и работе сервиса. Сложные вопросы передаёт администратору.</div>
             </div>
-            <router-link to="/app/assistant" class="btn-primary !py-1.5 !px-3 text-xs" @click="open = false">Спросить</router-link>
+            <button type="button" class="btn-primary !py-1.5 !px-3 text-xs" @click="askAi">Спросить</button>
           </div>
         </div>
 

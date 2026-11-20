@@ -46,7 +46,7 @@ async function ask() {
   busy.value = true;
   scrollChat();
   try {
-    const r = await api.assistantChat(text);
+    const r = await api.assistantChat(text, 'assistant');
     messages.value.push({
       role: 'a',
       text: r.answer,
@@ -124,16 +124,24 @@ onMounted(() => {
   <div class="max-w-6xl mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
     <SideNav active="/app/assistant" />
     <div class="space-y-4">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 class="font-display font-bold text-2xl">AI-помощник</h1>
-        <p class="text-sm text-slate-500 mt-1">
-          Отвечает по работе сервиса и маркировке «Честный ЗНАК». Если не решит — передаст вопрос администратору.
-        </p>
+    <div class="ai-hero rounded-2xl p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-11 h-11 ai-logo">
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-display font-bold text-2xl">AI-помощник</h1>
+              <span class="ai-premium-tag">PREMIUM</span>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              CODE QR PRO · отвечает по «Честному ЗНАКу» и работе сервиса, сложные вопросы передаёт администратору.
+            </p>
+          </div>
+        </div>
+        <span class="chip-soon" :class="isPremium ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'">
+          {{ isPremium ? 'PREMIUM · доступен' : 'только PREMIUM' }}
+        </span>
       </div>
-      <span class="chip-soon" :class="isPremium ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'">
-        {{ isPremium ? 'PREMIUM · доступен' : 'только PREMIUM' }}
-      </span>
     </div>
 
     <div v-if="!isPremium" class="glass rounded-2xl p-6 text-center">
@@ -230,3 +238,31 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.ai-hero {
+  background: linear-gradient(120deg, rgba(124, 58, 237, 0.16), rgba(99, 102, 241, 0.08) 55%, rgba(217, 70, 239, 0.14));
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  box-shadow: 0 18px 45px -24px rgba(124, 58, 237, 0.55);
+}
+.ai-logo {
+  border-radius: 12px;
+  padding: 1px;
+  background: linear-gradient(135deg, #7c3aed, #d946ef);
+  box-shadow: 0 6px 16px -6px rgba(124, 58, 237, 0.65);
+}
+.ai-premium-tag {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+:global(.dark) .ai-premium-tag {
+  color: #ddd6fe;
+  background: rgba(124, 58, 237, 0.25);
+}
+</style>

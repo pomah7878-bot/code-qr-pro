@@ -33,18 +33,36 @@ function supportAccess(user) {
   return user.role === 'admin' || user.role === 'support' || plan.id === 'premium';
 }
 
-const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток).
-Помогаешь клиентам по работе сервиса и маркировке. Опирайся ТОЛЬКО на статьи базы знаний ниже.
+/** Разделы кабинета: по ним помощник понимает, где сейчас клиент. */
+const PAGES = {
+  overview: { label: 'Обзор', keywords: 'обзор кабинет лимиты тариф статистика остатки' },
+  history: { label: 'История', keywords: 'история заданий скачать выгрузка архив срок хранения' },
+  generate: { label: 'Генерация', keywords: 'генерация коды csv xlsx загрузка gtIN datamatrix' },
+  labels: { label: 'Этикетки', keywords: 'этикетки печать pdf размер шаблон макет принтер' },
+  sets: { label: 'Наборы', keywords: 'наборы кин комплект упаковка' },
+  reprint: { label: 'Повторная печать', keywords: 'повторная печать перепечатать этикетки история' },
+  billing: { label: 'Подписка', keywords: 'подписка тариф premium лимиты оплата' },
+  api: { label: 'API', keywords: 'api ключи интеграция лимиты разработчик' },
+  cz: { label: 'Честный ЗНАК', keywords: 'честный знак проверка кодов маркировка киз' },
+  reviews: { label: 'Отзывы', keywords: 'отзывы рейтинг' },
+  security: { label: 'Безопасность', keywords: 'безопасность 2fa пароль сессии вход' },
+  assistant: { label: 'AI-помощник', keywords: '' }
+};
+
+const SYSTEM = `Ты — AI-помощник сервиса CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток). Помогаешь клиентам прямо в личном кабинете.
+Клиент находится в разделе кабинета: {{PAGE}}. Сначала пойми, что именно не получается в ЭТОМ разделе.
+
 Правила:
-1. Отвечай по-русски, по делу, шагами, 3–7 предложений или короткий список. Без markdown-заголовков.
-2. Не выдумывай функции, цены и сроки, которых нет в базе знаний.
-3. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
-4. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
-5. Не обещай действий от имени администратора. Если нужен доступ к аккаунту, сброс 2FA, разблокировка или вопрос про деньги — предложи «Передать в поддержку».
-6. Если не уверен — так и скажи и предложи поддержку.
+1. Если вопрос короткий или непонятный — задай ОДИН короткий уточняющий вопрос и поставь clarify=true, не додумывай.
+2. Отвечай по-русски, по делу, шагами, 3–7 предложений или короткий список. Без markdown-заголовков.
+3. Опирайся ТОЛЬКО на статьи базы знаний ниже. Не выдумывай функции, цены и сроки.
+4. Финансы (оплата, скидки, возвраты, счета) не решай: вежливо объясни, что это решает поддержка, и предложи передать обращение.
+5. Не проси пароль, коды 2FA, API-ключи и не советуй передавать их кому-либо.
+6. Не обещай действий от имени администратора. Если нужен доступ к аккаунту, сброс 2FA, разблокировка или вопрос про деньги — предложи «Передать в поддержку».
+7. Если не уверен — так и скажи и предложи поддержку.
 
 Верни строго JSON без markdown:
-{"answer":"ответ клиенту","needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
+{"answer":"ответ или уточняющий вопрос","clarify":true|false,"needHuman":true|false,"reason":"почему нужен человек (коротко)","sources":["заголовки статей"]}`;
 
 export async function registerAiSupportRoutes(app) {
   app.post('/api/assistant/chat', { preHandler: requireAuth }, async (req, reply) => {
@@ -59,14 +77,18 @@ export async function registerAiSupportRoutes(app) {
 
     const message = String(req.body?.message || '').trim().slice(0, 1500);
     if (message.length < 3) return reply.code(400).send({ error: 'Опишите вопрос подробнее' });
+    const pageKey = Object.prototype.hasOwnProperty.call(PAGES, String(req.body?.page || '')) ? String(req.body.page) : 'overview';
+    const page = PAGES[pageKey];
 
     const limit = bumpLimit(`ai-support:u${user.id}`, LIMIT_CHAT_PER_HOUR);
     if (!limit.ok) return reply.code(429).send({ error: 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.' });
 
-    const articles = searchKnowledge(message, 4);
+    // ищем по вопросу, добавляя ключевые слова текущего раздела — ответ будет про то меню, где клиент
+    const articles = searchKnowledge(`${message} ${page.keywords}`, 4);
     const context = kbContext(articles);
     const started = Date.now();
     let answer = '';
+    let clarify = false;
     let needHuman = false;
     let reason = '';
     let model = cfg.model;
@@ -74,14 +96,15 @@ export async function registerAiSupportRoutes(app) {
 
     try {
       const res = await askAi({
-        system: SYSTEM,
-        user: `Вопрос клиента: ${message}\n\nБаза знаний:\n${context || '(подходящих статей не найдено)'}`,
+        system: SYSTEM.replace('{{PAGE}}', page.label),
+        user: `Раздел: ${page.label}\nВопрос клиента: ${message}\n\nБаза знаний:\n${context || '(подходящих статей не найдено)'}`,
         cfg,
         freeMaxTokens: 900
       });
       model = String(res.model || cfg.model).slice(0, 120);
       const parsed = res.parsed || {};
       answer = String(parsed.answer || res.content || '').trim().slice(0, 3000);
+      clarify = Boolean(parsed.clarify);
       needHuman = Boolean(parsed.needHuman);
       reason = String(parsed.reason || '').slice(0, 300);
       if (!answer) throw new Error('Пустой ответ помощника');
@@ -106,8 +129,10 @@ export async function registerAiSupportRoutes(app) {
 
     return {
       answer,
+      clarify,
       needHuman,
       reason,
+      page: { key: pageKey, label: page.label },
       sources: articles.map((a) => ({ slug: a.slug, title: a.title })),
       model,
       durationMs,

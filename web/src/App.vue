@@ -1,13 +1,16 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 import { api } from './api.js';
 import HelpCenter from './components/HelpCenter.vue';
+import AssistantWidget from './components/AssistantWidget.vue';
 import BrandIcon from './components/BrandIcon.vue';
 
 const router = useRouter();
+const route = useRoute();
 const menuOpen = ref(false);
+const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app') && !route.path.startsWith('/app/admin'));
 const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 
@@ -142,6 +145,7 @@ async function changePassword() {
       </div>
     </Teleport>
     <HelpCenter />
+    <AssistantWidget v-if="showAssistant" />
   </div>
 </template>
 

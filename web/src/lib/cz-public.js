@@ -10,6 +10,8 @@
  * даты, статус кода и результат криптопроверки.
  */
 
+import { eanDigits } from './ean13.js';
+
 const ENDPOINT = 'https://mobile.api.crpt.ru/mobile/check';
 const CACHE_KEY = 'cq_cz_public_cards_v1';
 const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -101,7 +103,15 @@ export async function fetchCodeCard(code) {
   if (!raw || typeof raw !== 'object') throw new Error('ЧЗ вернул не JSON');
 
   if (!raw.codeFounded) {
-    return { found: false, gtin: '', serial: '', message: 'Код не найден в «Честном ЗНАКе»' };
+    return {
+      found: false,
+      gtin: '',
+      serial: '',
+      sentCode: trimmed,
+      czStatus: String(raw.status || raw.statusV2 || 'not_found'),
+      czWarning: String(raw.warning || ''),
+      message: 'Код не найден в «Честном ЗНАКе»'
+    };
   }
 
   const data = pickCategoryData(raw);
@@ -151,13 +161,91 @@ export async function fetchCodeCard(code) {
   return card;
 }
 
+/** Карточка товара по GTIN/EAN-13 из Национального каталога ЧЗ (без полного кода). */
+export async function fetchCatalogCard(gtin) {
+  const digits = eanDigits(gtin);
+  if (digits.length < 8) throw new Error('Нет GTIN для карточки');
+
+  const cache = readCache();
+  const key = `gtin:${digits}`;
+  const cached = cache[key];
+  if (cached && Date.now() - (cached.at || 0) < CACHE_TTL_MS && cached.card) return { ...cached.card, cached: true };
+
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `code=${encodeURIComponent(digits)}&codeType=ean13`,
+    credentials: 'omit',
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!res.ok) throw new Error(`ЧЗ вернул HTTP ${res.status}`);
+  const raw = await res.json().catch(() => null);
+  if (!raw || !raw.codeFounded) {
+    return { found: false, gtin: digits, message: 'Товар с таким GTIN не найден в Национальном каталоге' };
+  }
+  const catalog = Array.isArray(raw.catalogData) ? raw.catalogData[0] : {};
+  const attrs = Array.isArray(catalog.good_attrs) ? catalog.good_attrs : [];
+  const attr = (name) => String((attrs.find((a) => a.attr_name === name) || {}).attr_value || '');
+  const card = {
+    found: true,
+    catalogOnly: true,
+    sourceLabel: 'Честный ЗНАК · Национальный каталог',
+    name: raw.productName || catalog.good_name || attr('Полное наименование товара'),
+    brand: catalog.brand_name || attr('Товарный знак'),
+    category: attr('Вид товара'),
+    productKind: attr('Вид товара'),
+    quantity: attr('Номинальное количество'),
+    size: attr('Номинальное количество'),
+    producer: catalog.producer_name || '',
+    producerInn: catalog.producer_inn || '',
+    structure: attr('Состав товара'),
+    composition: attr('Состав товара'),
+    serviceLife: attr('Срок службы товара'),
+    serviceLifeCharacteristic: attr('Характеристика срока использования товара'),
+    model: '',
+    color: '',
+    material: '',
+    productionDate: '',
+    expirationDate: '',
+    status: '',
+    statusRaw: '',
+    crypto: null,
+    goodUrl: catalog.good_url || '',
+    gtin: raw.gtin || digits,
+    serial: '',
+    cached: false
+  };
+  writeCache(key, card);
+  return card;
+}
+
+/** Пакетная проверка карточек по GTIN (по умолчанию до 5). */
+export async function fetchCatalogCards(gtins, limit = 5) {
+  const list = (gtins || []).map((g) => eanDigits(g)).filter((g) => g.length >= 8).slice(0, limit);
+  const results = await Promise.allSettled(list.map((g) => fetchCatalogCard(g)));
+  return results.map((r, i) => {
+    const value = r.status === 'fulfilled' ? r.value : null;
+    return {
+      gtin: list[i],
+      card: value && value.found ? value : null,
+      error: r.status === 'rejected' ? String(r.reason?.message || r.reason) : ''
+    };
+  });
+}
+
 /** Пакетная проверка (по умолчанию до 5 кодов, параллельно). */
 export async function fetchCards(codes, limit = 5) {
   const list = (codes || []).slice(0, limit);
   const results = await Promise.allSettled(list.map((code) => fetchCodeCard(code)));
-  return results.map((r, i) => ({
-    code: list[i],
-    card: r.status === 'fulfilled' && r.value?.found ? r.value : null,
-    error: r.status === 'rejected' ? String(r.reason?.message || r.reason) : ''
-  }));
+  return results.map((r, i) => {
+    const value = r.status === 'fulfilled' ? r.value : null;
+    return {
+      code: list[i],
+      card: value && value.found ? value : null,
+      error: r.status === 'rejected' ? String(r.reason?.message || r.reason) : '',
+      sentCode: value?.sentCode || '',
+      czStatus: value?.czStatus || '',
+      czWarning: value?.czWarning || ''
+    };
+  });
 }

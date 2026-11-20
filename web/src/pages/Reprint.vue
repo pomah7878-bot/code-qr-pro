@@ -10,7 +10,7 @@ import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
-import { fetchCards } from '../lib/cz-public.js';
+import { fetchCards, fetchCatalogCards } from '../lib/cz-public.js';
 import { checkEan13, eanDigits } from '../lib/ean13.js';
 
 const MAX = 5000;
@@ -556,11 +556,37 @@ async function loadProductCards() {
       if (publicError) cardsMessage.value = `Часть кодов не удалось проверить в ЧЗ: ${publicError}`;
       return;
     }
+    const notFound = publicCards.find((c) => c && !c.card && !c.error) || null;
+    // 1б) Код не найден (например, короткий, без криптохвоста) — берём карточку из Нацкаталога по GTIN.
+    if (notFound) {
+      const gtins = valid.map((c) => eanDigits(c.gtin)).filter((g) => g.length >= 8);
+      if (gtins.length) {
+        const catalogCards = await fetchCatalogCards(gtins, 5);
+        const catalogFound = catalogCards.filter((c) => c && c.card).map((c) => ({
+          code: '',
+          gtin: c.gtin,
+          card: c.card,
+          cz: { configured: true, source: 'catalog' }
+        }));
+        if (catalogFound.length) {
+          cards.value = catalogFound;
+          const sent = String(notFound.sentCode || '').slice(0, 45);
+          cardsMessage.value = `Код не найден в ЧЗ (статус: ${notFound.czStatus || 'not_found'}) — показана карточка из Национального каталога по GTIN. `
+            + `Статус кода не проверен. Отправленный код: ${sent}${String(notFound.sentCode || '').length > 45 ? '…' : ''}.`;
+          return;
+        }
+      }
+    }
     // 2) Серверный фолбэк: личный токен ЧЗ или открытые базы по GTIN.
     const r = await api.productCards(valid.slice(0, 10).map((c) => ({ code: c.code, gtin: c.gtin })));
     cards.value = (r.cards || []).filter((c) => c && !c.error);
     if (publicError) {
       cardsMessage.value = `Публичная проверка ЧЗ недоступна (${publicError}). `;
+    } else if (notFound) {
+      const sent = String(notFound.sentCode || '').slice(0, 45);
+      cardsMessage.value = `Публичная проверка ЧЗ: код не найден (статус: ${notFound.czStatus || 'not_found'}). `
+        + `Отправлен код: ${sent}${String(notFound.sentCode || '').length > 45 ? '…' : ''}. `
+        + 'Проверьте, что скопирован весь DataMatrix (с криптохвостом) и код уже нанесён/введён в оборот. ';
     }
     const czError = cards.value.map((c) => c.cz && c.cz.error).find(Boolean);
     if (!cards.value.some((c) => c.card)) {
@@ -1154,6 +1180,9 @@ async function printLabels() {
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="czToken.busy" @click="saveCzToken">{{ czToken.busy ? 'Сохраняем…' : 'Подключить' }}</button>
             </div>
           </template>
+          <p v-if="!czToken.configured && czToken.input" class="text-[11px] text-amber-500">
+            Токен введён, но ещё не сохранён — нажмите «Подключить» (или Enter).
+          </p>
           <p v-if="czToken.message" class="text-[11px] text-amber-500">{{ czToken.message }}</p>
         </div>
         <div class="space-y-2">

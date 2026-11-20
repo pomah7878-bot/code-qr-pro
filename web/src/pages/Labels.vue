@@ -8,7 +8,7 @@ import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
+import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
 const S = 4; // px на мм для предпросмотра
 const canvas = ref(null);
@@ -42,6 +42,13 @@ const btStatus = ref('');
 const btWarning = ref('');
 const error = ref('');
 const notice = ref('');
+const pdfProgress = ref(null);
+const pdfBusy = ref(false);
+const pdfPercent = computed(() => {
+  const p = pdfProgress.value;
+  if (!p || !p.total) return 0;
+  return Math.min(100, Math.round((p.done / p.total) * 100));
+});
 const premium = computed(() => !!store.plan?.labelEditor);
 let itemImg = null;
 let uid = 1;
@@ -617,17 +624,29 @@ async function exportPdf() {
   // iOS: окно открываем синхронно в жесте, иначе Safari его заблокирует.
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
+  const count = dataRows.value.length;
+  pdfBusy.value = true;
   try {
     const body = jobId.value != null
       ? { template: tpl, jobId: jobId.value, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), source: 'labels' };
-    await downloadBlob('/api/labels/pdf', body, `labels-${dataRows.value.length}.pdf`, iosWin);
+    // Большие пакеты — с прогрессом, чтобы мобильный браузер не оборвал запрос.
+    if (count > 300) {
+      pdfProgress.value = { done: 0, total: count };
+      await downloadPdfTask('/api/labels/pdf', body, `labels-${count}.pdf`, (p) => {
+        pdfProgress.value = { done: Number(p.done) || 0, total: Number(p.total) || count };
+      }, iosWin);
+    } else {
+      await downloadBlob('/api/labels/pdf', body, `labels-${count}.pdf`, iosWin);
+    }
     navigated = true;
     if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы».';
   } catch (e) {
     error.value = e.message;
   } finally {
     if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
+    pdfProgress.value = null;
+    pdfBusy.value = false;
   }
 }
 
@@ -640,17 +659,28 @@ async function exportPdfSingle() {
   }
   const iosWin = isIOS() ? openPlaceholderWindow() : null;
   let navigated = false;
+  const count = dataRows.value.length;
+  pdfBusy.value = true;
   try {
     const body = jobId.value != null
       ? { template: tpl, jobId: jobId.value, single: true, source: 'labels' }
       : { template: tpl, rows: dataRows.value.map(({ row_index, ...r }) => r), single: true, source: 'labels' };
-    await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${dataRows.value.length}.pdf`, iosWin);
+    if (count > 300) {
+      pdfProgress.value = { done: 0, total: count };
+      await downloadPdfTask('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${count}.pdf`, (p) => {
+        pdfProgress.value = { done: Number(p.done) || 0, total: Number(p.total) || count };
+      }, iosWin);
+    } else {
+      await downloadBlob('/api/labels/pdf', body, `label-${tpl.widthMm}x${tpl.heightMm}-${count}.pdf`, iosWin);
+    }
     navigated = true;
     if (isIOS()) notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
   } catch (e) {
     error.value = e.message;
   } finally {
     if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
+    pdfProgress.value = null;
+    pdfBusy.value = false;
   }
 }
 
@@ -919,8 +949,14 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
               </div>
             </template>
 
-            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdf"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF-лист А4 ({{ dataRows.length || 0 }})</button>
-            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="exportPdfSingle"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
+            <button class="btn-primary w-full !py-2 text-sm" :disabled="!premium || !dataRows.length || pdfBusy" @click="exportPdf"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF-лист А4 ({{ dataRows.length || 0 }})</button>
+            <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length || pdfBusy" @click="exportPdfSingle"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF по размеру этикетки {{ tpl.widthMm }}×{{ tpl.heightMm }} мм ({{ dataRows.length || 0 }})</button>
+            <div v-if="pdfProgress" class="space-y-1">
+              <div class="h-2 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all duration-300" :style="{ width: pdfPercent + '%' }"></div>
+              </div>
+              <p class="text-xs text-slate-500">Готовим PDF: {{ pdfProgress.done }} / {{ pdfProgress.total }} этикеток · {{ pdfPercent }}%</p>
+            </div>
             <button class="btn-ghost w-full !py-2 text-sm" :disabled="!premium || !dataRows.length" @click="printLabels"><BrandIcon name="print" :size="15" class="inline-block mr-1 -mt-0.5" />Печать прямо с сайта ({{ dataRows.length || 0 }})</button>
             <p class="text-xs text-slate-500">Для термопринтера выбирай PDF по размеру этикетки — без листа A4.</p>
             <p class="text-xs text-slate-500">При печати из браузера выбери бумагу {{ tpl.widthMm }}×{{ tpl.heightMm }} мм; Adobe PDF/A4 добавит белые поля.</p>

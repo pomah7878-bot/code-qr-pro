@@ -9,7 +9,11 @@ import { availableParallelism } from 'node:os';
 import bwipjs from 'bwip-js';
 
 const WORKER_URL = new URL('./barcode-worker.js', import.meta.url);
-const POOL_SIZE = Math.max(1, Math.min(4, (availableParallelism?.() || 4) - 1));
+// На боевом сервере 2 ядра: раньше формула «ядра − 1» давала там ОДИН воркер,
+// то есть кодирование шло последовательно, как и до пула. Берём хотя бы 2
+// воркера, а на многоядерных машинах — до 4-х (основной поток тоже работает).
+const CORES = availableParallelism?.() || 4;
+const POOL_SIZE = Math.max(2, Math.min(4, Number(process.env.BARCODE_WORKERS) || CORES));
 const MEMO_MAX = 4000;
 
 const memo = new Map(); // одинаковые штрихкоды (повторная печать, PDF + печать) не кодируем заново

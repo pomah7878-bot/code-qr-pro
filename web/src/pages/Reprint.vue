@@ -8,9 +8,9 @@ import ValidHint from '../components/ValidHint.vue';
 import PageGuide from '../components/PageGuide.vue';
 import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
-import { downloadBlob, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
+import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 
-const MAX = 1000;
+const MAX = 5000;
 const categories = [
   { id: 'lp', title: 'Легпром', icon: 'shirt', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
   { id: 'shoes', title: 'Обувь', icon: 'shoe', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
@@ -49,6 +49,12 @@ const codesText = ref('');
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
+const pdfProgress = ref(null);
+const pdfPercent = computed(() => {
+  const p = pdfProgress.value;
+  if (!p || !p.total) return 0;
+  return Math.min(100, Math.round((p.done / p.total) * 100));
+});
 const result = ref(null);
 const pdfUrl = ref('');
 const shortWarning = ref('');
@@ -655,7 +661,22 @@ async function downloadPdf() {
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
     if (isIOS()) saveDraft();
-    const blobUrl = await downloadBlob('/api/labels/pdf', { template, rows, single: true, source: 'reprint' }, `reprint-${rows.length}.pdf`, iosWin);
+    // Большие пакеты готовим в фоне: виден прогресс, и запрос не рвётся
+    // мобильным таймаутом на десятках секунд генерации.
+    const body = { template, rows, single: true, source: 'reprint' };
+    let blobUrl;
+    if (rows.length > 200) {
+      pdfProgress.value = { done: 0, total: rows.length };
+      blobUrl = await downloadPdfTask(
+        '/api/labels/pdf',
+        body,
+        `reprint-${rows.length}.pdf`,
+        (p) => { pdfProgress.value = { done: Number(p.done) || 0, total: Number(p.total) || rows.length }; },
+        iosWin
+      );
+    } else {
+      blobUrl = await downloadBlob('/api/labels/pdf', body, `reprint-${rows.length}.pdf`, iosWin);
+    }
     navigated = true;
     if (isIOS()) {
       notice.value = 'PDF открылся. Нажмите «Поделиться» → «Сохранить в Файлы» или «Печать».';
@@ -669,6 +690,7 @@ async function downloadPdf() {
   } finally {
     if (!navigated && iosWin && !iosWin.closed) { try { iosWin.close(); } catch { /* ignore */ } }
     if (timer) clearTimeout(timer);
+    pdfProgress.value = null;
     busy.value = false;
   }
 }
@@ -733,7 +755,7 @@ async function printLabels() {
           'Выберите формат этикетки. Галочка «Только DataMatrix» подходит для большинства случаев; данные товара заполнять необязательно.',
           'Нажмите «Скачать PDF». Проверка кодов запустится автоматически — отдельно нажимать «Проверить» не нужно.'
         ]"
-        note="До 1000 кодов за раз. Если PDF не скачался, под кнопкой появится ссылка «Открыть PDF в новой вкладке»."
+        note="До 5000 кодов за раз. Долгий пакет собирается с индикатором прогресса; если PDF не скачался, под кнопкой появится ссылка «Открыть PDF в новой вкладке»."
       />
 
       <div class="grid md:grid-cols-2 gap-4">
@@ -789,9 +811,15 @@ async function printLabels() {
 
           <div class="grid grid-cols-2 gap-2">
             <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
-              <BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? 'Готовим…' : `PDF (${result?.valid?.length || codesCount})` }}
+              <BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? (pdfProgress ? `Готовим… ${pdfPercent}%` : 'Готовим…') : `PDF (${result?.valid?.length || codesCount})` }}
             </button>
             <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
+          </div>
+          <div v-if="pdfProgress" class="space-y-1">
+            <div class="h-2 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all duration-300" :style="{ width: pdfPercent + '%' }"></div>
+            </div>
+            <p class="text-xs text-slate-500">Готовим PDF: {{ pdfProgress.done }} / {{ pdfProgress.total }} этикеток · {{ pdfPercent }}%</p>
           </div>
           <p class="text-xs text-slate-500">Один клик: проверим коды и подготовим PDF.</p>
           <p class="text-xs text-slate-500">При печати выберите принтер этикеток и бумагу {{ currentFormat.w }}×{{ currentFormat.h }} мм. Adobe PDF/A4 добавит белые поля.</p>
@@ -842,7 +870,7 @@ async function printLabels() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(p, i) in infoRows" :key="i" class="border-b border-slate-100 dark:border-white/5">
+              <tr v-for="(p, i) in infoRows.slice(0, 300)" :key="i" class="border-b border-slate-100 dark:border-white/5">
                 <td class="py-1.5 pr-3 font-mono">{{ p.gtin }}</td>
                 <td class="py-1.5 pr-3 font-mono">{{ p.serial }}</td>
                 <td class="py-1.5 pr-3">{{ p.short ? 'GS1 (93)' : 'КИЗ (91/92)' }}</td>
@@ -853,6 +881,7 @@ async function printLabels() {
               </tr>
             </tbody>
           </table>
+          <p v-if="infoRows.length > 300" class="text-xs text-slate-500 mt-2">Показаны первые 300 из {{ infoRows.length }} кодов — в PDF попадут все.</p>
         </div>
         <p v-if="infoMessage" class="text-xs text-slate-500 mt-2">{{ infoMessage }}</p>
         <p class="text-xs text-slate-500 mt-2">Для маркировки печатается GS1 DataMatrix с полным кодом; QR не заменяет DataMatrix и в 20×20 не помещается.</p>

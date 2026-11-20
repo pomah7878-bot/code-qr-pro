@@ -3,7 +3,7 @@ import { planOf } from './plans.js';
 import { requireAuth } from './routes.js';
 import { resolveElements, resolveElementsMany, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
 import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
@@ -16,7 +16,9 @@ const EL_TYPES = ['datamatrix', 'code128', 'ean13', 'ean8', 'upca', 'code39', 'i
 const PDF_CACHE_TTL_MS = 10 * 60 * 1000;
 const PDF_CACHE_MAX_ENTRIES = 24;
 const PDF_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+const PDF_CACHE_TOTAL_BYTES = Math.max(16, Number(process.env.PDF_CACHE_MAX_MB) || 96) * 1024 * 1024;
 const pdfCache = new Map(); // key -> { buffer, at }
+let pdfCacheBytes = 0;
 
 function pdfCacheKey(template, rows, single) {
   return createHash('sha256')
@@ -24,10 +26,17 @@ function pdfCacheKey(template, rows, single) {
     .digest('hex');
 }
 
+function pdfCacheDrop(key) {
+  const item = pdfCache.get(key);
+  if (!item) return;
+  pdfCacheBytes -= item.buffer.length;
+  pdfCache.delete(key);
+}
+
 function pdfCachePrune() {
   const now = Date.now();
   for (const [key, item] of pdfCache) {
-    if (now - item.at > PDF_CACHE_TTL_MS) pdfCache.delete(key);
+    if (now - item.at > PDF_CACHE_TTL_MS) pdfCacheDrop(key);
   }
 }
 
@@ -42,11 +51,62 @@ function pdfCacheGet(key) {
 function pdfCacheSet(key, buffer) {
   if (!buffer || buffer.length > PDF_CACHE_MAX_BYTES) return;
   pdfCachePrune();
-  if (pdfCache.size >= PDF_CACHE_MAX_ENTRIES) {
+  while (pdfCache.size >= PDF_CACHE_MAX_ENTRIES) {
     const oldest = pdfCache.keys().next();
-    if (!oldest.done) pdfCache.delete(oldest.value);
+    if (oldest.done) break;
+    pdfCacheDrop(oldest.value);
   }
+  // Общий лимит памяти кэша (на боевом сервере мало RAM).
+  while (pdfCache.size && pdfCacheBytes + buffer.length > PDF_CACHE_TOTAL_BYTES) {
+    let oldestKey = null;
+    let oldestAt = Infinity;
+    for (const [k, item] of pdfCache) {
+      if (item.at < oldestAt) { oldestAt = item.at; oldestKey = k; }
+    }
+    if (!oldestKey) break;
+    pdfCacheDrop(oldestKey);
+  }
+  if (pdfCacheBytes + buffer.length > PDF_CACHE_TOTAL_BYTES) return;
+  pdfCacheDrop(key);
   pdfCache.set(key, { buffer, at: Date.now() });
+  pdfCacheBytes += buffer.length;
+}
+
+// Длинные пакеты (сотни и тысячи этикеток) собираются в фоне, а клиент видит
+// прогресс и не держит один HTTP-запрос десятки секунд (на мобильных сетях
+// такие запросы рвутся по таймауту). Готовый файл отдаётся по короткой ссылке.
+const PDF_TASK_TTL_MS = 15 * 60 * 1000;
+const PDF_TASK_MAX_PER_USER = 3;
+const PDF_TASK_CONCURRENCY = 2;
+const pdfTasks = new Map(); // id -> task
+const pdfTaskQueue = [];
+let pdfTasksActive = 0;
+
+function pdfTaskPrune() {
+  const now = Date.now();
+  for (const [id, task] of pdfTasks) {
+    if (now - task.at > PDF_TASK_TTL_MS) pdfTasks.delete(id);
+  }
+}
+
+function pdfTaskCountForUser(userId) {
+  let count = 0;
+  for (const task of pdfTasks.values()) {
+    if (task.userId === userId && (task.status === 'queued' || task.status === 'running')) count += 1;
+  }
+  return count;
+}
+
+function pdfTaskView(task) {
+  return {
+    id: task.id,
+    status: task.status,
+    done: task.done,
+    total: task.total,
+    name: task.name,
+    url: task.status === 'ready' ? `/api/labels/pdf/file/${task.ticketId}` : null,
+    error: task.status === 'error' ? task.error : null
+  };
 }
 
 function validateTemplate(t) {
@@ -173,7 +233,7 @@ export async function registerLabelRoutes(app) {
     return items.map((item) => ({ code: item.normalized, gtin: item.gtin, serial: item.serial, row: String(item.row_index + 1) }));
   }
 
-  async function buildLabelsPdf(template, dataRows, singlePage) {
+  async function buildLabelsPdf(template, dataRows, singlePage, onProgress = null) {
     const K = 72 / 25.4;
     const pageSize = singlePage ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
     const doc = new PDFDocument({ size: pageSize, margin: 0 });
@@ -183,38 +243,104 @@ export async function registerLabelRoutes(app) {
       doc.on('end', resolve);
       doc.on('error', reject);
     });
-    await renderLabelsPdf(doc, template, dataRows, { single: singlePage });
+    await renderLabelsPdf(doc, template, dataRows, { single: singlePage, onProgress });
     doc.end();
     await ended;
     return Buffer.concat(chunks);
   }
 
   // Один PDF на одинаковый запрос не собираем повторно (см. pdfCache выше).
-  async function cachedLabelsPdf(template, dataRows, singlePage) {
+  async function cachedLabelsPdf(template, dataRows, singlePage, onProgress = null) {
     const key = pdfCacheKey(template, dataRows, singlePage);
     const cached = pdfCacheGet(key);
-    if (cached) return { pdf: cached, cached: true };
-    const pdf = await buildLabelsPdf(template, dataRows, singlePage);
+    if (cached) {
+      if (typeof onProgress === 'function') onProgress(dataRows.length, dataRows.length);
+      return { pdf: cached, cached: true };
+    }
+    const pdf = await buildLabelsPdf(template, dataRows, singlePage, onProgress);
     pdfCacheSet(key, pdf);
     return { pdf, cached: false };
   }
 
-  // PDF-лист А4 с сеткой этикеток по всем сгенерированным строкам задания
-  app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
+  // Общая проверка запроса на PDF: возвращает null, если ответ уже отправлен.
+  function preparePdfRequest(req, reply) {
     const plan = planOf(req.user);
-    if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
+    if (!plan.labelEditor) {
+      reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
+      return null;
+    }
     const { template, single } = req.body || {};
     const err = validateTemplate(template);
-    if (err) return reply.code(400).send({ error: err });
+    if (err) {
+      reply.code(400).send({ error: err });
+      return null;
+    }
     const singlePage = single === true;
     const dataRows = resolvePdfRows(req.user, req.body, reply);
-    if (!dataRows) return reply;
-    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
-    logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
+    if (!dataRows) return null;
+    return { template, dataRows, singlePage };
+  }
+
+  function logPdfActivity(user, req, dataRows, template, singlePage) {
+    const isReprint = req.body?.source === 'reprint';
+    logActivity(user, 'labels_pdf', isReprint ? 'PDF для повторной печати' : 'PDF этикеток', {
       total: dataRows.length,
       ok: dataRows.length,
       meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: req.body?.jobId ?? null }
     });
+  }
+
+  // Очередь фоновых сборок PDF (не больше PDF_TASK_CONCURRENCY одновременно).
+  function pumpPdfTasks() {
+    while (pdfTasksActive < PDF_TASK_CONCURRENCY && pdfTaskQueue.length) {
+      const task = pdfTaskQueue.shift();
+      if (task.status !== 'queued') continue;
+      pdfTasksActive += 1;
+      runPdfTask(task).finally(() => {
+        pdfTasksActive -= 1;
+        pumpPdfTasks();
+      });
+    }
+  }
+
+  async function runPdfTask(task) {
+    task.status = 'running';
+    task.at = Date.now();
+    try {
+      const pdf = await (async () => {
+        const key = pdfCacheKey(task.template, task.dataRows, task.singlePage);
+        const cached = pdfCacheGet(key);
+        if (cached) {
+          task.done = task.total;
+          return cached;
+        }
+        const built = await buildLabelsPdf(task.template, task.dataRows, task.singlePage, (done, total) => {
+          task.done = done;
+          task.total = total;
+        });
+        pdfCacheSet(key, built);
+        return built;
+      })();
+      const ticketId = putPdfTicket(task.userId, pdf, task.name);
+      if (!ticketId) throw new Error('Файл слишком большой — уменьшите количество этикеток');
+      task.ticketId = ticketId;
+      task.done = task.total;
+      task.status = 'ready';
+      try { logPdfActivity(task.user, task.reqSnapshot, task.dataRows, task.template, task.singlePage); } catch { /* ignore */ }
+    } catch (e) {
+      task.status = 'error';
+      task.error = String(e?.message || e);
+    }
+    task.at = Date.now();
+  }
+
+  // PDF-лист А4 с сеткой этикеток по всем сгенерированным строкам задания
+  app.post('/api/labels/pdf', { preHandler: requireAuth }, async (req, reply) => {
+    const prepared = preparePdfRequest(req, reply);
+    if (!prepared) return reply;
+    const { template, dataRows, singlePage } = prepared;
+    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
+    logPdfActivity(req.user, req, dataRows, template, singlePage);
     reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', 'attachment; filename="labels.pdf"');
     reply.header('Content-Length', String(pdf.length));
@@ -222,26 +348,63 @@ export async function registerLabelRoutes(app) {
     return reply.send(pdf);
   });
 
+  // Задание на PDF с прогрессом: клиент опрашивает статус и показывает полосу
+  // «готово N из M этикеток», а не ждёт один длинный ответ.
+  app.post('/api/labels/pdf/task', { preHandler: requireAuth }, async (req, reply) => {
+    const prepared = preparePdfRequest(req, reply);
+    if (!prepared) return reply;
+    pdfTaskPrune();
+    if (pdfTaskCountForUser(req.user.id) >= PDF_TASK_MAX_PER_USER) {
+      return reply.code(429).send({ error: 'Предыдущая подготовка PDF ещё идёт — дождитесь её окончания' });
+    }
+    const { template, dataRows, singlePage } = prepared;
+    const task = {
+      id: randomUUID().replace(/-/g, ''),
+      userId: req.user.id,
+      user: req.user,
+      template,
+      dataRows,
+      singlePage,
+      name: req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf',
+      status: 'queued',
+      done: 0,
+      total: dataRows.length,
+      ticketId: null,
+      error: null,
+      at: Date.now(),
+      reqSnapshot: { body: { source: req.body?.source, jobId: req.body?.jobId ?? null } }
+    };
+    pdfTasks.set(task.id, task);
+    pdfTaskQueue.push(task);
+    pumpPdfTasks();
+    return { ...pdfTaskView(task), queued: true };
+  });
+
+  app.get('/api/labels/pdf/task/:id', { preHandler: requireAuth }, async (req, reply) => {
+    pdfTaskPrune();
+    const task = pdfTasks.get(String(req.params.id || ''));
+    if (!task || task.userId !== req.user.id) {
+      return reply.code(404).send({ error: 'Задание не найдено — сформируйте PDF заново' });
+    }
+    // если файл по тикету уже истёк — считаем задание устаревшим
+    if (task.status === 'ready' && !getPdfTicket(task.ticketId, req.user.id)) {
+      task.status = 'error';
+      task.error = 'Файл устарел — сформируйте PDF заново';
+    }
+    return pdfTaskView(task);
+  });
+
   // PDF через короткоживущую ссылку: нужен для iOS Safari, который не умеет
   // открывать PDF из blob: и не сохраняет их через download.
   app.post('/api/labels/pdf/ticket', { preHandler: requireAuth }, async (req, reply) => {
-    const plan = planOf(req.user);
-    if (!plan.labelEditor) return reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
-    const { template, single } = req.body || {};
-    const err = validateTemplate(template);
-    if (err) return reply.code(400).send({ error: err });
-    const dataRows = resolvePdfRows(req.user, req.body, reply);
-    if (!dataRows) return reply;
-    const singlePage = single === true;
+    const prepared = preparePdfRequest(req, reply);
+    if (!prepared) return reply;
+    const { template, dataRows, singlePage } = prepared;
     const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
     const name = req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf';
     const id = putPdfTicket(req.user.id, pdf, name);
     if (!id) return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество этикеток' });
-    logActivity(req.user, 'labels_pdf', req.body?.source === 'reprint' ? 'PDF для повторной печати' : 'PDF этикеток', {
-      total: dataRows.length,
-      ok: dataRows.length,
-      meta: { widthMm: template.widthMm, heightMm: template.heightMm, single: singlePage, jobId: req.body?.jobId ?? null }
-    });
+    logPdfActivity(req.user, req, dataRows, template, singlePage);
     return { id, url: `/api/labels/pdf/file/${id}`, name };
   });
 

@@ -47,6 +47,84 @@ export function openPlaceholderWindow() {
  *
  * На остальных платформах — обычное скачивание через blob + download.
  */
+function savePdfBlob(blob, fileName) {
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return blobUrl;
+}
+
+async function readPdfBlob(res) {
+  const blob = await res.blob();
+  const head = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
+  if (head !== '%PDF-') throw new Error('Сервер вернул не PDF');
+  return blob;
+}
+
+/**
+ * Принимает уже созданный на сервере PDF (по короткой ссылке) и отдаёт его
+ * пользователю: на iOS — открывает в просмотрщике Safari, иначе скачивает.
+ */
+async function deliverPdfUrl(url, fileName, preWindow = null) {
+  if (preWindow && !preWindow.closed) {
+    preWindow.location.href = url;
+    return url;
+  }
+  if (isIOS()) {
+    location.href = url;
+    return url;
+  }
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error('Не удалось скачать PDF');
+  const blob = await readPdfBlob(res);
+  return savePdfBlob(blob, fileName);
+}
+
+/**
+ * PDF из длинного пакета: сервер собирает файл в фоне, клиент показывает
+ * прогресс («готово N из M этикеток»), затем скачивает готовый файл.
+ *
+ * onProgress({ status, done, total }) вызывается на каждом опросе.
+ * preWindow — окно, открытое синхронно в обработчике клика (iOS).
+ */
+export async function downloadPdfTask(baseUrl, body, fileName, onProgress = () => {}, preWindow = null) {
+  const created = await fetch(`${baseUrl}/task`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  if (!created.ok) {
+    const data = await created.json().catch(() => ({}));
+    throw new Error(data.error || 'Не удалось создать задание на PDF');
+  }
+  const task = await created.json();
+  if (!task?.id) throw new Error('Сервер не создал задание на PDF');
+
+  const started = Date.now();
+  let status = task;
+  while (status.status !== 'ready') {
+    if (status.status === 'error') throw new Error(status.error || 'Не удалось подготовить PDF');
+    if (Date.now() - started > 10 * 60 * 1000) throw new Error('PDF формируется слишком долго — попробуйте меньший пакет');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const res = await fetch(`${baseUrl}/task/${task.id}`, { credentials: 'include' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Не удалось получить статус подготовки PDF');
+    }
+    status = await res.json();
+    onProgress({ status: status.status, done: status.done, total: status.total });
+  }
+  onProgress({ status: 'ready', done: status.total, total: status.total });
+  if (!status.url) throw new Error('Сервер не выдал ссылку на PDF');
+  return deliverPdfUrl(status.url, fileName, preWindow);
+}
+
 export async function downloadBlob(url, body, fileName, preWindow = null) {
   if (isIOS() && /\/pdf$/.test(url)) {
     const res = await fetch(`${url}/ticket`, {

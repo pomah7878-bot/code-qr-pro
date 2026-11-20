@@ -1,4 +1,4 @@
-﻿import { renderBarcode, renderBarcodeMany } from './lib/barcode-pool.js';
+import { renderBarcode, renderBarcodeMany } from './lib/barcode-pool.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
@@ -146,6 +146,10 @@ export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
   const pageW = 595.28, pageH = 841.89, margin = 10 * K;
   const lw = template.widthMm * K, lh = template.heightMm * K;
 
+  // Прогресс по этикеткам — для длинных пакетов (клиент видит, сколько готово).
+  const total = dataRows.length;
+  const report = typeof options.onProgress === 'function' ? options.onProgress : null;
+
   if (options.single) {
     let i = 0;
     for (let start = 0; start < dataRows.length; start += RESOLVE_CHUNK) {
@@ -159,6 +163,7 @@ export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
           else if (el.text) doc.fontSize(el.fontSize).fillColor('#000000').text(el.text, ex, ey, { width: ew, height: eh, align: el.align });
         }
         i++;
+        if (report) report(i, total);
       }
     }
     return;
@@ -182,6 +187,7 @@ export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
         else if (el.text) doc.fontSize(el.fontSize).fillColor('#000000').text(el.text, ex, ey, { width: ew, height: eh, align: el.align });
       }
       i++;
+      if (report) report(i, total);
     }
   }
   if (i === 0) doc.fontSize(12).fillColor('#333333').text('Нет сформированных строк', margin, margin);

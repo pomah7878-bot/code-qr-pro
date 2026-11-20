@@ -15,6 +15,59 @@ import { getSetting } from '../settings.js';
  */
 
 const UA = 'CODE-QR-PRO/1.0 (+https://code-qr.stockcity.ru)';
+const CZ_STATUS_RU = {
+  EMITTED: 'Эмитирован',
+  APPLIED: 'Нанесён',
+  INTRODUCED: 'В обороте',
+  RETIRED: 'Выбыл из оборота',
+  WRITTEN_OFF: 'Списан',
+  DISAGGREGATION: 'Отсоединён',
+  RESERVED: 'Зарезервирован'
+};
+
+/**
+ * Публичная проверка кода через мобильный API ЧЗ (без токена).
+ * Эндпоинт недокументированный, мобильное приложение ходит так:
+ *   GET https://mobile.api.crpt.ru/mobile/check?code=...&codeType=datamatrix
+ * С части сетей/дата-центров отдаёт 451 — тогда просто идём дальше по источникам.
+ */
+async function publicMobileCheck(code) {
+  if (!code) return null;
+  try {
+    const url = `https://mobile.api.crpt.ru/mobile/check?code=${encodeURIComponent(code)}&codeType=datamatrix`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Chestnyznak/4.47.0 (chestnyznak-mcp)'
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!res.ok) return null;
+    const raw = await res.json().catch(() => null);
+    if (!raw || typeof raw !== 'object') return null;
+    const nested = raw.category && raw[`${raw.category}Data`] && typeof raw[`${raw.category}Data`] === 'object'
+      ? raw[`${raw.category}Data`]
+      : {};
+    const get = (key) => (nested[key] ?? raw[key] ?? '');
+    const statusRaw = String(get('status') || '');
+    const card = {
+      found: Boolean(raw.codeFounded ?? true),
+      source: 'cz-public',
+      sourceLabel: 'Честный ЗНАК (публичная проверка)',
+      name: String(get('productName') || ''),
+      brand: String(get('brand') || ''),
+      category: String(raw.category || get('productKind') || ''),
+      quantity: String(get('nominalQuantity') || ''),
+      producer: String(get('producerName') || ''),
+      status: CZ_STATUS_RU[statusRaw] || statusRaw,
+      raw: { status: statusRaw, checkResult: raw.checkResult, ownerName: get('ownerName'), ownerInn: get('ownerInn') }
+    };
+    return card.name || card.producer || card.status ? card : null;
+  } catch {
+    return null;
+  }
+}
+
 const CACHE_DAYS = 30;
 
 const OPEN_FACTS = [
@@ -249,7 +302,7 @@ export async function productCard({ userId = null, code = '', gtin = '', czToken
       card: {
         found: true,
         source: card.source,
-        sourceLabel: card.source === 'cz' ? 'Честный ЗНАК' : (OPEN_FACTS.find((s) => s.id === card.source)?.label || 'Открытые данные'),
+        sourceLabel: card.source === 'cz' ? 'Честный ЗНАК' : card.source === 'cz-public' ? 'Честный ЗНАК (публичная проверка)' : (OPEN_FACTS.find((s) => s.id === card.source)?.label || 'Открытые данные'),
         name: card.name,
         brand: card.brand,
         category: card.category,
@@ -263,10 +316,14 @@ export async function productCard({ userId = null, code = '', gtin = '', czToken
   }
 
   let found = null;
-  if (g) {
+  // Публичная проверка ЧЗ (без токена) — недокументированный мобильный API
+  try { found = await publicMobileCheck(code); } catch { found = null; }
+  if (found && g && !found.name) found = null;
+  // Открытые базы по GTIN — если ЧЗ по коду ничего не дал
+  if (!found && g) {
     try { found = await openFactsLookup(g); } catch { found = null; }
-    if (found) cachePut(g, found);
   }
+  if (found) cachePut(g, found);
 
   let message = '';
   if (!found) {

@@ -8,6 +8,9 @@ function loadXlsx() {
   return xlsxPromise;
 }
 
+// Известные двухзначные идентификаторы GS1 (остальные считаем 3-4-значными, как 240/241/8005).
+const AI_2 = new Set(['00', '01', '02', '10', '11', '12', '13', '15', '16', '17', '20', '21', '22', '30', '37', '90', '91', '92', '93', '94', '95', '96', '97', '98', '99']);
+
 export function toParen(raw) {
   const s = String(raw || '').trim();
   if (/^\(\d{2,4}\)/.test(s)) return s;
@@ -17,8 +20,19 @@ export function toParen(raw) {
   if (!m) return s;
   let out = `(01)${m[1]}(21)${m[2]}`;
   for (const part of parts) {
-    const a = part.match(/^(\d{2,4})([\s\S]*)$/);
-    if (a) out += `(${a[1]})${a[2]}`;
+    if (!part) continue;
+    let ai = part.slice(0, 2);
+    let rest = part.slice(2);
+    if (!AI_2.has(ai)) {
+      if (/^800[5-8]/.test(part)) {
+        ai = part.slice(0, 4);
+        rest = part.slice(4);
+      } else {
+        ai = part.slice(0, 3);
+        rest = part.slice(3);
+      }
+    }
+    if (/^\d{2,4}$/.test(ai)) out += `(${ai})${rest}`;
   }
   return out;
 }

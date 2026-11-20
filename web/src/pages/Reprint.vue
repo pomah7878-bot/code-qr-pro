@@ -486,11 +486,26 @@ const colVisible = (key) => {
   return ['n', 'code', 'status', 'name', 'productKind', 'quantity', 'expirationDate', 'gtin'].includes(key);
 };
 
+function formatAiDate(value) {
+  const v = String(value || '');
+  if (!/^\d{6}$/.test(v)) return '';
+  return `${v.slice(4, 6)}.${v.slice(2, 4)}.20${v.slice(0, 2)}`;
+}
+
+// Даты в коде маркировки: (11) — изготовлен, (17) — годен до
+function parseCodeDates(code) {
+  const s = String(code || '');
+  const production = (s.match(/\(11\)(\d{6})/) || s.match(/(?:^|\u001d)11(\d{6})/) || [])[1];
+  const expiration = (s.match(/\(17\)(\d{6})/) || s.match(/(?:^|\u001d)17(\d{6})/) || [])[1];
+  return { productionDate: formatAiDate(production), expirationDate: formatAiDate(expiration) };
+}
+
 const checkRows = computed(() => {
   const valid = result.value?.valid || [];
   return valid.map((c, i) => {
     const entry = cards.value.find((x) => x && (x.gtin === c.gtin || (x.code && x.code === c.code))) || null;
     const card = entry?.card || null;
+    const codeDates = parseCodeDates(c.code);
     return {
       n: i + 1,
       code: c.code,
@@ -501,8 +516,8 @@ const checkRows = computed(() => {
       name: card?.name || '',
       productKind: card?.productKind || card?.category || '',
       quantity: card?.quantity || card?.size || '',
-      productionDate: card?.productionDate || '',
-      expirationDate: card?.expirationDate || '',
+      productionDate: card?.productionDate || codeDates.productionDate,
+      expirationDate: card?.expirationDate || codeDates.expirationDate,
       serviceLife: card?.serviceLife || '',
       status: card?.status || '',
       found: card ? 'Да' : 'Нет',
@@ -1410,6 +1425,10 @@ async function printLabels() {
           <p v-if="checkRows.length > 300" class="text-xs text-slate-500 mt-2">Показаны первые 300 из {{ checkRows.length }} кодов — в PDF попадут все.</p>
         </div>
         <p v-if="infoMessage" class="text-xs text-slate-500 mt-2">{{ infoMessage }}</p>
+        <p class="text-xs text-slate-500 mt-2">
+          «Дата изготовления» и «Годен до» приходят из полного кода ЧЗ (идентификаторы 11 и 17) или из карточки товара.
+          У короткого кода без криптохвоста этих данных нет — заполните «Дата» и «Срок годности» в «Данных товара», они попадут на этикетку.
+        </p>
         <p class="text-xs text-slate-500 mt-2">Для маркировки печатается GS1 DataMatrix с полным кодом; QR не заменяет DataMatrix и в 20×20 не помещается.</p>
       </div>
     </section>

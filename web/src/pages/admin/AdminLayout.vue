@@ -19,6 +19,7 @@ const links = computed(() => {
     { to: '/app/admin/logs', label: 'Ошибки', adminOnly: true },
     { to: '/app/admin/support', label: 'Поддержка', adminOnly: true },
     { to: '/app/admin/ai', label: 'AI-помощник', adminOnly: true },
+    { to: '/app/help', label: 'Помощь', adminOnly: true },
     { to: '/app/admin/settings', label: 'Настройки', adminOnly: true }
   ];
   return store.user?.role === 'admin' ? all : all.filter((l) => !l.adminOnly);

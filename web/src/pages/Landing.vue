@@ -73,6 +73,7 @@ const features = [
   { icon: 'print', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
   { icon: 'archive', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
   { icon: 'api', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
+  { icon: 'star', title: 'AI-помощник 24/7', text: 'Отвечает по «Честному ЗНАКу» и работе сервиса, подсказывает по шагам и передаёт сложное администратору. Входит в PREMIUM.' },
   { icon: 'lock', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
 ];
 const steps = [
@@ -164,6 +165,41 @@ const openFaq = ref(null);
       </div>
     </section>
 
+    <!-- НОВЫЕ ВОЗМОЖНОСТИ PREMIUM -->
+    <section class="max-w-6xl mx-auto px-4 py-16">
+      <div class="reveal text-center mb-10">
+        <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-3 py-1 mb-4">
+          <BrandIcon name="star-filled" :size="12" />Новое в PREMIUM
+        </span>
+        <h2 class="font-display font-bold text-3xl md:text-4xl mb-3">Помощник, который знает «Честный ЗНАК»</h2>
+        <p class="text-slate-500 max-w-2xl mx-auto">AI-помощник, база знаний и живая поддержка — включены в PREMIUM без доплат.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div class="reveal glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
+          <div class="absolute right-3 top-3 text-[9px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-violet-600 to-accent-500 rounded-full px-2 py-0.5">PREMIUM</div>
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30"><BrandIcon name="star" :size="24" /></span></div>
+          <h3 class="font-display font-semibold text-lg mb-2">AI-помощник 24/7</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Отвечает по GS1 DataMatrix, «Честному ЗНАКу» и работе сервиса. Понимает, в каком разделе вы находитесь, и подсказывает по шагам.</p>
+        </div>
+        <div class="reveal reveal-d1 glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20"><BrandIcon name="check" :size="26" /></span></div>
+          <h3 class="font-display font-semibold text-lg mb-2">База знаний</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Инструкции по генерации, наборам, печати, проверке кодов, ошибкам и настройке аккаунта — ответ со ссылкой на источник.</p>
+        </div>
+        <div class="reveal reveal-d2 glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20"><BrandIcon name="users" :size="26" /></span></div>
+          <h3 class="font-display font-semibold text-lg mb-2">Поддержка с историей</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Если помощник не решил вопрос — обращение уходит администратору вместе с диалогом. Статус и ответ видны в кабинете.</p>
+        </div>
+        <div class="reveal reveal-d3 glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
+          <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20"><BrandIcon name="print" :size="26" /></span></div>
+          <h3 class="font-display font-semibold text-lg mb-2">Мобильная печать</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Печать этикеток прямо с iPhone и Android: AirPrint, Mopria, сохранение в «Файлы» — без компьютера.</p>
+        </div>
+      </div>
+      <p class="reveal text-center text-xs text-slate-500 mt-6">Финансовые вопросы помощник не решает — только подсказывает, где смотреть, и передаёт администратору.</p>
+    </section>
+
     <div class="max-w-6xl mx-auto px-4 pb-6">
       <AdSlot placement="landing_middle" />
     </div>
@@ -249,6 +285,9 @@ const openFaq = ref(null);
             <h3 class="font-display font-extrabold text-2xl grad-text">PREMIUM</h3>
           </div>
           <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
+          <div class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-2.5 py-1 mb-4">
+            <BrandIcon name="star-filled" :size="11" />Новое: AI-помощник и поддержка
+          </div>
           <div class="flex items-end gap-2 mb-1">
             <span class="text-4xl sm:text-5xl font-extrabold grad-text">{{ minPerMonth().toLocaleString('ru') }} ₽</span>
             <span class="text-base font-medium text-slate-500 mb-1.5">/мес</span>
@@ -273,6 +312,12 @@ const openFaq = ref(null);
           <ul class="space-y-3 text-sm mb-8 flex-1">
             <li v-for="f in premiumFeatures" :key="f.text" class="flex items-center gap-2.5">
               <span class="text-emerald-500 font-bold"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
+            </li>
+            <li class="flex items-center gap-2.5">
+              <span class="text-violet-500 font-bold"><BrandIcon name="star" :size="14" /></span> AI-помощник 24/7 и база знаний
+            </li>
+            <li class="flex items-center gap-2.5">
+              <span class="text-violet-500 font-bold"><BrandIcon name="check" :size="14" /></span> Поддержка с историей обращений
             </li>
           </ul>
           <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PREMIUM →</router-link>

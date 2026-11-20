@@ -6,10 +6,12 @@ import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import AdSlot from '../components/AdSlot.vue';
 import BrandIcon from '../components/BrandIcon.vue';
+import { openAssistant } from '../lib/assistant-ui.js';
 const usagePct = computed(() => {
   if (!store.usage) return 0;
   return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
 });
+const isPremium = computed(() => store.plan?.id === 'premium');
 const bestOffer = ref(null);
 const premiumFrom = computed(() => {
   const o = bestOffer.value;
@@ -39,6 +41,31 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
         <p class="text-slate-500 text-sm">Аккаунт создан {{ fmtDate(store.user?.createdAt) }}</p>
       </div>
 
+      <div class="glass rounded-2xl p-5 relative overflow-hidden border border-violet-500/25">
+        <div class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-violet-600/20 blur-2xl"></div>
+        <div class="relative flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30">
+              <BrandIcon name="star" :size="22" />
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <div class="font-display font-semibold">Новое в PREMIUM</div>
+                <span class="text-[9px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-2 py-0.5">AI</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                AI-помощник по «Честному ЗНАКу», база знаний и поддержка с историей обращений.
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <router-link v-if="!isPremium" to="/app/billing" class="btn-primary !py-2 !px-4 text-sm">Оформить PREMIUM</router-link>
+            <router-link v-else to="/app/help" class="btn-ghost !py-2 !px-3 text-sm">Что нового</router-link>
+            <button class="btn-ghost !py-2 !px-3 text-sm" @click="openAssistant()">Спросить AI</button>
+          </div>
+        </div>
+      </div>
+
       <PageGuide
         id="dashboard"
         title="С чего начать"
@@ -47,7 +74,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
           'Проверьте пакет: сервис покажет, сколько кодов валидны, а где ошибка.',
           'Скачайте PDF или ZIP. Для готовых этикеток используйте разделы «Этикетки» и «Повторная печать».'
         ]"
-        note="Подсказки можно отключить кнопкой «Помощь» внизу справа и включить обратно там же."
+        note="Подсказки и инструкции теперь в разделе «Помощь» в меню кабинета."
       />
 
       <AdSlot placement="app_banner" />

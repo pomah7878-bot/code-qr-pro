@@ -10,7 +10,7 @@ import BrandIcon from './components/BrandIcon.vue';
 const router = useRouter();
 const route = useRoute();
 const menuOpen = ref(false);
-const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app') && !route.path.startsWith('/app/admin'));
+const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app'));
 const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 

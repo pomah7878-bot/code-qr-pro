@@ -14,7 +14,8 @@ const items = [
   { icon: 'api', t: 'API', to: '/app/apikeys' },
   { icon: 'cz', t: 'Честный ЗНАК', to: '/app/cz' },
   { icon: 'star', t: 'Отзывы', to: '/app/reviews' },
-  { icon: 'help', t: 'AI-помощник', action: 'assistant' },
+  { icon: 'help', t: 'Помощь', to: '/app/help' },
+  { icon: 'star', t: 'AI-помощник', action: 'assistant' },
   { icon: 'lock', t: 'Безопасность', to: '/app/security' },
   ...(['admin', 'support'].includes(store.user?.role) ? [{ icon: 'settings', t: 'Админка', to: '/app/admin' }] : [])
 ];

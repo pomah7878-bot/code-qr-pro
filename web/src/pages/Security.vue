@@ -87,6 +87,14 @@ onMounted(loadSessions);
       <div class="glass rounded-2xl p-5 text-sm text-slate-500">
         Администратору и поддержке вход в админку доступен только после включения 2FA. Сессия администратора живёт 7 дней и завершается после 2 часов бездействия.
       </div>
+
+      <router-link to="/app/help" class="glass rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3 hover:border-brand-500/40 border border-transparent transition">
+        <div>
+          <div class="font-semibold text-sm text-slate-800 dark:text-white">Помощь и подсказки</div>
+          <div class="text-xs text-slate-500 mt-0.5">Инструкции по разделам, печать с телефона и AI-помощник.</div>
+        </div>
+        <span class="text-xs text-brand-400 font-medium">Открыть →</span>
+      </router-link>
     </section>
   </div>
 </template>

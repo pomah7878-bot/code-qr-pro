@@ -35,6 +35,7 @@ const AdminStorage = () => import('./pages/admin/AdminStorage.vue');
 const AdminAds = () => import('./pages/admin/AdminAds.vue');
 const NotFound = () => import('./pages/NotFound.vue');
 const Assistant = () => import('./pages/Assistant.vue');
+const Help = () => import('./pages/Help.vue');
 const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
 
 const router = createRouter({
@@ -55,6 +56,7 @@ const router = createRouter({
     { path: '/app/security', component: Security, meta: { auth: true } },
     { path: '/app/history', component: History, meta: { auth: true } },
     { path: '/app/assistant', component: Assistant, meta: { auth: true } },
+    { path: '/app/help', component: Help, meta: { auth: true } },
     {
       path: '/app/admin',
       component: AdminLayout,

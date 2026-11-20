@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { store, toggleTheme } from './store.js';
 import { api } from './api.js';
-import HelpCenter from './components/HelpCenter.vue';
+import { openAssistant } from './lib/assistant-ui.js';
 import AssistantWidget from './components/AssistantWidget.vue';
 import BrandIcon from './components/BrandIcon.vue';
 
@@ -104,6 +104,8 @@ async function changePassword() {
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/reprint')"><BrandIcon name="print" :size="18" class="inline-block mr-2 -mt-0.5" />Повторная печать</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/billing')"><BrandIcon name="billing" :size="18" class="inline-block mr-2 -mt-0.5" />Подписка</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/security')"><BrandIcon name="lock" :size="18" class="inline-block mr-2 -mt-0.5" />Безопасность</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/help')"><BrandIcon name="help" :size="18" class="inline-block mr-2 -mt-0.5" />Помощь</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-brand-400" @click="menuOpen = false; openAssistant()"><BrandIcon name="star" :size="18" class="inline-block mr-2 -mt-0.5" />AI-помощник</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium text-red-500" @click="logout">Выйти</button>
           </template>
           <template v-else>
@@ -144,7 +146,6 @@ async function changePassword() {
         </div>
       </div>
     </Teleport>
-    <HelpCenter />
     <AssistantWidget v-if="showAssistant" />
   </div>
 </template>

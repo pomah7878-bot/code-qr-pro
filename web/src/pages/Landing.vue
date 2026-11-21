@@ -114,7 +114,7 @@ const openFaq = ref(null);
     <div class="orb anim-glow w-[400px] h-[400px] bg-accent-500/15 top-[600px] -right-32" style="animation-delay:1.5s"></div>
 
     <!-- HERO -->
-    <section class="relative max-w-6xl mx-auto px-4 pt-12 pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+    <section class="relative max-w-[1680px] mx-auto px-4 pt-12 pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
       <div>
         <div class="reveal inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-full px-4 py-1.5 mb-6">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Маркировка, наборы и печать
@@ -151,12 +151,12 @@ const openFaq = ref(null);
       </div>
     </section>
 
-    <div class="max-w-6xl mx-auto px-4 pb-6">
+    <div class="max-w-[1680px] mx-auto px-4 pb-6">
       <AdSlot placement="landing_banner" />
     </div>
 
     <!-- ДОВЕРИЕ / ВЫГОДЫ -->
-    <section class="max-w-6xl mx-auto px-4 py-12">
+    <section class="max-w-[1680px] mx-auto px-4 py-12">
       <div class="reveal grid md:grid-cols-2 lg:grid-cols-4 gap-5">
         <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="speed" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">В 10 раз быстрее</div><p class="text-sm text-slate-500">Пакетная генерация тысяч кодов вместо ручной работы</p></div>
         <div class="glass rounded-2xl p-6 text-center"><div class="mb-3 flex justify-center"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 ring-1 ring-violet-500/20 shadow-[0_0_24px_-12px_rgba(139,92,246,.8)]"><BrandIcon name="check" :size="26" /></span></div><div class="font-display font-bold text-lg mb-1">Без ошибок</div><p class="text-sm text-slate-500">Валидация GS1 до генерации — коды проходят проверку</p></div>
@@ -166,7 +166,7 @@ const openFaq = ref(null);
     </section>
 
     <!-- FEATURES -->
-    <section class="max-w-6xl mx-auto px-4 py-16">
+    <section class="max-w-[1680px] mx-auto px-4 py-16">
       <div class="reveal text-center mb-12">
         <h2 class="font-display font-bold text-3xl md:text-4xl mb-3">Всё для маркировки — в одном окне</h2>
         <p class="text-slate-500">От файла с кодами до напечатанной этикетки</p>
@@ -181,7 +181,7 @@ const openFaq = ref(null);
     </section>
 
     <!-- НОВЫЕ ВОЗМОЖНОСТИ PRO -->
-    <section class="max-w-6xl mx-auto px-4 py-16">
+    <section class="max-w-[1680px] mx-auto px-4 py-16">
       <div class="reveal text-center mb-10">
         <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-3 py-1 mb-4">
           <BrandIcon name="star-filled" :size="12" />Новое в PRO
@@ -215,12 +215,12 @@ const openFaq = ref(null);
       <p class="reveal text-center text-xs text-slate-500 mt-6">Финансовые вопросы помощник не решает — только подсказывает, где смотреть, и передаёт администратору.</p>
     </section>
 
-    <div class="max-w-6xl mx-auto px-4 pb-6">
+    <div class="max-w-[1680px] mx-auto px-4 pb-6">
       <AdSlot placement="landing_middle" />
     </div>
 
     <!-- SEO / ПОЛЕЗНАЯ ИНФОРМАЦИЯ -->
-    <section class="max-w-6xl mx-auto px-4 py-16">
+    <section class="max-w-[1680px] mx-auto px-4 py-16">
       <div class="reveal max-w-3xl mb-8">
         <h2 class="font-display font-bold text-3xl md:text-4xl mb-4">Маркировка «Честного ЗНАКа»: что умеет CODE QR PRO</h2>
         <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -253,7 +253,7 @@ const openFaq = ref(null);
     </section>
 
     <!-- STEPS -->
-    <section class="max-w-6xl mx-auto px-4 py-16">
+    <section class="max-w-[1680px] mx-auto px-4 py-16">
       <div class="reveal text-center mb-12"><h2 class="font-display font-bold text-3xl md:text-4xl">Как это работает</h2></div>
       <div class="grid md:grid-cols-3 gap-6">
         <div v-for="(s, i) in steps" :key="s.n" class="reveal relative rounded-2xl p-7 border border-slate-200 dark:border-white/10" :class="'reveal-d' + (i + 1)">
@@ -265,7 +265,7 @@ const openFaq = ref(null);
     </section>
 
     <!-- PRICING -->
-    <section id="pricing" class="relative max-w-5xl mx-auto px-4 py-20">
+    <section id="pricing" class="relative max-w-[1680px] mx-auto px-4 sm:px-6 py-20">
       <div class="orb anim-glow w-[400px] h-[400px] bg-violet-600/15 top-20 left-1/2 -translate-x-1/2"></div>
       <div class="reveal relative text-center mb-14">
         <div class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-full px-4 py-1.5 mb-5">
@@ -309,7 +309,7 @@ const openFaq = ref(null);
     </section>
 
     <!-- REVIEWS -->
-    <section v-if="reviews.length" class="max-w-6xl mx-auto px-4 py-16">
+    <section v-if="reviews.length" class="max-w-[1680px] mx-auto px-4 py-16">
       <div class="reveal text-center mb-10">
         <h2 class="font-display font-bold text-3xl md:text-4xl mb-2">Отзывы клиентов</h2>
         <p class="text-slate-500"><span class="text-amber-500"><BrandIcon name="star-filled" :size="15" /></span> {{ reviewAvg }} из 5 · {{ reviewCount }} отзывов</p>
@@ -324,7 +324,7 @@ const openFaq = ref(null);
       <div class="reveal text-center mt-8"><router-link to="/app/reviews" class="btn-ghost">Все отзывы и оставить свой →</router-link></div>
     </section>
 
-    <div class="max-w-6xl mx-auto px-4 pb-6">
+    <div class="max-w-[1680px] mx-auto px-4 pb-6">
       <AdSlot placement="landing_bottom" />
     </div>
 

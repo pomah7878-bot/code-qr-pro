@@ -89,13 +89,13 @@ async function changePassword() {
 <template>
   <div class="min-h-screen flex flex-col">
     <div v-if="store.impersonated" class="sticky top-0 z-50 bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 text-sm text-amber-600 dark:text-amber-400">
-      <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="max-w-[1680px] mx-auto flex flex-wrap items-center justify-between gap-2">
         <span>Режим просмотра от имени клиента — только чтение, изменения заблокированы.</span>
         <button class="rounded-lg border border-amber-500/50 px-3 py-1 text-xs font-medium" @click="exitViewMode">Выйти из просмотра</button>
       </div>
     </div>
     <header class="sticky top-0 z-40 glass border-x-0 border-t-0 rounded-none">
-      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="max-w-[1680px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <router-link to="/" class="flex items-center gap-2 font-display font-extrabold tracking-wide shrink-0" @click="menuOpen = false">
           <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-8 h-8 shrink-0">
           <span class="text-slate-900 dark:text-white whitespace-nowrap text-sm sm:text-base">CODE QR <span class="text-violet-600 dark:text-violet-400">PRO</span></span>
@@ -132,7 +132,7 @@ async function changePassword() {
       </div>
 
       <div v-if="store.user && ['admin', 'support'].includes(store.user.role) && !store.user.twoFactorEnabled" class="border-t border-amber-500/30 bg-amber-500/10">
-        <div class="max-w-6xl mx-auto px-4 py-2 text-xs text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-2">
+        <div class="max-w-[1680px] mx-auto px-4 py-2 text-xs text-amber-700 dark:text-amber-300 flex flex-wrap items-center gap-2">
           <span>Для доступа к админке включите двухфакторную аутентификацию.</span>
           <router-link to="/app/security" class="font-semibold underline" @click="menuOpen = false">Настроить 2FA →</router-link>
         </div>

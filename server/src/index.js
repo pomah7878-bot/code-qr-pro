@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import dns from 'node:dns';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // У VPS нет рабочего IPv6, а DNS отдаёт AAAA первым: Node ходил по IPv6 и падал
 // (например, уведомления в Telegram). Принудительно используем IPv4.
@@ -35,6 +35,7 @@ import { registerAdminSeoRoutes } from './routes-admin-seo.js';
 import { detectBot, recordBotHit, pruneAnalytics } from './lib/analytics.js';
 import { seedKnowledgeBase } from './lib/kb.js';
 import { startTelegramBot } from './lib/telegram-bot.js';
+import { injectSeo } from './lib/seo-head.js';
 import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, pruneAppLogs } from './lib/app-log.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { startSubscriptionSweeper } from './lib/subscription.js';
@@ -110,6 +111,7 @@ startMailQueue();
 app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');
+const indexHtmlPath = join(dist, 'index.html');
 if (existsSync(dist)) {
   await app.register(fastifyStatic, {
     root: dist,
@@ -131,7 +133,17 @@ if (existsSync(dist)) {
     }
     const publicPaths = new Set(['/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
     const isPublic = publicPaths.has(path) || path.startsWith('/articles/');
-    if (path === '/' || isPublic) return reply.sendFile('index.html');
+    if (path === '/' || isPublic) {
+      // Отдаём роботам уже правильный canonical/title/description. SPA всё равно
+      // обновит head после гидрации, но исходный HTML больше не указывает canonical на «/».
+      try {
+        const html = readFileSync(indexHtmlPath, 'utf8');
+        reply.header('X-Robots-Tag', 'index, follow');
+        return reply.type('text/html; charset=utf-8').send(injectSeo(html, path));
+      } catch {
+        return reply.sendFile('index.html');
+      }
+    }
     reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');
     return reply.sendFile('index.html');
   });

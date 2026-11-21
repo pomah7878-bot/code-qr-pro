@@ -196,11 +196,6 @@ function dismissHint() {
   try { sessionStorage.setItem('cq_ai_hint_shown', '1'); } catch { /* ignore */ }
 }
 
-function openFromHint() {
-  dismissHint();
-  assistantUi.open = true;
-}
-
 function peek() {
   if (assistantUi.open || document.hidden) return;
   peeking.value = true;
@@ -251,29 +246,10 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <!-- Кнопка вызова окна: робот стоит НАД кнопкой и уезжает влево, когда открыт диалог -->
-    <div class="ai-dock fixed z-40 print:hidden flex flex-col items-center sm:items-end" :class="{ 'is-open': assistantUi.open }">
-      <transition name="ai-pop">
-        <button
-          v-if="idleHint && !assistantUi.open"
-          type="button"
-          class="ai-hint-bubble"
-          @click="openFromHint"
-        >
-          <span class="ai-hint-emoji" aria-hidden="true">👋</span>
-          Я рядом — подскажу по шагам и передам администратору
-          <span class="ai-hint-close" role="button" aria-label="Скрыть" @click.stop="dismissHint">×</span>
-        </button>
-      </transition>
-
-      <!-- на телефоне робот скрыт — остаётся только кнопка -->
-      <div class="ai-robot-float hidden sm:block" aria-hidden="true">
-        <span class="ai-bot-halo"></span>
-        <RobotMascot :state="mascotState" :size="assistantUi.open ? 82 : 92" />
-      </div>
-
+    <!-- Компактная круглая кнопка AI-помощника: не перекрывает рабочие экраны -->
+    <div class="ai-dock fixed z-40 print:hidden" :class="{ 'is-open': assistantUi.open }">
       <button
-        class="ai-launcher relative flex items-center justify-center rounded-full text-sm font-semibold text-white w-14 h-14 p-0 sm:w-auto sm:h-auto sm:pl-4 sm:pr-5 sm:py-2.5 sm:gap-2"
+        class="ai-launcher relative flex items-center justify-center rounded-full text-white w-14 h-14 p-0"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
         :aria-label="assistantUi.open ? 'Свернуть AI-помощника' : 'Открыть AI-помощника'"
         :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
@@ -282,11 +258,7 @@ onUnmounted(() => {
         @mouseleave="hovering = false"
       >
         <span class="ai-shimmer" aria-hidden="true"></span>
-        <BrandIcon :name="assistantUi.open ? 'close' : 'ai'" :size="24" class="sm:hidden" solid="#ffffff" />
-        <span class="hidden sm:flex flex-col items-start leading-none text-left">
-          <span class="text-[13px] font-semibold tracking-wide">{{ assistantUi.open ? 'Свернуть' : 'AI-помощник' }}</span>
-          <span class="text-[9px] font-bold tracking-[0.12em] text-white/75 mt-1">{{ assistantUi.open ? 'ПРЕМИУМ · ОНЛАЙН' : 'ПРЕМИУМ · СПРОСИТЬ' }}</span>
-        </span>
+        <BrandIcon :name="assistantUi.open ? 'close' : 'ai'" :size="26" solid="#ffffff" />
         <span class="ai-notify-dot" :class="{ 'is-on': idleHint }" aria-hidden="true"></span>
       </button>
     </div>
@@ -549,10 +521,9 @@ onUnmounted(() => {
     right: 1.25rem;
     bottom: 1.5rem;
   }
-  /* диалог открыт: робот уезжает влево от окна и остаётся целиком виден */
+  /* диалог открыт: кнопка не нужна — закрытие в шапке диалога */
   .ai-dock.is-open {
-    right: calc(430px + 1.25rem + 44px);
-    bottom: 10rem;
+    display: none;
   }
 }
 @media (max-width: 639px) {

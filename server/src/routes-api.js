@@ -89,7 +89,14 @@ export async function registerApiRoutes(app) {
     const codes = req.body?.codes;
     if (!Array.isArray(codes) || !codes.length || codes.length > 10000) return reply.code(400).send({ error: 'Передайте до 10 000 кодов' });
     const mode = req.body?.mode === 'gs1' ? 'gs1' : 'cz';
-    const result = await verifyCodes(codes, mode);
+    const globalToken = getSetting('cz_enabled', '0') === '1' ? getSetting('cz_token', '') : '';
+    const token = String(req.user?.cz_token || globalToken || '').trim();
+    const onlineLimit = Math.max(0, Math.min(50, Number(req.body?.onlineLimit ?? 20) || 0));
+    const result = await verifyCodes(codes, mode, {
+      token,
+      apiUrl: getSetting('cz_api_url', 'https://markirovka.crpt.ru'),
+      onlineLimit
+    });
     const ok = (result.results || []).filter((r) => r.ok).length;
     logActivity(req.user, 'cz_verify', 'Проверка кодов «Честный ЗНАК»', {
       total: codes.length, ok, fail: codes.length - ok,

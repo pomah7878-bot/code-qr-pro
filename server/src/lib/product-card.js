@@ -105,6 +105,26 @@ async function mobileRequest(kind, { code = '', gtin = '' } = {}) {
   }
 }
 
+/** Онлайн-проверка одного кода через мобильный API «Честного ЗНАКа» (без токена). */
+export async function checkCodeOnline(code) {
+  const normalized = normalizeCzCode(code) || String(code || '').trim();
+  if (!normalized) throw new Error('Пустой код');
+  const { data } = await mobileRequest('status', { code: normalized });
+  const status = normalizeStatus(data);
+  return {
+    found: data?.codeFounded !== false && Boolean(status.found),
+    status: status.status || '',
+    statusRaw: status.statusRaw || '',
+    crypto: status.crypto || '',
+    checkResult: data?.checkResult === true,
+    verified: Boolean(data?.codeResolveData?.verified),
+    name: status.name || '',
+    producer: status.producer || '',
+    warnings: status.warnings || [],
+    source: 'cz-mobile'
+  };
+}
+
 function attrMap(list) {
   const out = {};
   if (!Array.isArray(list)) return out;

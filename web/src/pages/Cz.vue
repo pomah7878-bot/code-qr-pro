@@ -66,20 +66,28 @@ async function verify() {
     const results = [];
     let message = '';
     let configured = false;
+    let online = false;
+    let onlineChecked = 0;
+    let trueApi = false;
     for (let i = 0; i < codes.length; i += CHUNK) {
-      const part = await api.czVerify({ codes: codes.slice(i, i + CHUNK) });
+      const part = await api.czVerify({ codes: codes.slice(i, i + CHUNK), onlineLimit: 20 });
       if (!results.length) {
         message = part.message || '';
         configured = Boolean(part.configured);
       }
+      online = online || Boolean(part.online);
+      onlineChecked += Number(part.onlineChecked) || 0;
+      trueApi = trueApi || Boolean(part.trueApi);
       results.push(...(part.results || []));
       progress.value = { done: Math.min(i + CHUNK, codes.length), total: codes.length };
     }
     const valid = results.filter((r) => r.ok).length;
     result.value = {
       configured,
-      online: false,
-      message: `Проверено ${results.length} кодов: ${valid} валидных, ${results.length - valid} с ошибками. Структура GS1 проверена локально; статус и карточка товара ниже — из «Честного ЗНАКа» и открытых источников.`,
+      online,
+      onlineChecked,
+      trueApi,
+      message: `Проверено ${results.length} кодов: ${valid} валидных, ${results.length - valid} с ошибками. ${message}`,
       results
     };
     loadCards();
@@ -104,7 +112,7 @@ async function verify() {
           'Вставьте коды в поле ниже — по одному на строку. Можно вставить весь список из отчёта.',
           'Нажмите «Проверить». Сервис покажет структуру GS1, статус кода, криптоподпись и карточку товара из «Честного ЗНАКа» и открытых источников.'
         ]"
-        note="«Валидный» означает правильный формат, но не подтверждает подлинность кода в ГИС МТ. Статус и карточка запрашиваются отдельно у внешних источников."
+        note="«Валидный» означает правильный формат GS1. Статус и криптоподпись дополнительно проверяются онлайн через публичный API «Честного ЗНАКа» без токена; официальный True API работает по токену УКЭП."
       />
       <div class="glass rounded-2xl p-6">
         <label class="label" for="cz-codes">Коды маркировки (по одному на строку, до 30 000 — как в отчёте о нанесении)</label>
@@ -129,8 +137,13 @@ async function verify() {
           </div>
         </div>
 
-        <div class="glass rounded-2xl p-4 text-sm" :class="result.configured ? 'border-emerald-500/40' : 'border-amber-500/40'">
-          {{ result.message }}
+        <div class="glass rounded-2xl p-4 text-sm" :class="result.online ? 'border-emerald-500/40' : 'border-amber-500/40'">
+          <div class="flex flex-wrap items-center gap-2">
+            <span v-if="result.online" class="chip-soon !text-[10px]">
+              {{ result.trueApi ? 'True API' : 'Онлайн ЧЗ' }} · проверено {{ result.onlineChecked }}
+            </span>
+            <span>{{ result.message }}</span>
+          </div>
           <ValidHint class="mt-2" />
         </div>
 
@@ -184,8 +197,8 @@ async function verify() {
                 <td class="py-2 pr-3 font-mono text-xs max-w-[240px] truncate" :title="r.code">{{ r.code }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ r.gtin || '—' }}</td>
                 <td class="py-2 pr-3 font-mono text-xs">{{ r.serial || '—' }}</td>
-                <td class="py-2 pr-3 text-xs">{{ cardFor(r)?.status || '—' }}</td>
-                <td class="py-2 pr-3 text-xs" :class="cryptoClass(cardFor(r)?.crypto)">{{ cardFor(r)?.crypto || '—' }}</td>
+                <td class="py-2 pr-3 text-xs">{{ r.status || cardFor(r)?.status || '—' }}</td>
+                <td class="py-2 pr-3 text-xs" :class="cryptoClass(r.crypto || cardFor(r)?.crypto)">{{ r.crypto || cardFor(r)?.crypto || '—' }}</td>
                 <td class="py-2"><span v-if="r.ok" class="inline-flex items-center gap-1 text-emerald-500"><BrandIcon name="check" :size="14" />GS1 валиден</span><span v-else class="inline-flex items-center gap-1 text-red-500"><BrandIcon name="close" :size="14" />{{ r.error }}</span></td>
               </tr>
             </tbody>

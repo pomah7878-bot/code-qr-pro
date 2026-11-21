@@ -54,6 +54,16 @@ export function validateBuyer(input = {}) {
   };
 }
 
+function signatureBuffer() {
+  try {
+    const value = String(getSetting('invoice_signature_data', '') || '');
+    const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(value);
+    if (!m) return null;
+    const buf = Buffer.from(m[2], 'base64');
+    return buf.length > 0 && buf.length <= 2 * 1024 * 1024 ? buf : null;
+  } catch { return null; }
+}
+
 export function invoiceNumberFor(order) {
   return String(order.invoice_number || '').trim() || `СЧ-${order.id}`;
 }
@@ -155,6 +165,10 @@ export function generateInvoicePdf(order) {
   doc.moveTo(left + 60, signY + 22).lineTo(left + 230, signY + 22).stroke();
   doc.text(seller.name || '', left + 60, signY + 4, { width: 170 });
   doc.text('(подпись)', left + 110, signY + 24, { width: 100, align: 'center' });
+  const signature = signatureBuffer();
+  if (signature) {
+    try { doc.image(signature, left + 245, signY - 20, { fit: [220, 48] }); } catch { /* ignore bad image */ }
+  }
 
   doc.end();
   return new Promise((resolve, reject) => {

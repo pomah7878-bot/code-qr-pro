@@ -15,6 +15,8 @@ const notice = ref('');
 const savingCz = ref(false);
 const inv = ref({ name: '', status: '', inn: '', address: '', bank: '', bik: '', account: '', corr: '', phone: '', email: '', ready: false, missing: [] });
 const savingInv = ref(false);
+const signature = ref('');
+const savingSig = ref(false);
 
 async function load() {
   error.value = '';
@@ -22,6 +24,7 @@ async function load() {
     const data = await api.adminSettings();
     cz.value = data;
     if (data.invoice) inv.value = data.invoice;
+    signature.value = data.invoiceSignature || '';
   } catch (e) {
     error.value = e.message;
   }
@@ -45,6 +48,29 @@ async function saveCz() {
   } finally {
     savingCz.value = false;
   }
+}
+
+function onSignatureFile(event) {
+  error.value = ''; notice.value = '';
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (!/^image\/(png|jpeg)$/.test(file.type)) { error.value = 'Подпись должна быть PNG или JPEG'; return; }
+  if (file.size > 1.5 * 1024 * 1024) { error.value = 'Размер подписи — до 1,5 МБ'; return; }
+  const reader = new FileReader();
+  reader.onload = () => { signature.value = String(reader.result || ''); };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+async function saveSignature(clear = false) {
+  error.value = ''; notice.value = ''; savingSig.value = true;
+  try {
+    await api.adminSaveSettings({ invoiceSignature: clear ? '' : signature.value });
+    if (clear) signature.value = '';
+    notice.value = clear ? 'Подпись удалена из счетов' : 'Подпись сохранена — она появится в следующих PDF-счетах';
+    await load();
+  } catch (e) { error.value = e.message; }
+  finally { savingSig.value = false; }
 }
 
 async function saveInvoice() {
@@ -130,6 +156,22 @@ onMounted(load);
         </div>
       </div>
       <button class="btn-primary !py-2 mt-4" :disabled="savingInv" @click="saveInvoice">{{ savingInv ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
+
+      <div class="mt-5 pt-5 border-t border-slate-200/70 dark:border-white/10">
+        <div class="font-semibold text-sm mb-1">Подпись для счетов</div>
+        <p class="text-xs text-slate-500 mb-3">PNG или JPEG с прозрачным/белым фоном, до 1,5 МБ. Подпись автоматически встаёт в блок «Поставщик» в PDF-счёте. Это визуальное факсимиле, а не квалифицированная ЭЦП.</p>
+        <div v-if="signature" class="mb-3 inline-block rounded-xl border border-slate-200 dark:border-white/10 bg-white p-2">
+          <img :src="signature" alt="Подпись для счетов" class="max-h-24 max-w-[260px] object-contain">
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="btn-ghost !py-2 !px-3 text-sm cursor-pointer">
+            Загрузить подпись
+            <input type="file" class="hidden" accept="image/png,image/jpeg" @change="onSignatureFile">
+          </label>
+          <button class="btn-primary !py-2 !px-3 text-sm" :disabled="savingSig || !signature" @click="saveSignature(false)">{{ savingSig ? 'Сохраняем…' : 'Сохранить подпись' }}</button>
+          <button v-if="signature" class="btn-ghost !py-2 !px-3 text-sm text-red-500" :disabled="savingSig" @click="saveSignature(true)">Удалить</button>
+        </div>
+      </div>
     </div>
 
     <div class="glass rounded-2xl p-6">

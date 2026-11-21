@@ -23,6 +23,7 @@ export async function registerAdminRoutes(app) {
       czEnabled: getSetting('cz_enabled', '0') === '1',
       czApiUrl: getSetting('cz_api_url', 'https://api.mdlp.crpt.ru'),
       czConfigured: Boolean(getSetting('cz_token', '')),
+      invoiceSignature: getSetting('invoice_signature_data', ''),
       invoice: {
         name: seller.name,
         status: seller.status,
@@ -41,7 +42,19 @@ export async function registerAdminRoutes(app) {
   });
 
   app.put('/api/admin/settings', { preHandler: requireAdmin }, async (req, reply) => {
-    const { czEnabled, czApiUrl, czToken, invoice } = req.body || {};
+    const { czEnabled, czApiUrl, czToken, invoice, invoiceSignature } = req.body || {};
+    if (invoiceSignature !== undefined) {
+      const raw = String(invoiceSignature || '');
+      if (!raw) setSetting('invoice_signature_data', '');
+      else {
+        const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+        if (!m) return reply.code(400).send({ error: 'Подпись должна быть PNG или JPEG' });
+        const bytes = Buffer.from(m[2], 'base64');
+        if (!bytes.length || bytes.length > 1.5 * 1024 * 1024) return reply.code(400).send({ error: 'Размер подписи — до 1,5 МБ' });
+        setSetting('invoice_signature_data', raw);
+      }
+      audit(req, 'settings.invoice_signature', 'settings', 'invoice', { set: Boolean(raw) });
+    }
     if (invoice && typeof invoice === 'object') {
       const fields = {
         invoice_name: String(invoice.name || '').trim().slice(0, 200),

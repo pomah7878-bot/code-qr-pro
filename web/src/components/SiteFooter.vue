@@ -45,7 +45,7 @@ const year = new Date().getFullYear();
 
       <div class="mt-8 pt-6 border-t border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
         <div>© {{ year }} CODE QR PRO. Сервис не является официальным сервисом «Честного ЗНАКа».</div>
-        <div>{{ LEGAL.operator.label }} · {{ LEGAL.operator.status }} · ИНН {{ LEGAL.operator.inn }}</div>
+        <router-link to="/offer" class="hover:text-brand-400">Реквизиты и документы →</router-link>
       </div>
     </div>
   </footer>

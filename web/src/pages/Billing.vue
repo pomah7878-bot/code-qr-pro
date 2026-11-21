@@ -6,6 +6,7 @@ import { store } from '../store.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
+import { LEGAL } from '../content/legal.js';
 
 const route = useRoute();
 const info = ref(null);
@@ -282,6 +283,11 @@ onMounted(async () => {
           <button class="btn-primary ml-auto" :disabled="busy || !providerOk || !selectedPlan" @click="checkout">{{ busy ? 'Создаём заказ…' : 'Перейти к оплате' }}</button>
         </div>
         <p class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Чек на email. Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Автопродление по умолчанию выключено.</p>
+        <p class="text-[11px] text-slate-500 mt-2">
+          Исполнитель: {{ LEGAL.operator.label }}, {{ LEGAL.operator.status.toLowerCase() }}, ИНН {{ LEGAL.operator.inn }}.
+          <router-link to="/offer" class="text-brand-400 hover:underline">Публичная оферта</router-link> ·
+          <router-link to="/privacy" class="text-brand-400 hover:underline">Обработка персональных данных</router-link>
+        </p>
         <p v-if="!providerOk" class="text-xs text-red-500 mt-2">Платёжный провайдер не настроен — сообщите администратору.</p>
       </div>
 

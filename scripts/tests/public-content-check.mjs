@@ -152,7 +152,7 @@ ok('Тарифы: документы в футере', pricing.footer === true);
 await go('/articles');
 const footer = await ev("document.querySelector('footer')?.innerText || ''");
 ok('Футер: все документы', ['Публичная оферта', 'Пользовательское соглашение', 'Политика обработки персональных данных'].every((x) => footer.includes(x)));
-ok('Футер: контакты и ИНН', footer.includes('code-qr-pro@mail.ru') && footer.includes('504706547269'));
+ok('Футер: контакты и реквизиты по ссылке', footer.includes('code-qr-pro@mail.ru') && footer.includes('Реквизиты и документы'));
 
 console.log('\nconsole errors:', errors.length, JSON.stringify(errors.slice(0, 4)));
 const failed = checks.filter((x) => !x).length;

@@ -18,6 +18,16 @@ const KILO_BASE = String(process.env.KILO_BASE_URL || 'https://api.kilo.ai/api/g
 // kilo-auto/free — авто-роутер по бесплатному пулу Kilo; openrouter/free — резервный бесплатный роутер.
 const FREE_MODELS = ['kilo-auto/free', 'openrouter/free'];
 
+/** Базовый URL бесплатного пула (на РФ-сервере — локальный relay). */
+export function kiloApiBase(path = '') {
+  return `${KILO_BASE}${path}`;
+}
+
+/** Заголовки для запросов к пулу: relay требует токен, прямой Kilo — нет. */
+export function kiloApiHeaders(extra = {}) {
+  return { ...extra, ...(KILO_TOKEN ? { 'x-relay-token': KILO_TOKEN } : {}) };
+}
+
 export const freeFirstEnabled = () => getSetting('ai_free_first', '1') !== '0';
 
 export function aiConfig() {

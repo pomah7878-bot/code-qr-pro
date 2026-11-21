@@ -22,7 +22,9 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
-    if (req.method !== 'POST' || url.pathname !== '/kilo/chat/completions') {
+    const isChat = req.method === 'POST' && url.pathname === '/kilo/chat/completions';
+    const isModels = req.method === 'GET' && url.pathname === '/kilo/models';
+    if (!isChat && !isModels) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
       return;
@@ -44,14 +46,16 @@ const server = http.createServer(async (req, res) => {
       chunks.push(chunk);
     }
     const body = Buffer.concat(chunks);
-    const upstream = await fetch(`${UPSTREAM}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'dsh-our-free-model',
-        Accept: 'application/json'
-      },
-      body,
+    const upstream = await fetch(isModels ? `${UPSTREAM}/models` : `${UPSTREAM}/chat/completions`, {
+      method: isModels ? 'GET' : 'POST',
+      headers: isModels
+        ? { Accept: 'application/json', 'User-Agent': 'dsh-our-free-model' }
+        : {
+            'Content-Type': 'application/json',
+            'User-Agent': 'dsh-our-free-model',
+            Accept: 'application/json'
+          },
+      body: isModels ? undefined : body,
       signal: AbortSignal.timeout(TIMEOUT_MS)
     });
     const text = await upstream.text();

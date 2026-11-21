@@ -4,7 +4,7 @@ import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import { logEvent } from './lib/app-log.js';
 import { buildAiContext, formatAiContext } from './lib/ai-context.js';
-import { aiConfig, aiConfigured, askAi, testAiProvider } from './lib/ai-client.js';
+import { aiConfig, aiConfigured, askAi, testAiProvider, kiloApiBase, kiloApiHeaders } from './lib/ai-client.js';
 
 /** Действия, которые AI может предложить администратору (выполняет их человек). */
 const ALLOWED_ACTIONS = [
@@ -63,7 +63,8 @@ let kiloCache = { at: 0, data: null };
 async function kiloFreeModels() {
   if (Date.now() - kiloCache.at < 10 * 60 * 1000) return kiloCache.data;
   try {
-    const res = await fetch('https://api.kilo.ai/api/gateway/models', { signal: AbortSignal.timeout(15000) });
+    // на РФ-сервере прямой api.kilo.ai заблокирован (403), поэтому используем relay
+  const res = await fetch(kiloApiBase('/models'), { headers: kiloApiHeaders(), signal: AbortSignal.timeout(15000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const j = await res.json();
     const data = Array.isArray(j.data) ? j.data : [];

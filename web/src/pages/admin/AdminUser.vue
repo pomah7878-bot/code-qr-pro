@@ -526,18 +526,18 @@ onMounted(load);
           </div>
           <p v-else class="text-sm text-slate-500 mt-3">Подписка не активна.</p>
           <p class="text-xs text-slate-500 mt-3">Назначение тарифа, продление, триал и возвраты — в разделе «Тарифы и подписки».</p>
-          <router-link to="/app/admin/billing" class="btn-ghost !py-2 text-sm mt-3">Управлять тарифом →</router-link>
+          <router-link to="/app/admin/billing" class="btn-soft-brand !py-2 text-sm mt-3">Управлять тарифом →</router-link>
         </div>
 
         <!-- Действия -->
         <div class="glass rounded-2xl p-5">
           <h3 class="font-display font-semibold mb-3">Действия</h3>
           <div class="flex flex-wrap gap-2">
-            <button class="btn-ghost !py-2 !px-3 text-sm" :class="user.status === 'blocked' ? 'text-emerald-500' : 'text-red-500'" @click="toggleBlock">
+            <button class="!py-2 !px-3 text-sm" :class="user.status === 'blocked' ? 'btn-soft' : 'btn-soft-danger'" @click="toggleBlock">
               {{ user.status === 'blocked' ? 'Разблокировать' : 'Заблокировать' }}
             </button>
-            <button class="btn-ghost !py-2 !px-3 text-sm" @click="resetPassword">Сбросить пароль</button>
-            <button class="btn-ghost !py-2 !px-3 text-sm" @click="killAllSessions">Выйти со всех устройств</button>
+            <button class="btn-soft !py-2 !px-3 text-sm" @click="resetPassword">Сбросить пароль</button>
+            <button class="btn-soft !py-2 !px-3 text-sm" @click="killAllSessions">Выйти со всех устройств</button>
           </div>
 
           <div class="mt-4">

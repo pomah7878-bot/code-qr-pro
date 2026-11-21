@@ -1329,9 +1329,9 @@ async function printLabels() {
                 <span
                   v-if="c.card?.crypto"
                   class="chip-soon !text-[10px] !py-0 ml-1"
-                  :class="c.card.crypto.verified ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'"
-                  :title="c.card.crypto.message || ''"
-                >криптоподпись: {{ c.card.crypto.verified ? 'проверена' : 'не проверена' }}</span>
+                  :class="(typeof c.card.crypto === 'string' ? /^проверено/i.test(c.card.crypto) : c.card.crypto.verified) ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'"
+                  :title="(typeof c.card.crypto === 'object' && c.card.crypto.message) ? c.card.crypto.message : ((c.card.warnings || [])[0] || '')"
+                >криптоподпись: {{ typeof c.card.crypto === 'string' ? c.card.crypto.toLowerCase() : (c.card.crypto.verified ? 'проверена' : 'не проверена') }}</span>
                 <span v-if="c.history" class="chip-soon !text-[10px] !py-0 ml-1">из вашей истории: {{ c.history.jobName }}</span>
                 <span v-if="c.cz?.configured" class="ml-1">ЧЗ подключён</span>
                 <span v-else-if="c.cz?.error" class="ml-1">ЧЗ недоступен: {{ c.cz.error }}</span>

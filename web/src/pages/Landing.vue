@@ -10,15 +10,15 @@ const plans = ref([]);
 const reviews = ref([]);
 const reviewCount = ref(0);
 const reviewAvg = ref(0);
-const premium = () => plans.value.find(p => p.id === 'premium');
+const premium = () => plans.value.find(p => p.id === 'pro' || p.id === 'premium');
 const free = () => plans.value.find(p => p.id === 'free');
 const freeFeatures = computed(() => planFeatureRows(free()));
 const premiumFeatures = computed(() => planFeatureRows(premium(), { onlyEnabled: true }));
 const freeCodeLimit = computed(() => free()?.codesPerDay ?? 50);
-const premiumCodeLimit = computed(() => premium()?.codesPerDay ?? 10000);
+const premiumCodeLimit = computed(() => premium()?.opsPerPeriod ?? 5000);
 const minPerMonth = () => {
   const o = premium()?.offers || [];
-  return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 1990;
+  return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 349;
 };
 // лучшее предложение = минимальная цена за месяц
 const bestOffer = () => {
@@ -73,7 +73,7 @@ const features = [
   { icon: 'print', title: 'Печать прямо с сайта', text: 'PDF, печать из браузера или напрямую через Windows Print Bridge на TSC, Zebra, Xprinter и другие.' },
   { icon: 'archive', title: 'История и архив', text: 'Все пакеты, проверки и печать — в одном месте. ZIP-архивы, срок хранения и занятое место по тарифу.' },
   { icon: 'api', title: 'API для 1С и складов', text: 'REST API: генерация, проверка и получение результатов прямо из учётной системы.' },
-  { icon: 'ai', title: 'AI-помощник 24/7', text: 'Отвечает по «Честному ЗНАКу» и работе сервиса, подсказывает по шагам и передаёт сложное администратору. Входит в PREMIUM.' },
+  { icon: 'ai', title: 'AI-помощник 24/7', text: 'Отвечает по «Честному ЗНАКу» и работе сервиса, подсказывает по шагам и передаёт сложное администратору. Входит в PRO.' },
   { icon: 'lock', title: 'Безопасность', text: 'Двухфакторная аутентификация, активные сессии, защита аккаунта и API-ключи.' }
 ];
 const steps = [
@@ -86,7 +86,7 @@ const faq = [
   { q: 'Подойдёт ли для моего принтера?', a: 'Да. Windows Print Bridge печатает через драйвер любого термопринтера: TSC, Zebra, Xprinter, Godex и других. Можно скачать PDF по размеру этикетки или печатать прямо из браузера.' },
   { q: 'Можно ли печатать наборы?', a: 'Да. Загрузите КИН набора и КИЗ вложений — сервис распределит коды по составу и подготовит этикетку набора и этикетки каждого вложения. Для неразборной упаковки есть режим «Только набор».' },
   { q: 'Можно ли печатать без скачивания PDF?', a: 'Да. Кнопка «Печать» открывает готовый макет и системное окно печати. В окне печати выберите принтер этикеток и нужный размер бумаги.' },
-  { q: 'Можно ли интегрировать с 1С?', a: 'Да, на тарифе PREMIUM доступен REST API: генерация кодов, проверка и получение результатов прямо из вашей учётной системы.' },
+  { q: 'Можно ли интегрировать с 1С?', a: 'Да, на тарифе PRO доступен REST API: генерация кодов, проверка и получение результатов прямо из вашей учётной системы.' },
   { q: 'Что если код не пройдёт проверку?', a: 'Валидатор проверит GTIN, контрольные цифры, серийник, криптохвост и дубли до генерации. Вы сразу увидите ошибку и сможете исправить файл.' }
 ];
 const openFaq = ref(null);
@@ -118,7 +118,7 @@ const openFaq = ref(null);
         <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день. Без карты. Регистрация за 30 секунд.</p>
         <!-- счётчики -->
         <div class="reveal reveal-d5 grid grid-cols-3 gap-2 sm:gap-4 mt-10 max-w-xl">
-          <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">кодов/день на PREMIUM</div></div>
+          <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">операций/мес на PRO</div></div>
           <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.uptime }}%</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">аптайм сервиса</div></div>
           <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">30с</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">до первого кода</div></div>
         </div>
@@ -165,18 +165,18 @@ const openFaq = ref(null);
       </div>
     </section>
 
-    <!-- НОВЫЕ ВОЗМОЖНОСТИ PREMIUM -->
+    <!-- НОВЫЕ ВОЗМОЖНОСТИ PRO -->
     <section class="max-w-6xl mx-auto px-4 py-16">
       <div class="reveal text-center mb-10">
         <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-3 py-1 mb-4">
-          <BrandIcon name="star-filled" :size="12" />Новое в PREMIUM
+          <BrandIcon name="star-filled" :size="12" />Новое в PRO
         </span>
         <h2 class="font-display font-bold text-3xl md:text-4xl mb-3">Помощник, который знает «Честный ЗНАК»</h2>
-        <p class="text-slate-500 max-w-2xl mx-auto">AI-помощник, база знаний и живая поддержка — включены в PREMIUM без доплат.</p>
+        <p class="text-slate-500 max-w-2xl mx-auto">AI-помощник, база знаний и живая поддержка — включены в PRO без доплат.</p>
       </div>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div class="reveal glass rounded-2xl p-6 relative overflow-hidden hover:-translate-y-1 transition-transform">
-          <div class="absolute right-3 top-3 text-[9px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-violet-600 to-accent-500 rounded-full px-2 py-0.5">PREMIUM</div>
+          <div class="absolute right-3 top-3 text-[9px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-violet-600 to-accent-500 rounded-full px-2 py-0.5">PRO</div>
           <div class="mb-4"><span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-accent-500 text-white shadow-lg shadow-violet-600/30"><BrandIcon name="ai" :size="24" solid="#ffffff" /></span></div>
           <h3 class="font-display font-semibold text-lg mb-2">AI-помощник 24/7</h3>
           <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Отвечает по GS1 DataMatrix, «Честному ЗНАКу» и работе сервиса. Понимает, в каком разделе вы находитесь, и подсказывает по шагам.</p>
@@ -228,12 +228,12 @@ const openFaq = ref(null);
         </div>
         <div class="glass rounded-2xl p-6">
           <h3 class="font-display font-semibold text-lg text-slate-900 dark:text-white mb-2">API для 1С и склада</h3>
-          <p>На тарифе PREMIUM доступен REST API: создание пакета, проверка кодов и получение результата. Подходит для 1С, WMS и складских систем, где маркировка должна запускаться автоматически.</p>
+          <p>На тарифе PRO доступен REST API: создание пакета, проверка кодов и получение результата. Подходит для 1С, WMS и складских систем, где маркировка должна запускаться автоматически.</p>
         </div>
       </div>
       <p class="reveal text-sm text-slate-500 mt-6">
         Начните с <router-link to="/register" class="text-brand-400 font-medium">бесплатной регистрации</router-link>
-        или посмотрите <a href="#pricing" class="text-brand-400 font-medium">тарифы и лимиты</a>.
+        или посмотрите <router-link to="/pricing" class="text-brand-400 font-medium">тарифы и лимиты</router-link>.
       </p>
     </section>
 
@@ -258,7 +258,7 @@ const openFaq = ref(null);
           <span v-else>Выгоднее при оплате за год</span>
         </div>
         <h2 class="font-display font-bold text-3xl md:text-5xl mb-4">Выберите свой тариф</h2>
-        <p class="text-slate-500 text-lg">Начните бесплатно. PREMIUM окупается с первой партии маркировки.</p>
+        <p class="text-slate-500 text-lg">Начните бесплатно. PRO окупается с первой партии маркировки.</p>
       </div>
       <div class="relative grid md:grid-cols-2 gap-8 items-stretch">
         <!-- FREE -->
@@ -277,12 +277,12 @@ const openFaq = ref(null);
           </ul>
           <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
         </div>
-        <!-- PREMIUM -->
+        <!-- PRO -->
         <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-6 sm:p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
           <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap"><span class="inline-flex items-center gap-1"><BrandIcon name="star-filled" :size="13" />Выбор бизнеса</span></div>
           <div class="flex items-center gap-3 mb-2 mt-2">
             <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center shadow-lg shadow-violet-600/40"><BrandIcon name="crown" :size="24" /></div>
-            <h3 class="font-display font-extrabold text-2xl grad-text">PREMIUM</h3>
+            <h3 class="font-display font-extrabold text-2xl grad-text">PRO</h3>
           </div>
           <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
           <div class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-2.5 py-1 mb-4">
@@ -320,11 +320,11 @@ const openFaq = ref(null);
               <span class="text-violet-500 font-bold"><BrandIcon name="check" :size="14" /></span> Поддержка с историей обращений
             </li>
           </ul>
-          <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PREMIUM →</router-link>
+          <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PRO →</router-link>
           <p class="text-center text-xs text-slate-500 mt-3 inline-flex items-center gap-1.5"><BrandIcon name="lock" :size="14" />Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
         </div>
       </div>
-      <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PREMIUM в любой момент.</p>
+      <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PRO в любой момент.</p>
     </section>
 
     <!-- REVIEWS -->

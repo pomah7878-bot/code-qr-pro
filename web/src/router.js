@@ -17,6 +17,7 @@ const Security = () => import('./pages/Security.vue');
 const History = () => import('./pages/History.vue');
 const Sets = () => import('./pages/Sets.vue');
 const Billing = () => import('./pages/Billing.vue');
+const Pricing = () => import('./pages/Pricing.vue');
 const ApiKeys = () => import('./pages/ApiKeys.vue');
 const Cz = () => import('./pages/Cz.vue');
 const Reviews = () => import('./pages/Reviews.vue');
@@ -37,11 +38,13 @@ const NotFound = () => import('./pages/NotFound.vue');
 const Assistant = () => import('./pages/Assistant.vue');
 const Help = () => import('./pages/Help.vue');
 const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
+const AdminBilling = () => import('./pages/admin/AdminBilling.vue');
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Landing },
+    { path: '/pricing', component: Pricing },
     { path: '/login', component: Login },
     { path: '/register', component: Register },
     { path: '/app', component: Dashboard, meta: { auth: true } },
@@ -66,6 +69,7 @@ const router = createRouter({
         { path: 'users', component: AdminUsers },
         { path: 'users/:id', component: AdminUser, props: true },
         { path: 'orders', component: AdminOrders, meta: { adminOnly: true } },
+        { path: 'billing', component: AdminBilling, meta: { adminOnly: true } },
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
         { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },

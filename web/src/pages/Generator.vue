@@ -272,7 +272,7 @@ const itemStatus = { ok: 'ожидает', generated: 'готов', invalid: 'о
           <div class="flex flex-wrap gap-6 items-center">
             <div><div class="text-3xl font-extrabold text-emerald-500">{{ preview.valid }}</div><div class="text-xs text-slate-500">валидных</div></div>
             <div><div class="text-3xl font-extrabold text-red-500">{{ preview.total - preview.valid }}</div><div class="text-xs text-slate-500">с ошибками</div></div>
-            <div class="text-sm text-slate-500">Лимит пакета: {{ store.plan?.batchMax }} · осталось сегодня: {{ Math.max(0, (store.usage?.codesPerDay ?? 0) - (store.usage?.codesToday ?? 0)) }}</div>
+            <div class="text-sm text-slate-500">Лимит пакета: {{ store.plan?.batchMax }} · осталось операций: {{ store.usage?.ops?.left ?? '∞' }}<template v-if="store.usage?.daily?.limit"> · сегодня {{ store.usage.daily.used }} / {{ store.usage.daily.limit }}</template></div>
           </div>
           <ValidHint class="mt-3" />
         </div>

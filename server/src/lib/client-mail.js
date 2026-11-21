@@ -19,6 +19,8 @@ export const MAIL_TEMPLATES = [
   { id: 'premium_renewed', title: 'Подписка продлена', subject: 'Подписка PREMIUM в CODE QR PRO продлена' },
   { id: 'premium_expiring', title: 'PREMIUM скоро закончится', subject: 'Напоминание: PREMIUM в CODE QR PRO заканчивается' },
   { id: 'premium_expired', title: 'PREMIUM закончился', subject: 'PREMIUM в CODE QR PRO закончился' },
+  { id: 'trial_expiring', title: 'Пробный период заканчивается', subject: 'Пробный период PRO в CODE QR PRO заканчивается' },
+  { id: 'trial_ended', title: 'Пробный период закончился', subject: 'Пробный период PRO в CODE QR PRO закончился' },
   { id: 'compensation', title: 'Компенсация за инцидент', subject: 'Компенсация: PREMIUM в CODE QR PRO продлён' },
   { id: 'payment_failed', title: 'Оплата не прошла', subject: 'Оплата в CODE QR PRO не прошла' },
   { id: 'account_blocked', title: 'Аккаунт заблокирован', subject: 'Аккаунт CODE QR PRO заблокирован' },
@@ -77,6 +79,25 @@ const TEMPLATES = {
     notice: 'На тарифе FREE доступны только базовые лимиты: без редактора этикеток, наборов и API.',
     noticeTone: 'warn',
     ctaLabel: 'Продлить PREMIUM',
+    ctaUrl: `${site()}/app/billing`
+  }),
+  trial_expiring: (u, vars) => ({
+    subject: 'Пробный период PRO в CODE QR PRO заканчивается',
+    badge: 'Пробный период',
+    title: vars.until ? `Пробный период заканчивается ${vars.until}` : 'Пробный период скоро закончится',
+    intro: `Здравствуйте!\n\nБесплатный доступ к PRO${vars.until ? ' заканчивается ' + vars.until : ' скоро заканчивается'}. После окончания аккаунт автоматически перейдёт на FREE — деньги не списываются.`,
+    notice: 'Чтобы сохранить лимиты PRO и расширенные проверки, оформите подписку заранее.',
+    noticeTone: 'warn',
+    ctaLabel: 'Выбрать тариф',
+    ctaUrl: `${site()}/app/billing`
+  }),
+  trial_ended: (u, vars) => ({
+    subject: 'Пробный период PRO в CODE QR PRO закончился',
+    badge: 'Тариф',
+    title: 'Пробный период закончился',
+    intro: `Здравствуйте!\n\nПробный период PRO${vars.until ? ' (' + vars.until + ')' : ''} завершён — аккаунт переведён на FREE. Деньги не списывались.`,
+    notice: 'Данные и история сохранены. Тариф можно оформить в любой момент.',
+    ctaLabel: 'Открыть тарифы',
     ctaUrl: `${site()}/app/billing`
   }),
   premium_expired: (u, vars) => ({

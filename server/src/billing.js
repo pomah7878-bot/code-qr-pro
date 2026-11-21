@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { db } from './db.js';
-import { PLANS, getPremiumOffers, getTestPrice, offerFinalPrice, archiveAddon } from './plans.js';
+import { getPlan, normalizePlanId, getPremiumOffers, offerFinalPrice, archiveAddon, getTestPrice } from './plans.js';
+import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, activeSubscription, currentPeriod } from './lib/subscription.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
@@ -16,7 +17,7 @@ async function yk(method, path, body) {
   const res = await fetch(YK_API + path, {
     method,
     headers: {
-      'Authorization': 'Basic ' + Buffer.from(SHOP_ID + ':' + SECRET).toString('base64'),
+      Authorization: 'Basic ' + Buffer.from(SHOP_ID + ':' + SECRET).toString('base64'),
       'Idempotence-Key': randomUUID(),
       'Content-Type': 'application/json'
     },
@@ -30,21 +31,9 @@ async function yk(method, path, body) {
 
 const sqlNow = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
 
+/** Обратная совместимость для админки: активирует оплаченный период PRO. */
 export function activatePremium(userId, provider, externalId, orderId, days = 30) {
-  const termDays = Number.isFinite(days) && days > 0 ? days : 30;
-  db.transaction(() => {
-    const active = db.prepare("SELECT * FROM subscriptions WHERE user_id=? AND plan='premium' AND status='active' AND expires_at > datetime('now') ORDER BY expires_at DESC LIMIT 1").get(userId);
-    const base = active ? new Date(active.expires_at.replace(' ', 'T') + 'Z').getTime() : Date.now();
-    const expires = sqlNow(new Date(Math.max(base, Date.now()) + termDays * 86400000));
-    if (active) {
-      db.prepare('UPDATE subscriptions SET expires_at=? WHERE id=?').run(expires, active.id);
-    } else {
-      db.prepare("INSERT INTO subscriptions (user_id, plan, status, provider, external_id, started_at, expires_at) VALUES (?, 'premium', 'active', ?, ?, datetime('now'), ?)")
-        .run(userId, provider, externalId, expires);
-    }
-    db.prepare("UPDATE users SET plan='premium' WHERE id=?").run(userId);
-    if (orderId) db.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE id=?").run(orderId);
-  })();
+  return activateSubscription({ userId, planId: 'pro', days, provider, externalId: externalId || '', orderId, source: provider || 'admin' });
 }
 
 export function activateArchive(userId, provider, externalId, orderId, days = 1095, mb = 10240) {
@@ -59,7 +48,6 @@ export function activateArchive(userId, provider, externalId, orderId, days = 10
   db.transaction(() => {
     db.prepare('UPDATE users SET archive_until=?, archive_mb=MAX(archive_mb, ?) WHERE id=?')
       .run(until, termMb, userId);
-    // продлеваем хранение уже существующих работ, если они ещё не удалены
     db.prepare(
       "UPDATE generation_jobs SET expires_at=datetime('now','+' || ? || ' days') WHERE user_id=? AND (expires_at IS NULL OR expires_at < datetime('now','+' || ? || ' days'))"
     ).run(termDays, userId, termDays);
@@ -71,40 +59,42 @@ export function activateArchive(userId, provider, externalId, orderId, days = 10
   return { until, mb: termMb, provider, externalId };
 }
 
-export async function createCheckout(user, planId = 'premium', days = null, promoCode = '') {
-  // валидация тарифа/периода ДО проверки провайдера
-  let amount, termDays;
-  if (planId === 'test') {
-    amount = getTestPrice();
-    termDays = 30;
-  } else if (planId === 'archive') {
+const PLAN_PERIODS = { month: { days: 30, label: 'месяц' }, year: { days: 365, label: 'год' } };
+
+/** Расчёт цены и срока для тарифа/периода. */
+export function planOffer(planId, period = 'month') {
+  const id = normalizePlanId(planId);
+  if (id === 'archive') {
     const addon = archiveAddon();
-    amount = addon.price;
-    termDays = addon.days;
-  } else if (planId === 'premium') {
-    const offers = getPremiumOffers();
-    const offer = days != null ? offers.find(o => o.days === Number(days)) : offers[0];
-    if (!offer) {
-      const e = new Error('Недоступный период подписки');
-      e.statusCode = 400;
-      throw e;
-    }
-    amount = offerFinalPrice(offer);
-    termDays = offer.days;
-  } else {
-    const e = new Error('Неизвестный тариф');
+    return { kind: 'archive', planId: 'archive', days: addon.days, price: addon.price, title: 'Архив на 3 года' };
+  }
+  const plan = getPlan(id);
+  if (!plan || !plan.active || plan.id === 'free') {
+    const e = new Error('Недоступный тариф');
     e.statusCode = 400;
     throw e;
   }
+  const p = PLAN_PERIODS[period] || PLAN_PERIODS.month;
+  const price = period === 'year'
+    ? (Number(plan.priceYearly) > 0 ? Number(plan.priceYearly) : Math.round(Number(plan.priceMonthly) * 12))
+    : Number(plan.priceMonthly);
+  return { kind: 'subscription', planId: plan.id, plan, days: p.days, price, title: `${plan.title} на ${p.label}`, period: period === 'year' ? 'year' : 'month' };
+}
+
+export async function createCheckout(user, planId = 'pro', period = 'month', promoCode = '') {
+  const offer = planOffer(planId, period);
+  let amount = Number(offer.price);
+  let termDays = offer.days;
   if (!(amount > 0)) {
     const e = new Error('Некорректная цена тарифа');
     e.statusCode = 400;
     throw e;
   }
+  if (!(termDays > 0)) termDays = 30;
 
   let promo = null;
   if (promoCode) {
-    const checked = validatePromo({ code: promoCode, userId: user.id, amount, days: termDays, plan: planId });
+    const checked = validatePromo({ code: promoCode, userId: user.id, amount, days: termDays, plan: offer.planId });
     if (checked.error) {
       const e = new Error(checked.error);
       e.statusCode = 400;
@@ -120,14 +110,13 @@ export async function createCheckout(user, planId = 'premium', days = null, prom
     e.statusCode = 503;
     throw e;
   }
-  const info = db.prepare('INSERT INTO orders (user_id, plan, amount, days, promo_code, discount) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(user.id, planId, amount, termDays, promo?.code || null, promo?.discount || 0);
+  const info = db.prepare(
+    'INSERT INTO orders (user_id, plan, amount, days, promo_code, discount, kind, period, plan_title) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(user.id, offer.planId, amount, termDays, promo?.code || null, promo?.discount || 0, offer.kind, offer.period || 'month', offer.title);
   const orderId = info.lastInsertRowid;
-  const description = planId === 'test'
-    ? 'TEST: проверка оплаты CODE QR PRO (PREMIUM ' + termDays + ' дней)'
-    : planId === 'archive'
-      ? 'Архив CODE QR PRO: ' + termDays + ' дней, ' + archiveAddon().mb + ' МБ'
-      : 'PREMIUM подписка CODE QR PRO (' + termDays + ' дней)';
+  const description = offer.kind === 'archive'
+    ? `Архив CODE QR PRO: ${termDays} дней, ${archiveAddon().mb} МБ`
+    : `${offer.plan?.title || 'CODE QR PRO'} подписка CODE QR PRO (${termDays} дней)`;
   try {
     const data = await yk('POST', '/payments', {
       amount: { value: amount.toFixed(2), currency: 'RUB' },
@@ -145,7 +134,7 @@ export async function createCheckout(user, planId = 'premium', days = null, prom
           payment_subject: 'service'
         }]
       },
-      metadata: { order_id: String(orderId), product: 'code-qr-pro' }
+      metadata: { order_id: String(orderId), product: 'code-qr-pro', plan: offer.planId, kind: offer.kind }
     });
     db.prepare('UPDATE orders SET external_id=?, confirmation_url=? WHERE id=?')
       .run(data.id, data.confirmation?.confirmation_url || null, orderId);
@@ -156,35 +145,72 @@ export async function createCheckout(user, planId = 'premium', days = null, prom
   return db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
 }
 
+/** Подтверждение заказа по серверному платежу (только после GET /payments/:id). */
+function fulfillOrder(order, payment) {
+  if (!order || order.status === 'paid') return db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+  const amountMatches = Math.abs(Number(payment.amount?.value || 0) - Number(order.amount || 0)) < 0.01;
+  if (!amountMatches) throw new Error('Сумма платежа не совпадает с заказом');
+  if (order.kind === 'archive' || order.plan === 'archive') {
+    const addon = archiveAddon();
+    activateArchive(order.user_id, 'yookassa', payment.id, order.id, order.days || addon.days, addon.mb);
+  } else {
+    activateSubscription({
+      userId: order.user_id,
+      planId: order.plan,
+      days: order.days || 30,
+      provider: 'yookassa',
+      externalId: payment.id,
+      orderId: order.id,
+      source: 'payment'
+    });
+  }
+  db.prepare("INSERT OR IGNORE INTO payment_events (external_id, provider, order_id, status, payload_hash) VALUES (?,?,?,?,?)")
+    .run(payment.id, 'yookassa', order.id, payment.status || 'succeeded', createHash('sha256').update(JSON.stringify(payment.metadata || {})).digest('hex').slice(0, 32));
+  const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+  redeemPromo(paid);
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+  notifyPayment(paid, user);
+  const sub = activeSubscription(order.user_id);
+  notifyClient(user, 'premium_renewed', { until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' }).catch(() => {});
+  return paid;
+}
+
 export async function checkOrder(order) {
   if (order.status !== 'pending' || !order.external_id) return order;
   const data = await yk('GET', '/payments/' + order.external_id);
   if (data.status === 'succeeded') {
-    if (order.plan === 'archive') {
-      const addon = archiveAddon();
-      activateArchive(order.user_id, 'yookassa', data.id, order.id, order.days || addon.days, addon.mb);
-    } else {
-      activatePremium(order.user_id, 'yookassa', data.id, order.id, order.days || 30);
-    }
-    const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
-    redeemPromo(paid);
-    const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
-    notifyPayment(paid, u);
-    if (order.plan !== 'archive') {
-      const sub = db.prepare(
-        "SELECT expires_at FROM subscriptions WHERE user_id=? AND status='active' ORDER BY expires_at DESC LIMIT 1"
-      ).get(order.user_id);
-      notifyClient(u, 'premium_renewed', { until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' }).catch(() => {});
-    }
-  } else if (data.status === 'canceled') {
+    return fulfillOrder(order, data);
+  }
+  if (data.status === 'canceled') {
     db.prepare("UPDATE orders SET status='canceled' WHERE id=?").run(order.id);
-    const u = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
-    notifyOrderCanceled(order, u);
+    const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+    notifyOrderCanceled(order, user);
   }
   return db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
 }
 
-// Отмена ещё не оплаченного платежа в ЮKassa (best-effort для админки)
+/**
+ * Обработка серверного уведомления ЮKassa.
+ * Тело уведомления не доверяем: запрашиваем платёж по API и сверяем сумму/метаданные.
+ * Повторная обработка защищена таблицей payment_events.
+ */
+export async function handleYooKassaNotification(body = {}) {
+  const paymentId = String(body?.object?.id || '');
+  if (!paymentId) return { ok: false, status: 400, error: 'Нет id платежа' };
+  if (!providerConfigured()) return { ok: false, status: 503, error: 'Провайдер не настроен' };
+  const seen = db.prepare('SELECT * FROM payment_events WHERE external_id=?').get(paymentId);
+  if (seen) return { ok: true, duplicated: true, orderId: seen.order_id };
+  const payment = await yk('GET', '/payments/' + encodeURIComponent(paymentId));
+  if (payment.status !== 'succeeded') return { ok: true, ignored: true, status: payment.status };
+  const orderId = Number(payment.metadata?.order_id || 0);
+  const order = orderId
+    ? db.prepare('SELECT * FROM orders WHERE id=?').get(orderId)
+    : db.prepare('SELECT * FROM orders WHERE external_id=?').get(paymentId);
+  if (!order) return { ok: true, ignored: true, reason: 'order_not_found' };
+  const paid = fulfillOrder(order, payment);
+  return { ok: true, duplicated: false, orderId: paid.id, status: paid.status };
+}
+
 export async function getPayment(paymentId) {
   return yk('GET', '/payments/' + encodeURIComponent(paymentId));
 }
@@ -193,7 +219,6 @@ export async function cancelPayment(paymentId) {
   return yk('POST', '/payments/' + encodeURIComponent(paymentId) + '/cancel', {});
 }
 
-// Возврат по успешному платежу. ЮKassa принимает payment_id и сумму.
 export async function refundPayment(paymentId, amount) {
   return yk('POST', '/refunds', {
     payment_id: paymentId,
@@ -201,63 +226,36 @@ export async function refundPayment(paymentId, amount) {
   });
 }
 
+// Устаревшие имена оставлены для совместимости: суперайзер теперь в subscription.js
 export function expireSubscriptions() {
-  // кого переводим на FREE — для уведомления
-  const expiring = db.prepare(`
-    SELECT u.id, u.email, u.name,
-      (SELECT expires_at FROM subscriptions s WHERE s.user_id=u.id AND s.plan='premium' ORDER BY expires_at DESC LIMIT 1) AS last_expires
-    FROM users u
-    WHERE u.plan='premium' AND u.id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))
-  `).all();
-  db.prepare("UPDATE subscriptions SET status='expired' WHERE status='active' AND expires_at <= datetime('now')").run();
-  db.prepare("UPDATE users SET plan='free' WHERE plan='premium' AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))").run();
-  for (const u of expiring) {
-    notifyStatusChange(u, 'Подписка PREMIUM истекла → FREE');
-    notifyClient(u, 'premium_expired', { until: u.last_expires ? String(u.last_expires).slice(0, 10) : '' }).catch(() => {});
-  }
+  return expireSubscriptionsAndTrials();
 }
 
-// Напоминание за N дней до окончания PREMIUM: не чаще одного письма в 3 дня на клиента.
 export function notifyExpiringSoon(days = 3) {
-  const rows = db.prepare(`
-    SELECT u.id, u.email, u.name, s.expires_at
-    FROM users u JOIN subscriptions s ON s.user_id = u.id
-    WHERE u.plan='premium' AND u.status='active' AND s.status='active'
-      AND s.expires_at > datetime('now')
-      AND s.expires_at <= datetime('now', ?)
-      AND (u.premium_notice_at IS NULL OR u.premium_notice_at < datetime('now','-3 days'))
-    ORDER BY s.expires_at ASC
-    LIMIT 200
-  `).all(`+${Math.max(1, Number(days) || 3)} days`);
-  for (const u of rows) {
-    db.prepare("UPDATE users SET premium_notice_at=datetime('now') WHERE id=?").run(u.id);
-    notifyClient(u, 'premium_expiring', { until: String(u.expires_at).slice(0, 10) }).catch(() => {});
-  }
-  return rows.length;
+  return remindTrialEnding(days);
 }
 
 let sweeping = false;
-let lastExpiringNotice = 0;
+let lastNotice = 0;
 async function sweep() {
   if (sweeping) return;
   sweeping = true;
   try {
-    expireSubscriptions();
-    if (Date.now() - lastExpiringNotice > 6 * 3600_000) {
-      lastExpiringNotice = Date.now();
-      try { notifyExpiringSoon(3); } catch { /* письма не должны ломать свипер */ }
+    expireSubscriptionsAndTrials();
+    if (Date.now() - lastNotice > 6 * 3600_000) {
+      lastNotice = Date.now();
+      try { remindTrialEnding(); } catch { /* письма не должны ломать свипер */ }
     }
     if (!providerConfigured()) return;
     const pending = db.prepare("SELECT * FROM orders WHERE status='pending' AND external_id IS NOT NULL AND created_at > datetime('now', '-1 day') ORDER BY id LIMIT 20").all();
-    for (const o of pending) {
-      try { await checkOrder(o); } catch { /* транзиентная ошибка YooKassa — повторим в следующем цикле */ }
+    for (const order of pending) {
+      try { await checkOrder(order); } catch { /* транзиентная ошибка ЮKassa — повторим */ }
     }
   } finally { sweeping = false; }
 }
 
 export function startBillingSweeper() {
-  expireSubscriptions();
-  // Напоминания об окончании PREMIUM — не сразу после рестарта, а через 10 минут.
-  setTimeout(() => { try { notifyExpiringSoon(3); } catch { /* ignore */ } }, 10 * 60_000).unref();
+  expireSubscriptionsAndTrials();
+  setTimeout(() => { try { remindTrialEnding(); } catch { /* ignore */ } }, 10 * 60_000).unref();
   setInterval(sweep, 30000).unref();
 }

@@ -32,10 +32,9 @@ const currentPage = computed(() => pageContext(route.path));
 const pageKey = computed(() => assistantUi.pageKey || currentPage.value.key);
 const pageLabel = computed(() => pageContext(`/app/${pageKey.value === 'overview' ? '' : pageKey.value}`).label || currentPage.value.label);
 
-const isPremium = computed(() => {
-  const id = store.plan?.id || store.plan?.key || '';
-  return id === 'premium' || ['admin', 'support'].includes(store.user?.role);
-});
+const isPremium = computed(() => Boolean(
+  store.plan?.aiAssistant || store.plan?.features?.aiAssistant || ['admin', 'support'].includes(store.user?.role)
+));
 
 function greeting() {
   return `Вы в разделе «${pageLabel.value}». Опишите, что не получается — подскажу по шагам.`;
@@ -307,7 +306,7 @@ onUnmounted(() => {
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-display font-bold tracking-wide text-[15px] sm:text-base">AI-помощник</span>
-                    <span class="ai-premium-tag">PREMIUM</span>
+                    <span class="ai-premium-tag">AI</span>
                   </div>
                   <div class="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     CODE QR PRO · раздел <b class="text-brand-400">{{ pageLabel }}</b>
@@ -328,7 +327,7 @@ onUnmounted(() => {
               </div>
               <p class="text-sm mt-3 font-semibold">AI-помощник — премиальная функция</p>
               <p class="text-xs text-slate-500 mt-1">Отвечает по «Честному ЗНАКу» и работе сервиса, а сложные вопросы передаёт администратору.</p>
-              <router-link to="/app/billing" class="ai-cta inline-block mt-4 !py-2.5 !px-5 text-sm" @click="closeAssistant">Оформить PREMIUM</router-link>
+              <router-link to="/app/billing" class="ai-cta inline-block mt-4 !py-2.5 !px-5 text-sm" @click="closeAssistant">Перейти в кабинет</router-link>
             </div>
           </div>
 

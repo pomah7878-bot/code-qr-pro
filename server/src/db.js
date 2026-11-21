@@ -441,7 +441,135 @@ const MIGRATIONS = [
      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
    );`,
   // v28 — личный токен «Честного ЗНАКа» (True API) у клиента
-  `ALTER TABLE users ADD COLUMN cz_token TEXT NOT NULL DEFAULT '';`
+  `ALTER TABLE users ADD COLUMN cz_token TEXT NOT NULL DEFAULT '';`,
+  // v29 — тарифы в БД: 4 тарифа, цены месяц/год, лимиты операций и проверок
+  `CREATE TABLE plans (
+     id TEXT PRIMARY KEY,
+     title TEXT NOT NULL,
+     description TEXT NOT NULL DEFAULT '',
+     price_monthly REAL NOT NULL DEFAULT 0,
+     price_yearly REAL NOT NULL DEFAULT 0,
+     ops_per_period INTEGER NOT NULL DEFAULT 0,
+     daily_ops INTEGER NOT NULL DEFAULT 0,
+     checks_per_period INTEGER NOT NULL DEFAULT 0,
+     batch_max INTEGER NOT NULL DEFAULT 100,
+     formats TEXT NOT NULL DEFAULT '["png","svg"]',
+     history_days INTEGER NOT NULL DEFAULT 7,
+     archive_mb INTEGER NOT NULL DEFAULT 50,
+     features TEXT NOT NULL DEFAULT '{}',
+     sort_order INTEGER NOT NULL DEFAULT 0,
+     recommended INTEGER NOT NULL DEFAULT 0,
+     active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   INSERT OR IGNORE INTO plans
+     (id, title, description, price_monthly, price_yearly, ops_per_period, daily_ops,
+      checks_per_period, batch_max, formats, history_days, archive_mb, features, sort_order, recommended, active)
+   VALUES
+     ('free', 'FREE', 'Для знакомства с сервисом и небольших объёмов', 0, 0, 600, 20, 0, 20,
+      '["png","svg","pdf"]', 7, 50,
+      '{"labelEditor":false,"printBridge":false,"apiAccess":false,"aiAssistant":true,"templates":false,"employees":1,"extendedChecks":false}', 1, 0, 1),
+     ('start', 'START', 'Для небольшого бизнеса: расширенные форматы и массовая обработка', 149, 1490, 500, 0, 0, 5000,
+      '["png","svg","pdf"]', 7, 500,
+      '{"labelEditor":false,"printBridge":false,"apiAccess":false,"aiAssistant":true,"templates":false,"employees":1,"extendedChecks":false}', 2, 0, 1),
+     ('pro', 'PRO', 'Оптимальный тариф: сохранение шаблонов, AI-помощник и расширенные проверки', 349, 3490, 5000, 0, 500, 5000,
+      '["png","svg","pdf","zip"]', 30, 2048,
+      '{"labelEditor":true,"printBridge":true,"apiAccess":true,"aiAssistant":true,"templates":true,"employees":1,"extendedChecks":true}', 3, 1, 1),
+     ('business', 'BUSINESS', 'Для больших объёмов: 30 000 операций и 5 сотрудников', 799, 7990, 30000, 0, 3000, 5000,
+      '["png","svg","pdf","zip"]', 1095, 10240,
+      '{"labelEditor":true,"printBridge":true,"apiAccess":true,"aiAssistant":true,"templates":true,"employees":5,"extendedChecks":true}', 4, 0, 1);`,
+  // v30 — пробный период PRO 7 дней; старые premium/test переводим в PRO
+  `ALTER TABLE users ADD COLUMN trial_started_at TEXT;
+   ALTER TABLE users ADD COLUMN trial_ends_at TEXT;
+   ALTER TABLE users ADD COLUMN trial_used INTEGER NOT NULL DEFAULT 0;
+   UPDATE users SET plan='pro' WHERE plan IN ('premium','test');
+   UPDATE subscriptions SET plan='pro' WHERE plan IN ('premium','test');
+   CREATE INDEX idx_users_trial ON users(trial_ends_at);`,
+  // v31 — учёт использования по периодам, идемпотентные события, расширенный кэш карточек
+  `CREATE TABLE usage_periods (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     plan TEXT NOT NULL DEFAULT 'free',
+     source TEXT NOT NULL DEFAULT 'free',
+     period_start TEXT NOT NULL,
+     period_end TEXT,
+     ops_used INTEGER NOT NULL DEFAULT 0,
+     checks_used INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+     UNIQUE(user_id, period_start)
+   );
+   CREATE INDEX idx_usage_periods_user ON usage_periods(user_id, period_start DESC);
+   CREATE TABLE usage_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     period_id INTEGER,
+     kind TEXT NOT NULL,
+     count INTEGER NOT NULL DEFAULT 1,
+     context TEXT NOT NULL DEFAULT '',
+     idem_key TEXT,
+     external INTEGER NOT NULL DEFAULT 0,
+     status TEXT NOT NULL DEFAULT 'ok',
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_usage_events_user ON usage_events(user_id, created_at DESC);
+   CREATE UNIQUE INDEX idx_usage_events_idem ON usage_events(user_id, idem_key) WHERE idem_key IS NOT NULL;
+   ALTER TABLE usage_daily ADD COLUMN ops_used INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE usage_daily ADD COLUMN checks_used INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE product_cards ADD COLUMN product_kind TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN volume TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN composition TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN country TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN production_date TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN expiration_date TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN crypto TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN source_label TEXT NOT NULL DEFAULT '';
+   ALTER TABLE product_cards ADD COLUMN fetched_at TEXT;
+   ALTER TABLE product_cards ADD COLUMN expires_at TEXT;
+   CREATE TABLE external_requests (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER,
+     adapter TEXT NOT NULL,
+     ok INTEGER NOT NULL DEFAULT 0,
+     status_code INTEGER NOT NULL DEFAULT 0,
+     latency_ms INTEGER NOT NULL DEFAULT 0,
+     error TEXT NOT NULL DEFAULT '',
+     cost_units INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX idx_external_requests_created ON external_requests(created_at);
+   CREATE TABLE payment_events (
+     external_id TEXT PRIMARY KEY,
+     provider TEXT NOT NULL DEFAULT 'yookassa',
+     order_id INTEGER,
+     status TEXT NOT NULL DEFAULT '',
+     payload_hash TEXT NOT NULL DEFAULT '',
+     processed_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );`,
+  // v32 — подписки/заказы: период оплаты, автопродление, тип
+  `ALTER TABLE orders ADD COLUMN kind TEXT NOT NULL DEFAULT 'subscription';
+   ALTER TABLE orders ADD COLUMN period TEXT NOT NULL DEFAULT 'month';
+   ALTER TABLE orders ADD COLUMN plan_title TEXT NOT NULL DEFAULT '';
+   ALTER TABLE subscriptions ADD COLUMN source TEXT NOT NULL DEFAULT 'payment';
+   ALTER TABLE subscriptions ADD COLUMN auto_renew INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE subscriptions ADD COLUMN canceled_at TEXT;
+   ALTER TABLE subscriptions ADD COLUMN plan_title TEXT NOT NULL DEFAULT '';`,
+  // v33 — настройки новых модулей
+  `INSERT OR IGNORE INTO app_settings (key, value) VALUES
+     ('trial_days', '7'),
+     ('trial_checks', '50'),
+     ('cache_card_ttl_seconds', '86400'),
+     ('cache_error_ttl_seconds', '60'),
+     ('extended_checks_enabled', '1'),
+     ('auto_trial', '0'),
+     ('pricing_link_promo', '');`,
+  // v34 — отметка отправленного напоминания об окончании триала
+  `ALTER TABLE users ADD COLUMN trial_notice_at TEXT;
+   INSERT OR IGNORE INTO app_settings (key, value) VALUES ('trial_notice_days', '2');`,
+  // v35 — идемпотентность генерации: повторный запрос с тем же ключом не создаёт дубль задания
+  `ALTER TABLE generation_jobs ADD COLUMN idem_key TEXT;
+   CREATE UNIQUE INDEX idx_jobs_idem ON generation_jobs(user_id, idem_key) WHERE idem_key IS NOT NULL;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

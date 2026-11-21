@@ -10,7 +10,6 @@ import PrintHelp from '../components/PrintHelp.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { downloadBlob, downloadPdfTask, openPrintWindow, openPlaceholderWindow, isIOS } from '../lib/print.js';
 import { mobilePdfGuard, mobilePrintGuard, mobilePdfNotice } from '../lib/mobile-print.js';
-import { fetchCards, fetchCatalogCards } from '../lib/cz-public.js';
 import { checkEan13, eanDigits } from '../lib/ean13.js';
 
 const MAX = 5000;
@@ -521,7 +520,7 @@ const checkRows = computed(() => {
       serviceLife: card?.serviceLife || '',
       status: card?.status || '',
       found: card ? 'Да' : 'Нет',
-      crypto: card?.crypto ? (card.crypto.verified ? 'Проверено' : 'Не проверено') : '—'
+      crypto: card?.crypto ? (typeof card.crypto === 'string' ? card.crypto : (card.crypto.verified ? 'Проверено' : 'Не проверено')) : '—'
     };
   });
 });
@@ -585,7 +584,8 @@ async function checkCodes() {
   finally { busy.value = false; }
 }
 
-// Ищем карточку товара по коду: ЧЗ (если настроен) → открытые базы → своя история
+// Расширенная проверка DataMatrix: локальный разбор + каталог + статус кода.
+// Внешние API вызываются только сервером; лимиты проверяет UsageMeter.
 async function loadProductCards() {
   const valid = result.value?.valid || [];
   cards.value = [];
@@ -593,89 +593,39 @@ async function loadProductCards() {
   if (!valid.length) return;
   cardsLoading.value = true;
   try {
-    // 1) Публичная проверка ЧЗ из браузера клиента: серверы ЦРПТ блокируют IP дата-центров,
-    //    а с обычного IP пользователя карточка приходит полностью (CORS ЧЗ разрешает наш домен).
-    const publicCards = await fetchCards(valid.map((c) => c.code), 5);
-    const publicFound = publicCards.filter((c) => c && c.card).map((c) => ({
-      code: c.code,
-      gtin: c.card.gtin || c.card.ais?.gtin || '',
-      card: c.card,
-      cz: { configured: true, source: 'public' }
-    }));
-    const publicError = publicCards.map((c) => c.error).find(Boolean) || '';
-    if (publicFound.length) {
-      // Дополняем карточку ЧЗ недостающими полями из Нацкаталога (срок службы, состав и т.п.)
-      try {
-        const gtins = valid.map((c) => eanDigits(c.gtin)).filter((g) => g.length >= 8);
-        if (gtins.length) {
-          const catalog = await fetchCatalogCards(gtins, 5);
-          for (const entry of publicFound) {
-            const match = catalog.find((c) => c.card && c.gtin === eanDigits(entry.gtin || entry.card?.gtin));
-            if (!match) continue;
-            const extra = match.card;
-            const card = entry.card;
-            card.serviceLife = card.serviceLife || extra.serviceLife || '';
-            card.structure = card.structure || extra.structure || '';
-            card.composition = card.composition || extra.composition || '';
-            card.productKind = card.productKind || extra.productKind || '';
-            card.category = card.category || extra.category || '';
-            card.quantity = card.quantity || extra.quantity || '';
-            card.producer = card.producer || extra.producer || '';
-            card.brand = card.brand || extra.brand || '';
-            card.name = card.name || extra.name || '';
-          }
-        }
-      } catch { /* каталог не критичен */ }
-      cards.value = publicFound;
-      const firstPublicCard = publicFound.find((c) => c.card)?.card;
-      if (firstPublicCard) fillProductFromCard(firstPublicCard);
-      if (publicError) cardsMessage.value = `Часть кодов не удалось проверить в ЧЗ: ${publicError}`;
-      return;
-    }
-    const notFound = publicCards.find((c) => c && !c.card && !c.error) || null;
-    // 1б) Код не найден (например, короткий, без криптохвоста) — берём карточку из Нацкаталога по GTIN.
-    if (notFound) {
-      const gtins = valid.map((c) => eanDigits(c.gtin)).filter((g) => g.length >= 8);
-      if (gtins.length) {
-        const catalogCards = await fetchCatalogCards(gtins, 5);
-        const catalogFound = catalogCards.filter((c) => c && c.card).map((c) => ({
-          code: '',
-          gtin: c.gtin,
-          card: c.card,
-          cz: { configured: true, source: 'catalog' }
-        }));
-        if (catalogFound.length) {
-          cards.value = catalogFound;
-          const firstCatalogCard = catalogFound.find((c) => c.card)?.card;
-          if (firstCatalogCard) fillProductFromCard(firstCatalogCard);
-          const sent = String(notFound.sentCode || '').slice(0, 45);
-          cardsMessage.value = `Код не найден в ЧЗ (статус: ${notFound.czStatus || 'not_found'}) — показана карточка из Национального каталога по GTIN. `
-            + `Статус кода не проверен. Отправленный код: ${sent}${String(notFound.sentCode || '').length > 45 ? '…' : ''}.`;
-          return;
-        }
-      }
-    }
-    // 2) Серверный фолбэк: личный токен ЧЗ или открытые базы по GTIN.
-    const r = await api.productCards(valid.slice(0, 10).map((c) => ({ code: c.code, gtin: c.gtin })));
-    cards.value = (r.cards || []).filter((c) => c && !c.error);
-    const firstServerCard = cards.value.find((c) => c.card)?.card;
-    if (firstServerCard) fillProductFromCard(firstServerCard);
-    if (publicError) {
-      cardsMessage.value = `Публичная проверка ЧЗ недоступна (${publicError}). `;
-    } else if (notFound) {
-      const sent = String(notFound.sentCode || '').slice(0, 45);
-      cardsMessage.value = `Публичная проверка ЧЗ: код не найден (статус: ${notFound.czStatus || 'not_found'}). `
-        + `Отправлен код: ${sent}${String(notFound.sentCode || '').length > 45 ? '…' : ''}. `
-        + 'Проверьте, что скопирован весь DataMatrix (с криптохвостом) и код уже нанесён/введён в оборот. ';
-    }
-    const czError = cards.value.map((c) => c.cz && c.cz.error).find(Boolean);
-    if (!cards.value.some((c) => c.card)) {
-      cardsMessage.value += cards.value[0]?.message || 'Товар не найден в открытых источниках.';
-    } else if (czError) {
-      cardsMessage.value += `ЧЗ ответил: ${czError}. Показаны данные из открытого источника.`;
+    const idemKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+    const r = await api.productCards(valid.slice(0, 50).map((c) => ({ code: c.code, gtin: c.gtin })), idemKey);
+    cards.value = (r.cards || []).map((item) => {
+      const card = item.card || null;
+      const mapped = card ? {
+        ...card,
+        quantity: card.volume || card.quantity || '',
+        structure: card.composition || card.structure || '',
+        serviceLife: card.serviceLife || ''
+      } : null;
+      return {
+        code: item.code?.input || '',
+        gtin: card?.gtin || item.code?.gtin || '',
+        card: mapped,
+        cz: { configured: true, source: card?.source || '' },
+        warnings: card?.warnings || [],
+        errors: card?.errors || [],
+        local: item.local || null
+      };
+    });
+    const anyCard = cards.value.find((x) => x.card);
+    if (anyCard) fillProductFromCard(anyCard.card);
+    const errors = cards.value.flatMap((x) => x.errors || []);
+    const warnings = cards.value.flatMap((x) => x.warnings || []);
+    if (!anyCard) {
+      cardsMessage.value = 'Карточка товара не найдена: ' + (errors[0] || warnings[0] || 'проверьте полный код и лимит расширенных проверок.');
+    } else if (errors.length) {
+      cardsMessage.value = 'Часть данных не получена: ' + errors[0];
+    } else if (warnings.length) {
+      cardsMessage.value = warnings[0];
     }
   } catch (e) {
-    cardsMessage.value = `Не удалось получить карточку товара: ${e.message}`;
+    cardsMessage.value = e.message || 'Не удалось получить карточку товара';
   } finally {
     cardsLoading.value = false;
   }

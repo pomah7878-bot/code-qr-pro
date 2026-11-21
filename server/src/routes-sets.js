@@ -60,7 +60,7 @@ export async function registerSetRoutes(app) {
 
   app.post('/api/sets/pdf', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
-    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать наборов доступна на тарифе PREMIUM' });
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать наборов доступна на тарифе PRO и выше', feature: 'labelEditor' });
     const p = normalizeSetPayload(req.body);
     const error = validateSetPayload(p);
     if (error) return reply.code(400).send({ error });

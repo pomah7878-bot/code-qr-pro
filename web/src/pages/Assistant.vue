@@ -25,10 +25,9 @@ const tickets = ref([]);
 const ticketsLoading = ref(false);
 const support = reactive({ open: false, busy: false, subject: '', message: '', error: '' });
 
-const isPremium = computed(() => {
-  const id = store.plan?.id || store.plan?.key || '';
-  return id === 'premium' || store.user?.role === 'admin' || store.user?.role === 'support';
-});
+const isPremium = computed(() => Boolean(
+  store.plan?.aiAssistant || store.plan?.features?.aiAssistant || store.user?.role === 'admin' || store.user?.role === 'support'
+));
 
 const QUICK = [
   'Как сгенерировать GS1 DataMatrix?',
@@ -149,7 +148,7 @@ onMounted(() => {
           <div>
             <div class="flex items-center gap-2">
               <h1 class="font-display font-bold text-2xl">AI-помощник</h1>
-              <span class="ai-premium-tag">PREMIUM</span>
+              <span class="ai-premium-tag">AI</span>
             </div>
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
               CODE QR PRO · отвечает по «Честному ЗНАКу» и работе сервиса, сложные вопросы передаёт администратору.
@@ -157,18 +156,18 @@ onMounted(() => {
           </div>
         </div>
         <span class="chip-soon" :class="isPremium ? '!text-emerald-500 !border-emerald-500/30 !bg-emerald-500/10' : '!text-amber-500 !border-amber-500/30 !bg-amber-500/10'">
-          {{ isPremium ? 'PREMIUM · доступен' : 'только PREMIUM' }}
+          {{ isPremium ? 'AI · доступен' : 'AI недоступен' }}
         </span>
       </div>
     </div>
 
     <div v-if="!isPremium" class="glass rounded-2xl p-6 text-center">
       <BrandIcon name="star" :size="30" class="mx-auto text-brand-400" />
-      <h2 class="font-display font-semibold mt-3">Помощник входит в PREMIUM</h2>
+      <h2 class="font-display font-semibold mt-3">AI-помощник</h2>
       <p class="text-sm text-slate-500 mt-1 max-w-lg mx-auto">
         Он разбирается в GS1 DataMatrix, «Честном ЗНАКе», печати этикеток и работе сервиса, а сложные вопросы передаёт администратору.
       </p>
-      <router-link to="/app/billing" class="btn-primary inline-block mt-4 !py-2.5 !px-5 text-sm">Оформить PREMIUM</router-link>
+      <router-link to="/app/billing" class="btn-primary inline-block mt-4 !py-2.5 !px-5 text-sm">Перейти в кабинет</router-link>
     </div>
 
     <template v-else>

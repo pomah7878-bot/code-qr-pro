@@ -1,5 +1,6 @@
 import { db } from './db.js';
 import { planOf } from './plans.js';
+import { consumeOperations, UsageError } from './lib/usage.js';
 import { requireAuth } from './routes.js';
 import { resolveElements, resolveElementsMany, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
@@ -150,6 +151,7 @@ export async function registerLabelRoutes(app) {
   }));
 
   app.post('/api/templates', { preHandler: requireAuth }, async (req, reply) => {
+    if (!planOf(req.user).templates) return reply.code(403).send({ error: 'Сохранение шаблонов доступно на тарифе PRO и выше', feature: 'templates' });
     const t = req.body || {};
     const err = validateTemplate(t);
     if (err) return reply.code(400).send({ error: err });
@@ -165,6 +167,7 @@ export async function registerLabelRoutes(app) {
   };
 
   app.put('/api/templates/:id', { preHandler: requireAuth }, async (req, reply) => {
+    if (!planOf(req.user).templates) return reply.code(403).send({ error: 'Сохранение шаблонов доступно на тарифе PRO и выше', feature: 'templates' });
     const r = ownTemplate(req, reply);
     if (!r) return;
     const t = req.body || {};
@@ -185,7 +188,7 @@ export async function registerLabelRoutes(app) {
   // Подготовка этикетки к печати: тексты + PNG штрихкодов для Print Bridge
   app.post('/api/labels/prepare', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
-    if (!plan.labelEditor) return reply.code(403).send({ error: 'Редактор этикеток доступен на тарифе PREMIUM' });
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Редактор этикеток доступен на тарифе PRO и выше', feature: 'labelEditor' });
     const { template, jobId, row, data } = req.body || {};
     const err = validateTemplate(template);
     if (err) return reply.code(400).send({ error: err });
@@ -196,6 +199,13 @@ export async function registerLabelRoutes(app) {
       const item = db.prepare('SELECT * FROM job_items WHERE job_id=? AND row_index=?').get(job.id, Number(row) || 0);
       if (!item || !item.normalized) return reply.code(404).send({ error: 'Строка задания не найдена' });
       d = { code: item.normalized, gtin: item.gtin, serial: item.serial, row: item.row_index + 1 };
+    }
+    try {
+      const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+      consumeOperations(req.user, 1, { idemKey: idem ? `${idem}:prepare` : '', context: 'print_bridge' });
+    } catch (e) {
+      if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, ...e.payload });
+      throw e;
     }
     const elements = (await resolveElements(template, d)).map((el) => {
       // В JSON отдаём привычный pngBase64 (Buffer внутри элемента не сериализуется).
@@ -264,11 +274,6 @@ export async function registerLabelRoutes(app) {
 
   // Общая проверка запроса на PDF: возвращает null, если ответ уже отправлен.
   function preparePdfRequest(req, reply) {
-    const plan = planOf(req.user);
-    if (!plan.labelEditor) {
-      reply.code(403).send({ error: 'Экспорт этикеток доступен на тарифе PREMIUM' });
-      return null;
-    }
     const { template, single } = req.body || {};
     const err = validateTemplate(template);
     if (err) {
@@ -278,6 +283,17 @@ export async function registerLabelRoutes(app) {
     const singlePage = single === true;
     const dataRows = resolvePdfRows(req.user, req.body, reply);
     if (!dataRows) return null;
+    // Одна операция = один код/этикетка в PDF. idemKey защищает от двойного нажатия.
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      consumeOperations(req.user, dataRows.length, { idemKey: idem ? `${idem}:pdf` : '', context: 'labels_pdf' });
+    } catch (e) {
+      if (e instanceof UsageError) {
+        reply.code(e.statusCode || 402).send({ error: e.message, ...e.payload });
+        return null;
+      }
+      throw e;
+    }
     return { template, dataRows, singlePage };
   }
 
@@ -421,7 +437,7 @@ export async function registerLabelRoutes(app) {
   // HTML-версия для печати прямо из браузера (без скачивания PDF)
   app.post('/api/labels/print', { preHandler: requireAuth }, async (req, reply) => {
     const plan = planOf(req.user);
-    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать этикеток доступна на тарифе PREMIUM' });
+    if (!plan.labelEditor) return reply.code(403).send({ error: 'Печать этикеток доступна на тарифе PRO и выше', feature: 'labelEditor' });
     const { template, jobId, rows } = req.body || {};
     const err = validateTemplate(template);
     if (err) return reply.code(400).send({ error: err });

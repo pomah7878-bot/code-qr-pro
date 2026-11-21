@@ -1,4 +1,4 @@
-// Строки преимуществ тарифа — из тех же лимитов, что меняются в админке.
+// Строки преимуществ тарифа — из полей таблицы plans (админка).
 export const formatList = (plan) => (plan?.formats || []).map((f) => String(f).toUpperCase()).join(', ');
 
 export function formatArchiveSize(mb) {
@@ -12,16 +12,21 @@ export function formatArchiveSize(mb) {
 
 export function planFeatureRows(plan, { onlyEnabled = false } = {}) {
   if (!plan) return [];
+  const ops = Number(plan.opsPerPeriod ?? plan.ops_per_period ?? 0);
+  const checks = Number(plan.checksPerPeriod ?? plan.checks_per_period ?? 0);
   const rows = [
-    { text: `${Number(plan.codesPerDay || 0).toLocaleString('ru')} кодов в день`, on: true },
-    { text: `Пакет до ${Number(plan.batchMax || 0).toLocaleString('ru')} строк`, on: true },
-    { text: `Форматы ${formatList(plan)}`, on: true },
-    { text: 'Редактор этикеток', on: Boolean(plan.labelEditor) },
-    { text: 'Наборы: КИН и этикетки вложений', on: Boolean(plan.labelEditor) },
-    { text: 'Печать на термопринтер (Print Bridge)', on: Boolean(plan.printBridge) },
-    { text: 'API для 1С и складов', on: Boolean(plan.apiAccess) },
-    { text: `История ${Number(plan.historyDays || 0)} дней`, on: true },
-    { text: `Архив ${formatArchiveSize(plan.archiveMb)}`, on: true }
+    { text: `${ops.toLocaleString('ru')} операций в месяц`, on: true },
+    { text: Number(plan.dailyOps ?? plan.daily_ops) > 0 ? `До ${plan.dailyOps ?? plan.daily_ops} операций в сутки` : 'Без суточного ограничения', on: true },
+    { text: checks > 0 ? `${checks.toLocaleString('ru')} расширенных проверок` : 'Без расширенных проверок', on: checks > 0 },
+    { text: `Пакет до ${Number(plan.batchMax ?? plan.batch_max ?? 0).toLocaleString('ru')} строк`, on: true },
+    { text: `Выгрузка: ${formatList(plan)}`, on: true },
+    { text: 'Редактор этикеток и печать с термопринтера', on: Boolean(plan.features?.labelEditor ?? plan.labelEditor) },
+    { text: 'Сохранение шаблонов', on: Boolean(plan.features?.templates ?? plan.templates) },
+    { text: 'API для 1С и складов', on: Boolean(plan.features?.apiAccess ?? plan.apiAccess) },
+    { text: 'AI-помощник', on: Boolean(plan.features?.aiAssistant ?? plan.aiAssistant ?? true) },
+    { text: `Сотрудников: до ${Number(plan.features?.employees ?? plan.employees ?? 1)}`, on: true },
+    { text: `История ${Number(plan.historyDays ?? plan.history_days ?? 0)} дней`, on: true },
+    { text: `Архив ${formatArchiveSize(plan.archiveMb ?? plan.archive_mb)}`, on: true }
   ];
   return onlyEnabled ? rows.filter((r) => r.on) : rows;
 }

@@ -8,20 +8,23 @@ import AdSlot from '../components/AdSlot.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { openAssistant } from '../lib/assistant-ui.js';
 const usagePct = computed(() => {
-  if (!store.usage) return 0;
-  return Math.min(100, Math.round(store.usage.codesToday / store.usage.codesPerDay * 100));
+  const u = store.usage;
+  if (!u) return 0;
+  if (u.ops?.limit) return Math.min(100, Math.round((u.ops.used / u.ops.limit) * 100));
+  if (u.daily?.limit) return Math.min(100, Math.round((u.daily.used / u.daily.limit) * 100));
+  return 0;
 });
-const isPremium = computed(() => store.plan?.id === 'premium');
+const isPremium = computed(() => store.plan?.id && store.plan.id !== 'free');
 const bestOffer = ref(null);
 const premiumFrom = computed(() => {
   const o = bestOffer.value;
-  if (!o) return 1990;
+  if (!o) return 349;
   return Math.round(o.perMonth ?? o.finalPrice ?? o.price);
 });
 onMounted(async () => {
   try {
     const plans = (await api.plans()).plans;
-    const premium = plans.find((p) => p.id === 'premium');
+    const premium = plans.find((p) => p.id === 'pro' || p.id === 'premium');
     const offers = premium?.offers || [];
     if (offers.length) {
       bestOffer.value = offers.reduce((a, b) => ((b.perMonth ?? b.finalPrice) < (a.perMonth ?? a.finalPrice) ? b : a));
@@ -84,29 +87,32 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
           <div class="flex items-center justify-between mb-4">
             <h2 class="font-display font-semibold">Тариф</h2>
             <span class="font-display font-extrabold text-lg"
-                  :class="store.plan?.id === 'premium' ? 'grad-text' : ''">{{ store.plan?.title }}</span>
+                  :class="isPremium ? 'grad-text' : ''">{{ store.plan?.title }}</span>
           </div>
           <ul class="text-sm space-y-1.5 text-slate-600 dark:text-slate-300">
-            <li>Кодов в день: <b>{{ store.plan?.codesPerDay.toLocaleString('ru') }}</b></li>
+            <li>Операций в месяц: <b>{{ (store.plan?.opsPerPeriod || 0).toLocaleString('ru') }}</b></li>
+            <li v-if="store.plan?.dailyOps">В сутки: <b>{{ store.plan.dailyOps }}</b> · сегодня {{ store.usage?.daily?.used ?? 0 }}</li>
+            <li v-if="store.plan?.checksPerPeriod">Расширенных проверок: <b>{{ store.plan.checksPerPeriod.toLocaleString('ru') }}</b></li>
             <li>Пакет до: <b>{{ store.plan?.batchMax.toLocaleString('ru') }}</b> строк</li>
             <li>Форматы: <b>{{ store.plan?.formats.join(', ').toUpperCase() }}</b></li>
           </ul>
-          <router-link v-if="store.plan?.id !== 'premium'" to="/app/billing" class="btn-primary w-full mt-5">
-            Оформить PREMIUM — от {{ premiumFrom.toLocaleString('ru') }} ₽/мес
+          <router-link v-if="!isPremium" to="/app/billing" class="btn-primary w-full mt-5">
+            Оформить PRO — от {{ premiumFrom.toLocaleString('ru') }} ₽/мес
           </router-link>
-          <router-link v-else to="/app/billing" class="btn-ghost w-full mt-5">Продлить подписку</router-link>
+          <router-link v-else to="/app/billing" class="btn-ghost w-full mt-5">Моя подписка</router-link>
         </div>
 
         <div class="glass rounded-2xl p-6">
-          <h2 class="font-display font-semibold mb-4">Использование сегодня</h2>
+          <h2 class="font-display font-semibold mb-4">Использование за период</h2>
           <div class="text-4xl font-extrabold mb-1">
-            {{ store.usage?.codesToday ?? 0 }}
-            <span class="text-base font-medium text-slate-500">/ {{ store.usage?.codesPerDay?.toLocaleString('ru') }}</span>
+            {{ (store.usage?.ops?.used ?? 0).toLocaleString('ru') }}
+            <span class="text-base font-medium text-slate-500">/ {{ (store.usage?.ops?.limit ?? 0).toLocaleString('ru') }} операций</span>
           </div>
           <div class="h-3 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden mt-4">
-            <div class="h-full rounded-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all" :style="{ width: usagePct + '%' }"></div>
+            <div class="h-full rounded-full transition-all" :class="usagePct >= 80 ? 'bg-amber-500' : 'bg-gradient-to-r from-brand-500 to-accent-500'" :style="{ width: usagePct + '%' }"></div>
           </div>
-          <p class="text-xs text-slate-500 mt-3">Лимит обновляется каждый день в 00:00 UTC</p>
+          <p class="text-xs text-slate-500 mt-3">Расширенные проверки: {{ store.usage?.checks?.used ?? 0 }} / {{ store.usage?.checks?.limit ?? 0 }} · до {{ store.usage?.periodEnd ? fmtDate(store.usage.periodEnd) : 'конца периода' }}</p>
+          <router-link v-if="store.usage?.warnings?.ops80 || store.usage?.warnings?.checks80" to="/app/billing" class="text-xs text-amber-500 font-medium mt-2 inline-block">Лимит близок к концу — посмотреть тарифы →</router-link>
         </div>
       </div>
 

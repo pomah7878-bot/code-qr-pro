@@ -9,7 +9,8 @@ const freeLimit = ref(50);
 onMounted(async () => {
   try {
     const plans = (await api.plans()).plans;
-    freeLimit.value = plans.find((p) => p.id === 'free')?.codesPerDay ?? 50;
+    const free = plans.find((p) => p.id === 'free');
+    freeLimit.value = free?.dailyOps || Math.round((free?.opsPerPeriod || 600) / 30);
   } catch { /* остаётся значение по умолчанию */ }
 });
 async function submit() {

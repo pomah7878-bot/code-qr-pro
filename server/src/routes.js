@@ -1,7 +1,8 @@
 import { randomInt, createHash, timingSafeEqual } from 'node:crypto';
 import { db, usageToday } from './db.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser, sessionDaysFor } from './auth.js';
-import { PLANS, planOf, publicPlans } from './plans.js';
+import { PLANS, planOf, publicPlans, listPlans } from './plans.js';
+import { entitlements } from './lib/subscription.js';
 import { notifyRegistration } from './notify.js';
 import { issueTicket } from './lib/twofa-ticket.js';
 import { sendMail, smtpConfigured } from './lib/mailer.js';
@@ -354,17 +355,26 @@ export async function registerRoutes(app) {
   });
 
   app.get('/api/me', { preHandler: requireAuth }, async (req) => {
-    const plan = planOf(req.user);
+    const data = entitlements(req.user);
     return {
       user: publicUser(req.user),
-      plan,
+      plan: data.plan,
+      subscription: data.usage.subscription,
+      trial: data.plan.trial,
       impersonated: Boolean(req.user.impersonatedBy),
       impersonatedBy: req.user.impersonatedBy || null,
-      usage: { codesToday: usageToday(req.user.id), codesPerDay: plan.codesPerDay }
+      usage: {
+        ...data.usage,
+        codesToday: usageToday(req.user.id),
+        codesPerDay: data.plan.codesPerDay
+      }
     };
   });
 
-  app.get('/api/plans', async () => ({ plans: Object.values(publicPlans()) }));
+  app.get('/api/plans', async () => ({
+    plans: Object.values(publicPlans()),
+    list: listPlans({ activeOnly: true })
+  }));
 
   app.get('/api/health', async (req, reply) => {
     try {

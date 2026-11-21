@@ -8,6 +8,7 @@ import { getSetting } from './settings.js';
 import { logActivity } from './lib/activity.js';
 import { audit } from './lib/audit.js';
 import { productCard } from './lib/product-card.js';
+import { consumeOperations, UsageError } from './lib/usage.js';
 
 const hashKey = (k) => createHash('sha256').update(k).digest('hex');
 
@@ -18,7 +19,7 @@ const requireApiKey = async (req, reply) => {
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(row.user_id);
   if (!user) return reply.code(401).send({ error: 'Неверный API-ключ (заголовок X-API-Key)' });
   if (user.status === 'blocked') return reply.code(403).send({ error: 'Аккаунт заблокирован' });
-  if (!planOf(user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PREMIUM' });
+  if (!planOf(user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PRO и выше', feature: 'apiAccess' });
   db.prepare("UPDATE api_keys SET last_used_at=datetime('now') WHERE id=?").run(row.id);
   req.apiUser = user;
 };
@@ -45,7 +46,7 @@ function normalizeCis(code) {
 
 export async function registerApiRoutes(app) {
   app.post('/api/keys', { preHandler: requireAuth }, async (req, reply) => {
-    if (!planOf(req.user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PREMIUM' });
+    if (!planOf(req.user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PRO и выше', feature: 'apiAccess' });
     const name = String(req.body?.name || 'Ключ').slice(0, 60);
     const key = 'cq_' + randomBytes(24).toString('hex');
     db.prepare('INSERT INTO api_keys (user_id, name, key_hash, prefix) VALUES (?,?,?,?)')
@@ -174,23 +175,37 @@ export async function registerApiRoutes(app) {
     }
   });
 
-  // Карточка товара по коду: ЧЗ (если есть токен) -> открытые базы -> своя история
+  // Расширенная проверка DataMatrix: локальный разбор + каталог по GTIN + статус кода.
+  // Внешние API вызываются только на сервере; операции и проверки списываются раздельно.
   app.post('/api/product/cards', { preHandler: requireAuth }, async (req, reply) => {
     const codes = Array.isArray(req.body?.codes) ? req.body.codes.slice(0, 50) : [];
     if (!codes.length) return reply.code(400).send({ error: 'Передайте список кодов' });
+    const idemBase = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
     const cards = [];
-    for (const item of codes) {
+    let quotaError = null;
+    for (let index = 0; index < codes.length; index += 1) {
+      const item = codes[index];
       const code = typeof item === 'string' ? item : String(item?.code || '');
       const gtin = typeof item === 'string' ? '' : String(item?.gtin || '');
+      const idemKey = idemBase ? `${idemBase}:${index}` : '';
       try {
-        const card = await productCard({ userId: req.user.id, code, gtin, czToken: req.user.cz_token || '' });
+        // операция — обработка одного кода; списываем до внешних запросов
+        consumeOperations(req.user, 1, { idemKey: idemKey ? `${idemKey}:op` : '', context: 'product_card' });
+        const card = await productCard({ user: req.user, code, gtin, idemKey });
         cards.push(card);
       } catch (e) {
-        cards.push({ ok: false, error: String(e?.message || e), code });
+        if (e instanceof UsageError) quotaError = quotaError || e;
+        cards.push({ ok: false, error: String(e?.message || e), code, quota: e instanceof UsageError ? e.payload : null });
       }
     }
-    logActivity(req.user, 'product_card', 'Карточка товара по коду', { total: codes.length, ok: cards.filter((c) => c.card).length });
-    return { cards };
+    logActivity(req.user, 'product_card', 'Карточка товара по коду', {
+      total: codes.length,
+      ok: cards.filter((c) => c.ok).length
+    });
+    if (quotaError && cards.every((c) => !c.ok)) {
+      return reply.code(402).send({ error: quotaError.message, ...quotaError.payload, cards });
+    }
+    return { cards, quota: quotaError ? quotaError.payload : null };
   });
 
   // Информация о товаре из «Честного ЗНАКа» по коду (True API, если настроен токен)

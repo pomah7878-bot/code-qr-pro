@@ -51,8 +51,15 @@ function bumpLimit(key, limit, windowSec = 3600) {
 }
 
 function supportAccess(user) {
+  // AI-помощник доступен на всех тарифах (FREE/START — базовый лимит вопросов в день)
+  return Boolean(user && user.id);
+}
+
+function chatLimitFor(user) {
   const plan = planOf(user);
-  return user.role === 'admin' || user.role === 'support' || plan.id === 'premium';
+  if (user.role === 'admin' || user.role === 'support') return { limit: LIMIT_CHAT_PER_HOUR, window: 3600 };
+  if (plan.id === 'free' || plan.id === 'start') return { limit: 10, window: 86400 };
+  return { limit: LIMIT_CHAT_PER_HOUR, window: 3600 };
 }
 
 /** Разделы кабинета: по ним помощник понимает, где сейчас клиент. */
@@ -148,9 +155,7 @@ export async function registerAiSupportRoutes(app) {
     if (!aiConfigured(cfg)) return reply.code(400).send({ error: 'Помощник временно недоступен. Напишите в поддержку.' });
 
     const user = req.user;
-    if (!supportAccess(user)) {
-      return reply.code(403).send({ error: 'AI-помощник доступен на тарифе PREMIUM. Оформите подписку в разделе «Подписка».', needPremium: true });
-    }
+    if (!supportAccess(user)) return reply.code(403).send({ error: 'AI-помощник недоступен для этого аккаунта.' });
 
     const message = String(req.body?.message || '').trim().slice(0, 1500);
     if (message.length < 3) return reply.code(400).send({ error: 'Опишите вопрос подробнее' });
@@ -177,8 +182,15 @@ export async function registerAiSupportRoutes(app) {
       : [];
     const hadDialogue = history.some((m) => m.role === 'ассистент');
 
-    const limit = bumpLimit(`ai-support:u${user.id}`, LIMIT_CHAT_PER_HOUR);
-    if (!limit.ok) return reply.code(429).send({ error: 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.' });
+    const chatLimit = chatLimitFor(user);
+    const limit = bumpLimit(`ai-support:${chatLimit.window === 86400 ? 'day' : 'hour'}:u${user.id}`, chatLimit.limit, chatLimit.window);
+    if (!limit.ok) {
+      return reply.code(429).send({
+        error: chatLimit.window === 86400
+          ? 'Базовый лимит AI-помощника: 10 вопросов в день. Лимит обновится завтра — или подключите PRO для расширенного доступа.'
+          : 'Слишком много вопросов подряд. Подождите немного или передайте обращение в поддержку.'
+      });
+    }
 
     // ищем по вопросу, добавляя ключевые слова текущего раздела — ответ будет про то меню, где клиент
     let articles = searchKnowledge(`${message} ${page.keywords}`, 6);
@@ -275,9 +287,7 @@ export async function registerAiSupportRoutes(app) {
   // Обращение в поддержку: клиент передаёт сложный вопрос человеку.
   app.post('/api/assistant/tickets', { preHandler: requireAuth }, async (req, reply) => {
     const user = req.user;
-    if (!supportAccess(user)) {
-      return reply.code(403).send({ error: 'Обращения в поддержку доступны на тарифе PREMIUM.', needPremium: true });
-    }
+    if (!supportAccess(user)) return reply.code(403).send({ error: 'Обращения в поддержку недоступны для этого аккаунта.' });
     const limit = bumpLimit(`ai-ticket:u${user.id}`, LIMIT_TICKETS_PER_HOUR);
     if (!limit.ok) return reply.code(429).send({ error: 'Слишком много обращений подряд. Попробуйте через час.' });
 

@@ -61,7 +61,10 @@ async function deepseekBalance(cfg) {
 /** Сколько бесплатных моделей сейчас в пуле Kilo (кэш 10 минут). */
 let kiloCache = { at: 0, data: null };
 async function kiloFreeModels() {
-  if (Date.now() - kiloCache.at < 10 * 60 * 1000) return kiloCache.data;
+  // Ошибку кэшируем коротко: после восстановления relay пул должен появиться
+  // сразу, а не через 10 минут.
+  const ttl = kiloCache.data && kiloCache.data.available === false ? 60 * 1000 : 10 * 60 * 1000;
+  if (Date.now() - kiloCache.at < ttl) return kiloCache.data;
   try {
     // на РФ-сервере прямой api.kilo.ai заблокирован (403), поэтому используем relay
   const res = await fetch(kiloApiBase('/models'), { headers: kiloApiHeaders(), signal: AbortSignal.timeout(15000) });

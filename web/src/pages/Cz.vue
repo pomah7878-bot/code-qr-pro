@@ -37,7 +37,17 @@ async function loadCards() {
   cardsLoading.value = true;
   try {
     const idemKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
-    const data = await api.productCards(valid.slice(0, 50).map((r) => ({ code: r.code, gtin: r.gtin })), idemKey);
+    // Карточка по GTIN нужна одна на товар — не дублируем запросы для каждого КИЗ.
+    const unique = [];
+    const seen = new Set();
+    for (const r of valid.slice(0, 50)) {
+      const key = r.gtin || r.code;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ code: r.code, gtin: r.gtin });
+      if (unique.length >= 50) break;
+    }
+    const data = await api.productCards(unique, idemKey);
     cards.value = Array.isArray(data.cards) ? data.cards.filter((x) => x.card) : [];
     const errors = cards.value.flatMap((x) => x.card?.errors || []);
     const warnings = cards.value.flatMap((x) => x.card?.warnings || []);

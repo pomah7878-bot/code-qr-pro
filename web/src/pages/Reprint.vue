@@ -518,9 +518,9 @@ const checkRows = computed(() => {
       productionDate: card?.productionDate || codeDates.productionDate,
       expirationDate: card?.expirationDate || codeDates.expirationDate,
       serviceLife: card?.serviceLife || '',
-      status: card?.status || '',
+      status: c.status || card?.status || '',
       found: card ? 'Да' : 'Нет',
-      crypto: card?.crypto ? (typeof card.crypto === 'string' ? card.crypto : (card.crypto.verified ? 'Проверено' : 'Не проверено')) : '—'
+      crypto: c.crypto || (card?.crypto ? (typeof card.crypto === 'string' ? card.crypto : (card.crypto.verified ? 'Проверено' : 'Не проверено')) : '—')
     };
   });
 });
@@ -594,7 +594,18 @@ async function loadProductCards() {
   cardsLoading.value = true;
   try {
     const idemKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
-    const r = await api.productCards(valid.slice(0, 50).map((c) => ({ code: c.code, gtin: c.gtin })), idemKey);
+    // Одна карточка на GTIN: в пакете из 50 кодов одного товара это один
+    // внешний запрос вместо 50 (раньше страница могла грузиться 10–15 секунд).
+    const unique = [];
+    const seen = new Set();
+    for (const c of valid.slice(0, 50)) {
+      const key = c.gtin || c.code;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ code: c.code, gtin: c.gtin });
+      if (unique.length >= 50) break;
+    }
+    const r = await api.productCards(unique, idemKey);
     cards.value = (r.cards || []).map((item) => {
       const card = item.card || null;
       const mapped = card ? {

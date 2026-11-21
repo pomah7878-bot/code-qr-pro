@@ -188,23 +188,30 @@ export async function registerApiRoutes(app) {
     const codes = Array.isArray(req.body?.codes) ? req.body.codes.slice(0, 50) : [];
     if (!codes.length) return reply.code(400).send({ error: 'Передайте список кодов' });
     const idemBase = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
-    const cards = [];
+    const cards = new Array(codes.length);
     let quotaError = null;
-    for (let index = 0; index < codes.length; index += 1) {
-      const item = codes[index];
-      const code = typeof item === 'string' ? item : String(item?.code || '');
-      const gtin = typeof item === 'string' ? '' : String(item?.gtin || '');
-      const idemKey = idemBase ? `${idemBase}:${index}` : '';
-      try {
-        // операция — обработка одного кода; списываем до внешних запросов
-        consumeOperations(req.user, 1, { idemKey: idemKey ? `${idemKey}:op` : '', context: 'product_card' });
-        const card = await productCard({ user: req.user, code, gtin, idemKey });
-        cards.push(card);
-      } catch (e) {
-        if (e instanceof UsageError) quotaError = quotaError || e;
-        cards.push({ ok: false, error: String(e?.message || e), code, quota: e instanceof UsageError ? e.payload : null });
+    // Раньше карточки собирались строго последовательно: 50 кодов × несколько
+    // внешних запросов давали 10-15 секунд. Ограниченный параллелизм ускоряет
+    // ответ, но не перегружает API ЧЗ (не больше 6 одновременных карточек).
+    let nextIndex = 0;
+    const worker = async () => {
+      while (nextIndex < codes.length) {
+        const index = nextIndex++;
+        const item = codes[index];
+        const code = typeof item === 'string' ? item : String(item?.code || '');
+        const gtin = typeof item === 'string' ? '' : String(item?.gtin || '');
+        const idemKey = idemBase ? `${idemBase}:${index}` : '';
+        try {
+          // операция — обработка одного кода; списываем до внешних запросов
+          consumeOperations(req.user, 1, { idemKey: idemKey ? `${idemKey}:op` : '', context: 'product_card' });
+          cards[index] = await productCard({ user: req.user, code, gtin, idemKey });
+        } catch (e) {
+          if (e instanceof UsageError) quotaError = quotaError || e;
+          cards[index] = { ok: false, error: String(e?.message || e), code, quota: e instanceof UsageError ? e.payload : null };
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, codes.length) }, () => worker()));
     logActivity(req.user, 'product_card', 'Карточка товара по коду', {
       total: codes.length,
       ok: cards.filter((c) => c.ok).length

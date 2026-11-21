@@ -4,6 +4,7 @@ import { czStatus } from './cz.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import { invoiceSeller } from './lib/invoice.js';
+import { tgConfigured, tgAdminIds, tgSendMessage } from './lib/telegram-api.js';
 
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
@@ -24,6 +25,7 @@ export async function registerAdminRoutes(app) {
       czApiUrl: getSetting('cz_api_url', 'https://api.mdlp.crpt.ru'),
       czConfigured: Boolean(getSetting('cz_token', '')),
       invoiceSignature: getSetting('invoice_signature_data', ''),
+      telegram: { configured: tgConfigured(), admins: tgAdminIds() },
       invoice: {
         name: seller.name,
         status: seller.status,
@@ -39,6 +41,17 @@ export async function registerAdminRoutes(app) {
         missing: seller.missing
       }
     };
+  });
+
+  app.post('/api/admin/telegram/test', { preHandler: requireAdmin }, async (req, reply) => {
+    if (!tgConfigured()) return reply.code(400).send({ error: 'Telegram-бот не настроен: проверьте TELEGRAM_BOT_TOKEN и TELEGRAM_ADMIN_ID' });
+    const sent = [];
+    for (const chatId of tgAdminIds()) {
+      try { await tgSendMessage(chatId, '✅ <b>Тест админ-бота CODE QR PRO</b>\nБот на связи. Откройте /menu для управления.'); sent.push(chatId); }
+      catch (e) { return reply.code(502).send({ error: String(e?.message || e) }); }
+    }
+    audit(req, 'settings.telegram_test', 'settings', 'telegram', { sent });
+    return { ok: true, sent };
   });
 
   app.put('/api/admin/settings', { preHandler: requireAdmin }, async (req, reply) => {

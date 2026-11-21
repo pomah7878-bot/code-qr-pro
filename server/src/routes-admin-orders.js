@@ -1,5 +1,7 @@
 import { db } from './db.js';
 import { activateArchive, checkOrder, providerConfigured, getPayment, cancelPayment, refundPayment } from './billing.js';
+import { notifyPayment } from './notify.js';
+import { recordConversion } from './lib/analytics.js';
 import { activateSubscription } from './lib/subscription.js';
 import { notifyStatusChange } from './notify.js';
 import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
@@ -112,6 +114,9 @@ export async function registerAdminOrderRoutes(app) {
     db.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE id=?").run(order.id);
     redeemPromo(getOrder(order.id));
     const user = getUser(order.user_id);
+    const paid = getOrder(order.id);
+    recordConversion('payment', paid.user_id, Number(paid.amount) || 0);
+    notifyPayment(paid, user);
     notifyStatusChange(user, `Заказ №${order.id} подтверждён вручную (${order.amount} ₽)`);
     audit(req, 'order.confirm', 'order', order.id, { amount: order.amount, days: order.days });
     return { ok: true, order: getOrder(order.id) };

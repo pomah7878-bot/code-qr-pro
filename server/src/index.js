@@ -34,6 +34,7 @@ import { registerAnalyticsRoutes } from './routes-analytics.js';
 import { registerAdminSeoRoutes } from './routes-admin-seo.js';
 import { detectBot, recordBotHit, pruneAnalytics } from './lib/analytics.js';
 import { seedKnowledgeBase } from './lib/kb.js';
+import { startTelegramBot } from './lib/telegram-bot.js';
 import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, pruneAppLogs } from './lib/app-log.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { startSubscriptionSweeper } from './lib/subscription.js';
@@ -104,6 +105,7 @@ await registerLogRoutes(app);
 seedKnowledgeBase();
 startBillingSweeper();
 startSubscriptionSweeper();
+startTelegramBot();
 startMailQueue();
 app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 

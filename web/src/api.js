@@ -178,6 +178,7 @@ export const api = {
   adminEmailCampaign: (id) => req('GET', '/api/admin/email/campaigns/' + id),
   adminSettings: () => req('GET', '/api/admin/settings'),
   adminSaveSettings: (b) => req('PUT', '/api/admin/settings', b),
+  adminTelegramTest: () => req('POST', '/api/admin/telegram/test', {}),
 
   reviews: () => req('GET', '/api/reviews'),
   myReview: () => req('GET', '/api/reviews/mine'),

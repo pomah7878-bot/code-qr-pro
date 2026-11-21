@@ -3,7 +3,7 @@ import { db } from './db.js';
 import { recordConversion } from './lib/analytics.js';
 import { getPlan, normalizePlanId, getPremiumOffers, offerFinalPrice, archiveAddon, getTestPrice } from './plans.js';
 import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, activeSubscription, currentPeriod } from './lib/subscription.js';
-import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
+import { notifyPayment, notifyOrderCanceled, notifyStatusChange, notifyInvoiceCreated } from './notify.js';
 import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
 import { invoiceSeller, validateBuyer } from './lib/invoice.js';
@@ -192,6 +192,7 @@ export function createInvoiceOrder(user, planId = 'pro', period = 'month', promo
   db.prepare('UPDATE orders SET invoice_number=? WHERE id=?').run(number, orderId);
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
   notifyStatusChange(user, `Сформирован счёт № ${number} на ${amount} ₽. Доступ активируется после поступления оплаты.`);
+  notifyInvoiceCreated({ ...order, buyer_email: user.email }).catch(() => {});
   return order;
 }
 

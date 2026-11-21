@@ -16,6 +16,8 @@ const savingCz = ref(false);
 const inv = ref({ name: '', status: '', inn: '', address: '', bank: '', bik: '', account: '', corr: '', phone: '', email: '', ready: false, missing: [] });
 const savingInv = ref(false);
 const signature = ref('');
+const tg = ref({ configured: false, admins: [] });
+const tgBusy = ref(false);
 const savingSig = ref(false);
 
 async function load() {
@@ -25,6 +27,7 @@ async function load() {
     cz.value = data;
     if (data.invoice) inv.value = data.invoice;
     signature.value = data.invoiceSignature || '';
+    if (data.telegram) tg.value = data.telegram;
   } catch (e) {
     error.value = e.message;
   }
@@ -73,6 +76,13 @@ async function saveSignature(clear = false) {
   finally { savingSig.value = false; }
 }
 
+async function testTelegram() {
+  error.value = ''; notice.value = ''; tgBusy.value = true;
+  try { await api.adminTelegramTest(); notice.value = 'Тестовое сообщение отправлено в Telegram'; }
+  catch (e) { error.value = e.message; }
+  finally { tgBusy.value = false; }
+}
+
 async function saveInvoice() {
   error.value = ''; notice.value = ''; savingInv.value = true;
   try {
@@ -106,6 +116,16 @@ onMounted(load);
     <SmtpCard />
 
     <StorageCard />
+
+    <div class="glass rounded-2xl p-6">
+      <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="ai" :size="19" />Telegram-админ-бот</h2>
+      <p class="text-xs text-slate-500 mb-2">
+        Статус: <b :class="tg.configured ? 'text-emerald-500' : 'text-amber-500'">{{ tg.configured ? 'подключён' : 'не настроен' }}</b>
+        <span v-if="tg.admins?.length"> · админы: {{ tg.admins.join(', ') }}</span>
+      </p>
+      <p class="text-xs text-slate-500 mb-3">Уведомления о регистрациях, счетах, оплатах, отменах и обращениях. Команды: /stats /orders /invoices /users /user /tickets /jobs /menu. Доступ только для TELEGRAM_ADMIN_ID.</p>
+      <button class="btn-primary !py-2 text-sm" :disabled="tgBusy || !tg.configured" @click="testTelegram">{{ tgBusy ? 'Отправляем…' : 'Отправить тестовое сообщение' }}</button>
+    </div>
 
     <div class="glass rounded-2xl p-6">
       <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="orders" :size="19" />Реквизиты для счетов (B2B)</h2>

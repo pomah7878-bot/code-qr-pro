@@ -124,10 +124,28 @@ export async function syncWebmasterQueries(days = 30) {
   params.set('date_from', from);
   params.set('date_to', to);
   params.set('limit', '100');
-  const data = await wmFetch(
-    `/user/${encodeURIComponent(userId)}/hosts/${encodeURIComponent(hostId)}/search-queries/popular?${params.toString()}`,
-    token
-  );
+  let data;
+  try {
+    data = await wmFetch(
+      `/user/${encodeURIComponent(userId)}/hosts/${encodeURIComponent(hostId)}/search-queries/popular?${params.toString()}`,
+      token
+    );
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/HOST_NOT_LOADED|HOST_NOT_INDEXED|HOST_NOT_VERIFIED/i.test(msg)) {
+      return {
+        saved: 0,
+        pending: true,
+        from,
+        to,
+        total: 0,
+        message: /HOST_NOT_VERIFIED/i.test(msg)
+          ? 'Хост найден, но права на управление сайтом ещё не подтверждены в Вебмастере.'
+          : 'Хост найден, но Яндекс ещё не загрузил данные по сайту. Обычно это занимает от нескольких часов до 1–2 дней после добавления и подтверждения сайта.'
+      };
+    }
+    throw e;
+  }
   const queries = Array.isArray(data.queries) ? data.queries : [];
   const { db } = await import('../db.js');
   const upsert = db.prepare(
@@ -189,8 +207,10 @@ export async function syncWebmasterExtra() {
       return (order[a.severity] ?? 9) - (order[b.severity] ?? 9);
     });
   const maps = Array.isArray(sitemaps.ok ? sitemaps.data?.sitemaps : []) ? (sitemaps.data?.sitemaps || []) : [];
+  const pending = errors.some((e) => /HOST_NOT_LOADED|HOST_NOT_INDEXED|HOST_NOT_VERIFIED/i.test(e));
   const snapshot = {
     syncedAt: new Date().toISOString(),
+    pending,
     summary: {
       sqi: Number(summaryData.sqi) || 0,
       searchablePages: Number(summaryData.searchable_pages_count) || 0,

@@ -101,7 +101,9 @@ async function syncWebmaster() {
   wm.value.syncing = true; wm.value.message = ''; wm.value.error = '';
   try {
     const r = await api.adminWebmasterSync(days.value);
-    wm.value.message = `Загружено запросов: ${r.saved} за ${fmtDate(r.from)} — ${fmtDate(r.to)}${r.summary ? ` · ИКС ${r.summary.sqi}, страниц в поиске ${r.summary.searchablePages}` : ''}`;
+    wm.value.message = r.pending
+      ? (r.message || 'Хост найден, но Яндекс ещё не загрузил данные по сайту. Попробуйте синхронизацию позже.')
+      : `Загружено запросов: ${r.saved} за ${fmtDate(r.from)} — ${fmtDate(r.to)}${r.summary ? ` · ИКС ${r.summary.sqi}, страниц в поиске ${r.summary.searchablePages}` : ''}`;
     await load();
   } catch (e) { wm.value.error = e.message || 'Не удалось синхронизировать запросы'; }
   finally { wm.value.syncing = false; }
@@ -402,6 +404,7 @@ watch(days, load);
               </div>
             </div>
           </div>
+          <div v-if="wmSnapshot?.pending" class="mt-2 text-[11px] text-amber-500">Вебмастер принял хост, но данные ещё загружаются. Обычно это занимает от нескольких часов до 1–2 дней — синхронизация заполнит показатели автоматически.</div>
           <div v-if="wmSnapshot?.syncedAt" class="mt-2 text-[11px] text-emerald-500">Данные Вебмастера: {{ fmtDateTime(wmSnapshot.syncedAt) }}</div>
 
           <div class="mt-3 space-y-2">

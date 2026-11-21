@@ -227,7 +227,7 @@ export async function registerAdminSeoRoutes(app) {
       const result = await syncWebmasterQueries(days);
       const extra = await syncWebmasterExtra().catch((e) => ({ errors: [String(e?.message || e)] }));
       audit(req, 'analytics.webmaster_sync', 'settings', 'webmaster', { saved: result.saved });
-      return { ok: true, ...result, summary: extra.summary || null, diagnostics: extra.diagnostics || [], sitemaps: extra.sitemaps || null, extraErrors: extra.errors || [] };
+      return { ok: true, ...result, summary: extra.summary || null, diagnostics: extra.diagnostics || [], sitemaps: extra.sitemaps || null, extraErrors: extra.errors || [], pending: Boolean(result.pending || extra.pending) };
     } catch (e) {
       return reply.code(400).send({ error: String(e?.message || e) });
     }

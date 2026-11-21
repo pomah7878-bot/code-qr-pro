@@ -398,9 +398,9 @@ onUnmounted(() => { if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value); });
           </template>
           <p v-else class="text-xs text-amber-500">Включён режим «Только набор» — коды вложений не нужны.</p>
 
-          <div class="grid grid-cols-2 gap-2">
-            <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !canPrint" @click="downloadPdf"><BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? 'Готовим…' : `PDF (${setCount || 0})` }}</button>
-            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !canPrint" @click="printSets"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button class="btn-primary flex-1 sm:flex-none !py-2.5 !px-5 text-sm" :disabled="busy || !canPrint" @click="downloadPdf"><BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? 'Готовим…' : `PDF (${setCount || 0})` }}</button>
+            <button class="btn-ghost flex-1 sm:flex-none !py-2.5 !px-5 text-sm" :disabled="busy || !canPrint" @click="printSets"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
           </div>
           <p v-if="validationMessage" class="text-xs text-amber-500">{{ validationMessage }}</p>
           <p class="text-xs text-slate-500">Набор + все вложения. Проверка заполнения выполняется до печати.</p>

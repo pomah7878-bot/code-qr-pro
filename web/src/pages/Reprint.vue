@@ -1191,11 +1191,11 @@ async function printLabels() {
           <p v-if="notice" class="text-sm text-emerald-500">{{ notice }}</p>
           <p v-if="shortWarning" class="text-xs text-amber-500">{{ shortWarning }}</p>
 
-          <div class="grid grid-cols-2 gap-2">
-            <button class="btn-primary !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
+          <div class="flex flex-wrap items-center gap-2">
+            <button class="btn-primary flex-1 sm:flex-none !py-2.5 !px-5 text-sm" :disabled="busy || !premium || !codesCount" @click="downloadPdf">
               <BrandIcon v-if="!busy" name="download" :size="16" class="inline-block mr-1 -mt-0.5" />{{ busy ? (pdfProgress ? `Готовим… ${pdfPercent}%` : 'Готовим…') : `PDF (${result?.valid?.length || codesCount})` }}
             </button>
-            <button class="btn-ghost !py-2.5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
+            <button class="btn-ghost flex-1 sm:flex-none !py-2.5 !px-5 text-sm" :disabled="busy || !premium || !codesCount" @click="printLabels"><BrandIcon name="print" :size="16" class="inline-block mr-1 -mt-0.5" />Печать</button>
           </div>
           <div v-if="pdfProgress" class="space-y-1">
             <div class="h-2 w-full rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
@@ -1238,11 +1238,11 @@ async function printLabels() {
                   <span v-if="eanInfo.completed"> · контрольная цифра добавлена</span>
                   · уже в этикетке КИЗ
                 </p>
-                <div class="grid grid-cols-2 gap-2">
-                  <button class="btn-primary !py-2 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="downloadMarketplacePdf">
+                <div class="flex flex-wrap gap-2">
+                  <button class="btn-primary flex-1 sm:flex-none !py-2 !px-4 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="downloadMarketplacePdf">
                     PDF только EAN-13
                   </button>
-                  <button class="btn-ghost !py-2 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="printMarketplace">
+                  <button class="btn-ghost flex-1 sm:flex-none !py-2 !px-4 text-xs" :disabled="busy || !premium || !eanInfo.valid" @click="printMarketplace">
                     Печать EAN-13
                   </button>
                 </div>

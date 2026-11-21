@@ -614,7 +614,10 @@ async function loadProductCards() {
       };
     });
     const anyCard = cards.value.find((x) => x.card);
-    if (anyCard) fillProductFromCard(anyCard.card);
+    if (anyCard) {
+      fillProductFromCard(anyCard.card);
+      infoMessage.value = '';
+    }
     const errors = cards.value.flatMap((x) => x.errors || []);
     const warnings = cards.value.flatMap((x) => x.warnings || []);
     if (!anyCard) {
@@ -793,9 +796,9 @@ async function loadProductInfo() {
       if (!product.name && name) product.name = name;
       if (!product.manufacturer && producer) product.manufacturer = producer;
     }
-    infoMessage.value = data.configured
-      ? (name || brand ? '' : (data.message || 'Информация о товаре не найдена в ЧЗ'))
-      : (data.message || 'Информация о товаре из ЧЗ не подключена — показываю GTIN и серийник из кода.');
+    // Карточка может прийти из Нацкаталога/открытых баз даже без токена True API —
+    // не показываем противоречивое «ЧЗ не подключён», если данные уже есть.
+    infoMessage.value = (name || brand) ? '' : (data.configured ? (data.message || '') : '');
   } catch (e) {
     infoMessage.value = `Не удалось получить информацию о товаре: ${e.message}`;
   } finally {

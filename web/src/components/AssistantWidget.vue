@@ -252,7 +252,6 @@ onUnmounted(() => {
         class="ai-launcher relative flex items-center justify-center rounded-full text-white w-[58px] h-[58px] p-0"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
         :aria-label="assistantUi.open ? 'Свернуть AI-помощника' : 'Открыть AI-помощника'"
-        :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
         @click="toggleOpen"
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
@@ -738,7 +737,7 @@ onUnmounted(() => {
   opacity: 0.85;
   animation: ai-glow-pulse 4.5s ease-in-out infinite;
 }
-.ai-launcher-core {
+.ai-launcher > .ai-launcher-core {
   position: absolute;
   inset: 3px;
   z-index: 2;

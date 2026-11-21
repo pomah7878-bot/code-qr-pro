@@ -14,7 +14,22 @@ const premium = () => plans.value.find(p => p.id === 'pro' || p.id === 'premium'
 const free = () => plans.value.find(p => p.id === 'free');
 const freeFeatures = computed(() => planFeatureRows(free()));
 const premiumFeatures = computed(() => planFeatureRows(premium(), { onlyEnabled: true }));
-const freeCodeLimit = computed(() => free()?.codesPerDay ?? 50);
+const freeCodeLimit = computed(() => free()?.codesPerDay ?? 20);
+const landingPeriod = ref('month');
+const pricingPlans = computed(() => {
+  const list = plans.value || [];
+  return ['free', 'start', 'pro', 'business']
+    .map((id) => list.find((p) => p.id === id))
+    .filter(Boolean);
+});
+const priceOf = (plan) => landingPeriod.value === 'year'
+  ? (Number(plan.priceYearly) || Math.round(Number(plan.priceMonthly || 0) * 12))
+  : (Number(plan.priceMonthly) || 0);
+const perMonthOf = (plan) => Math.round(priceOf(plan) / (landingPeriod.value === 'year' ? 12 : 1));
+const landingFeatures = (plan) => planFeatureRows(plan, { onlyEnabled: true });
+const landingCta = (plan) => plan.id === 'free'
+  ? { to: '/register', label: 'Начать бесплатно' }
+  : { to: store.user ? '/app/billing' : '/register', label: 'Выбрать ' + plan.title };
 const premiumCodeLimit = computed(() => premium()?.opsPerPeriod ?? 5000);
 const minPerMonth = () => {
   const o = premium()?.offers || [];
@@ -56,7 +71,7 @@ function animateCounters() {
 }
 
 onMounted(async () => {
-  try { plans.value = (await api.plans()).plans; } catch {}
+  try { const d = await api.plans(); plans.value = d.list || d.plans; } catch {}
   try { const d = await api.reviews(); reviews.value = d.reviews.slice(0, 6); reviewCount.value = d.count; reviewAvg.value = d.avgRating; } catch {}
   await nextTick();
   setupReveal();
@@ -260,71 +275,37 @@ const openFaq = ref(null);
         <h2 class="font-display font-bold text-3xl md:text-5xl mb-4">Выберите свой тариф</h2>
         <p class="text-slate-500 text-lg">Начните бесплатно. PRO окупается с первой партии маркировки.</p>
       </div>
-      <div class="relative grid md:grid-cols-2 gap-8 items-stretch">
-        <!-- FREE -->
-        <div v-if="free()" class="reveal glass rounded-3xl p-6 sm:p-8 flex flex-col hover:-translate-y-1 transition-transform duration-300">
-          <div class="flex items-center gap-3 mb-2">
-            <div class="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center"><BrandIcon name="seed" :size="24" /></div>
-            <h3 class="font-display font-extrabold text-2xl">FREE</h3>
-          </div>
-          <p class="text-sm text-slate-500 mb-5">Попробовать без риска</p>
-          <div class="text-4xl sm:text-5xl font-extrabold mb-1">0 ₽</div>
-          <div class="text-sm text-slate-500 mb-7">навсегда, без карты</div>
-          <ul class="space-y-3 text-sm mb-8 flex-1">
-            <li v-for="f in freeFeatures" :key="f.text" class="flex items-center gap-2.5" :class="f.on ? '' : 'opacity-40'">
-              <span :class="f.on ? 'text-emerald-500' : 'text-red-400'"><BrandIcon :name="f.on ? 'check' : 'close'" :size="14" /></span> {{ f.text }}
-            </li>
-          </ul>
-          <router-link to="/register" class="btn-ghost w-full !py-3.5">Начать бесплатно</router-link>
-        </div>
-        <!-- PRO -->
-        <div v-if="premium()" class="reveal reveal-d2 plan-premium rounded-3xl p-6 sm:p-8 relative flex flex-col shadow-2xl shadow-violet-600/20 md:scale-[1.03] hover:-translate-y-1 transition-transform duration-300">
-          <div class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-5 py-1.5 shadow-lg shadow-violet-600/40 whitespace-nowrap"><span class="inline-flex items-center gap-1"><BrandIcon name="star-filled" :size="13" />Выбор бизнеса</span></div>
-          <div class="flex items-center gap-3 mb-2 mt-2">
-            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-accent-500 flex items-center justify-center shadow-lg shadow-violet-600/40"><BrandIcon name="crown" :size="24" /></div>
-            <h3 class="font-display font-extrabold text-2xl grad-text">PRO</h3>
-          </div>
-          <p class="text-sm text-slate-500 mb-5">Всё для профессиональной маркировки</p>
-          <div class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-2.5 py-1 mb-4">
-            <BrandIcon name="star-filled" :size="11" />Новое: AI-помощник и поддержка
-          </div>
-          <div class="flex items-end gap-2 mb-1">
-            <span class="text-4xl sm:text-5xl font-extrabold grad-text">{{ minPerMonth().toLocaleString('ru') }} ₽</span>
-            <span class="text-base font-medium text-slate-500 mb-1.5">/мес</span>
-          </div>
-          <div class="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">при оплате за {{ periodLabel(bestOffer()?.days || 365) }} · экономия до {{ saving(bestOffer() || {price:0}).toLocaleString('ru') }} ₽</div>
-          <!-- периоды -->
-          <div class="space-y-2.5 mb-7">
-            <div v-for="o in premium().offers" :key="o.days"
-              class="relative flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition-all"
-              :class="bestOffer() && o.days === bestOffer().days ? 'border-violet-500/60 bg-violet-500/10 ring-1 ring-violet-500/30' : 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/5'">
-              <span class="flex items-center gap-2 font-medium">
-                {{ periodLabel(o.days) }}
-                <span v-if="bestOffer() && o.days === bestOffer().days" class="text-[9px] font-bold uppercase bg-violet-600 text-white rounded px-1.5 py-0.5">выгодно</span>
-              </span>
-              <span class="flex items-center gap-2">
-                <span v-if="o.discount > 0" class="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5 shadow">−{{ o.discount }}%</span>
-                <span v-if="o.discount > 0" class="text-xs text-slate-400 line-through">{{ o.price.toLocaleString('ru') }}</span>
-                <b class="text-base">{{ (o.finalPrice ?? o.price).toLocaleString('ru') }} ₽</b>
-              </span>
-            </div>
-          </div>
-          <ul class="space-y-3 text-sm mb-8 flex-1">
-            <li v-for="f in premiumFeatures" :key="f.text" class="flex items-center gap-2.5">
-              <span class="text-emerald-500 font-bold"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
-            </li>
-            <li class="flex items-center gap-2.5">
-              <span class="text-violet-500 font-bold"><BrandIcon name="ai" :size="14" /></span> AI-помощник 24/7 и база знаний
-            </li>
-            <li class="flex items-center gap-2.5">
-              <span class="text-violet-500 font-bold"><BrandIcon name="check" :size="14" /></span> Поддержка с историей обращений
-            </li>
-          </ul>
-          <router-link :to="store.user ? '/app/billing' : '/register'" class="btn-glow w-full text-base">Оформить PRO →</router-link>
-          <p class="text-center text-xs text-slate-500 mt-3 inline-flex items-center gap-1.5"><BrandIcon name="lock" :size="14" />Оплата через YooKassa · чек по 54-ФЗ · без автосписаний</p>
+      <div class="reveal flex justify-center mb-8">
+        <div class="inline-flex rounded-2xl border border-slate-200 dark:border-white/15 p-1">
+          <button class="px-5 py-2 rounded-xl text-sm font-medium" :class="landingPeriod === 'month' ? 'bg-violet-600 text-white' : 'text-slate-500'" @click="landingPeriod = 'month'">Месяц</button>
+          <button class="px-5 py-2 rounded-xl text-sm font-medium" :class="landingPeriod === 'year' ? 'bg-violet-600 text-white' : 'text-slate-500'" @click="landingPeriod = 'year'">Год <span class="text-xs opacity-80">−2 месяца</span></button>
         </div>
       </div>
-      <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день бесплатно, переход на PRO в любой момент.</p>
+      <div class="relative grid sm:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch">
+        <div v-for="plan in pricingPlans" :key="plan.id"
+          class="reveal glass rounded-3xl p-6 flex flex-col relative"
+          :class="plan.id === 'pro' ? 'plan-premium shadow-2xl shadow-violet-600/20 ring-2 ring-violet-500/40' : 'hover:-translate-y-1 transition-transform duration-300'">
+          <div v-if="plan.recommended" class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-4 py-1 shadow-lg whitespace-nowrap">Рекомендуем</div>
+          <div class="flex items-center gap-2 mb-2 mt-1">
+            <h3 class="font-display font-extrabold text-2xl" :class="plan.id === 'pro' ? 'grad-text' : ''">{{ plan.title }}</h3>
+          </div>
+          <p class="text-sm text-slate-500 mb-4 min-h-[44px]">{{ plan.description }}</p>
+          <div class="flex items-end gap-1.5 mb-1">
+            <span class="text-4xl font-extrabold" :class="plan.id === 'pro' ? 'grad-text' : ''">{{ priceOf(plan).toLocaleString('ru') }} ₽</span>
+            <span v-if="plan.id !== 'free'" class="text-sm text-slate-500 mb-1">/{{ landingPeriod === 'year' ? 'год' : 'мес' }}</span>
+          </div>
+          <div v-if="plan.id === 'free'" class="text-xs text-slate-500 mb-5">бесплатно, без карты</div>
+          <div v-else class="text-xs text-slate-500 mb-5">{{ landingPeriod === 'year' ? perMonthOf(plan).toLocaleString('ru') + ' ₽/мес · выгода' : 'без автопродления' }}</div>
+          <ul class="space-y-2 text-sm mb-6 flex-1">
+            <li v-for="f in landingFeatures(plan)" :key="f.text" class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold mt-0.5"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
+            </li>
+          </ul>
+          <router-link :to="landingCta(plan).to" class="w-full text-center" :class="plan.id === 'pro' ? 'btn-glow' : 'btn-ghost'">{{ landingCta(plan).label }}</router-link>
+        </div>
+      </div>
+      <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} операций в день бесплатно, переход на платный тариф в любой момент.</p>
+      <p class="reveal text-center mt-3"><router-link to="/pricing" class="text-brand-400 font-medium text-sm">Сравнить все тарифы и возможности →</router-link></p>
     </section>
 
     <!-- REVIEWS -->

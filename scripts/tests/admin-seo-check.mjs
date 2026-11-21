@@ -70,9 +70,9 @@ ok('Трекер фиксирует новые просмотры', Number(after
 // невалидный токен Вебмастера: ошибка, но настройка не сохраняется
 await send('Page.navigate', { url: BASE + '/app/admin/analytics' });
 await sleep(2200);
-await ev(`(() => { const i=[...document.querySelectorAll('input')].find((x)=>x.placeholder && x.placeholder.includes('OAuth')); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; set.call(i,'invalid-qa-token'); i.dispatchEvent(new Event('input',{bubbles:true})); return 1; })()`);
+await ev(`(() => { const i=document.querySelector('input[type=password]'); const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; set.call(i,'invalid-qa-token'); i.dispatchEvent(new Event('input',{bubbles:true})); return 1; })()`);
 await sleep(300);
-await ev(`(() => { const b=[...document.querySelectorAll('button')].find((x)=>(x.textContent||'').trim()==='Подключить'); if(b)b.click(); return 1; })()`);
+await ev(`(() => { const b=[...document.querySelectorAll('button')].find((x)=>(x.textContent||'').trim().startsWith('Подключить')); if(b)b.click(); return 1; })()`);
 await waitFor("(document.body.innerText || '').includes('Вебмастер: HTTP') || (document.body.innerText || '').includes('невалид')", 15000);
 const wm = await (await fetch(BASE + '/api/admin/analytics/webmaster', { headers: { Cookie: 'cq_session=' + TOKEN } })).json();
 ok('Ошибка невалидного токена показывается', (await ev("document.body.innerText.includes('Вебмастер: HTTP') || document.body.innerText.includes('невалид')")) === true);
@@ -87,7 +87,10 @@ ok('Мобильная админка: без горизонтальной пр�
 const mshot = await send('Page.captureScreenshot', { format: 'png' });
 fs.writeFileSync('docs/seo-analytics-mobile.png', Buffer.from(mshot.result.data, 'base64'));
 
-await ev(`(() => { const h=document.querySelector('h1'); if(h)h.scrollIntoView({block:'start'}); window.scrollTo(0,0); return 1; })()`);
+await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1300, deviceScaleFactor: 1, mobile: false });
+await send('Page.navigate', { url: BASE + '/app/admin/analytics' });
+await sleep(2600);
+await ev(`(() => { window.scrollTo(0,0); return 1; })()`);
 await sleep(500);
 const shot = await send('Page.captureScreenshot', { format: 'png' });
 fs.writeFileSync('docs/seo-analytics.png', Buffer.from(shot.result.data, 'base64'));

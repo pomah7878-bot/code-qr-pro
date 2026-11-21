@@ -35,12 +35,16 @@ export function webmasterConfigured() {
 export function webmasterStatus() {
   return {
     configured: webmasterConfigured(),
+    clientId: getSetting('webmaster_client_id', ''),
     hostId: getSetting('webmaster_host_id', ''),
     userId: getSetting('webmaster_user_id', ''),
     lastSyncAt: getSetting('webmaster_last_sync', ''),
     tokenSet: Boolean(getSetting('webmaster_token', ''))
   };
 }
+
+export const WEBMASTER_REDIRECT_URI = 'https://code-qr.stockcity.ru/app/admin/analytics';
+export const WEBMASTER_SCOPE = 'webmaster:hostinfo';
 
 /** Проверка токена: возвращает user_id и список хостов. */
 export async function resolveWebmaster(token, hostId = '') {
@@ -63,10 +67,14 @@ export async function resolveWebmaster(token, hostId = '') {
   };
 }
 
-export async function saveWebmaster({ token = '', hostId = '' } = {}) {
+export async function saveWebmaster({ token = '', hostId = '', clientId = '' } = {}) {
+  if (clientId) setSetting('webmaster_client_id', String(clientId).trim().slice(0, 200));
   const current = getSetting('webmaster_token', '');
   const useToken = String(token || current || '').trim();
-  if (!useToken) throw new Error('Укажите OAuth-токен Вебмастера');
+  if (!useToken) {
+    if (clientId) return { ...webmasterStatus(), hosts: [], resolvedHost: null };
+    throw new Error('Укажите OAuth-токен Вебмастера');
+  }
   const resolved = await resolveWebmaster(useToken, hostId);
   if (token) setSetting('webmaster_token', useToken);
   setSetting('webmaster_user_id', resolved.userId);

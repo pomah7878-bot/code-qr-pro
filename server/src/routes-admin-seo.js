@@ -197,7 +197,7 @@ export async function registerAdminSeoRoutes(app) {
 
   app.post('/api/admin/analytics/webmaster', { preHandler: requireAdmin }, async (req, reply) => {
     try {
-      const result = await saveWebmaster({ token: req.body?.token, hostId: req.body?.hostId });
+      const result = await saveWebmaster({ token: req.body?.token, hostId: req.body?.hostId, clientId: req.body?.clientId });
       audit(req, 'analytics.webmaster_save', 'settings', 'webmaster', { hostId: result.hostId, tokenSet: result.tokenSet });
       return { ok: true, ...result };
     } catch (e) {

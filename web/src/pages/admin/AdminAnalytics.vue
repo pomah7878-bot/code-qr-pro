@@ -67,6 +67,7 @@ async function load() {
   error.value = '';
   try {
     data.value = await api.adminSeoDashboard(days.value);
+    if (!wm.value.clientId && data.value?.webmaster?.clientId) wm.value.clientId = data.value.webmaster.clientId;
   } catch (e) {
     error.value = e.message || 'Не удалось загрузить аналитику';
   } finally {
@@ -74,13 +75,21 @@ async function load() {
   }
 }
 
-const wm = ref({ token: '', hostId: '', saving: false, syncing: false, message: '', error: '' });
+const WEBMASTER_REDIRECT = 'https://code-qr.stockcity.ru/app/admin/analytics';
+const wm = ref({ token: '', clientId: '', hostId: '', saving: false, syncing: false, message: '', error: '' });
+const oauthUrl = computed(() => wm.value.clientId
+  ? 'https://oauth.yandex.ru/authorize?response_type=token&client_id=' + encodeURIComponent(wm.value.clientId) + '&redirect_uri=' + encodeURIComponent(WEBMASTER_REDIRECT)
+  : '');
 async function saveWebmaster() {
   wm.value.saving = true; wm.value.message = ''; wm.value.error = '';
   try {
-    const r = await api.adminWebmasterSave({ token: wm.value.token, hostId: wm.value.hostId });
-    wm.value.message = r.resolvedHost ? `Подключено: ${r.resolvedHost.url || r.hostId}` : `Токен сохранён, хост: ${r.hostId || 'не выбран'}`;
-    wm.value.token = '';
+    const r = await api.adminWebmasterSave({ token: wm.value.token, hostId: wm.value.hostId, clientId: wm.value.clientId });
+    if (!wm.value.token) {
+      wm.value.message = 'Client ID сохранён — теперь получите токен по кнопке ниже.';
+    } else {
+      wm.value.message = r.resolvedHost ? `Подключено: ${r.resolvedHost.url || r.hostId}` : `Токен сохранён, хост: ${r.hostId || 'не выбран'}`;
+      wm.value.token = '';
+    }
     await load();
   } catch (e) { wm.value.error = e.message || 'Не удалось подключить Вебмастер'; }
   finally { wm.value.saving = false; }
@@ -107,8 +116,24 @@ function exportCsv() {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+function handleOAuthHash() {
+  try {
+    const params = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+    const token = params.get('access_token');
+    const err = params.get('error_description') || params.get('error');
+    if (token) {
+      wm.value.token = token;
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      saveWebmaster();
+    } else if (err) {
+      wm.value.error = 'Яндекс: ' + err;
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  } catch { /* ignore */ }
+}
 onMounted(() => {
   load();
+  handleOAuthHash();
   timer = window.setInterval(() => { if (!document.hidden) load(); }, 60000);
 });
 onUnmounted(() => window.clearInterval(timer));
@@ -335,20 +360,38 @@ watch(days, load);
             <div class="font-semibold">Яндекс.Вебмастер</div>
             <span class="text-[10px] px-2 py-0.5 rounded-full border" :class="webmaster.configured ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-amber-500/10 text-amber-500 border-amber-500/30'">{{ webmaster.configured ? 'подключён' : 'не подключён' }}</span>
           </div>
-          <p class="text-xs text-slate-500">Подключите OAuth-токен Вебмастера, чтобы видеть реальные показы, клики, CTR и позиции по запросам. Хост <b>code-qr.stockcity.ru</b> определится автоматически.</p>
+          <p class="text-xs text-slate-500">Показы, клики, CTR и позиции по поисковым запросам из Яндекса. Хост <b>code-qr.stockcity.ru</b> определится автоматически.</p>
+
+          <div class="mt-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/60 dark:bg-white/[.03] p-3 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+            <div><b>1.</b> В OAuth-приложении Яндекса («Веб-сервисы») добавьте доступ <code class="font-mono">webmaster:hostinfo</code> — это API Вебмастера. Доступы <code class="font-mono">webmaster:verify</code> и <code class="font-mono">direct:api</code> не нужны.</div>
+            <div><b>2.</b> Redirect URI: <code class="font-mono break-all">https://code-qr.stockcity.ru/app/admin/analytics</code></div>
+            <div><b>3.</b> Скопируйте Client ID приложения, сохраните ниже и нажмите «Получить токен в Яндексе».</div>
+          </div>
+
           <div v-if="webmaster.configured" class="mt-2 text-[11px] text-slate-500">
             Хост: {{ webmaster.hostId || '—' }} · последняя синхронизация: {{ fmtDateTime(webmaster.lastSyncAt) }}
           </div>
+
           <div class="mt-3 space-y-2">
-            <input v-model="wm.token" class="input !py-2 text-sm" type="password" autocomplete="off" placeholder="OAuth-токен Вебмастера (поле не сохраняется в браузере)">
-            <input v-model="wm.hostId" class="input !py-2 text-sm" placeholder="host_id (необязательно, определится сам)">
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input v-model="wm.clientId" class="input !py-2 text-sm flex-1" placeholder="Client ID OAuth-приложения Яндекса" autocomplete="off">
+              <button class="btn-ghost !py-2 !px-3 text-xs shrink-0" :disabled="wm.saving || !wm.clientId" @click="saveWebmaster">Сохранить Client ID</button>
+            </div>
+            <a v-if="oauthUrl" :href="oauthUrl" target="_blank" rel="noopener" class="btn-primary !py-2 !px-3 text-xs inline-flex">Получить токен в Яндексе →</a>
+            <details class="text-[11px] text-slate-500">
+              <summary class="cursor-pointer">Вставить токен вручную</summary>
+              <div class="mt-2 space-y-2">
+                <input v-model="wm.token" class="input !py-2 text-sm" type="password" autocomplete="off" placeholder="OAuth-токен Вебмастера">
+                <input v-model="wm.hostId" class="input !py-2 text-sm" placeholder="host_id (необязательно, определится сам)">
+              </div>
+            </details>
             <div class="flex flex-wrap gap-2">
-              <button class="btn-primary !py-2 !px-3 text-xs" :disabled="wm.saving || !wm.token" @click="saveWebmaster">{{ wm.saving ? 'Проверяем…' : 'Подключить' }}</button>
+              <button class="btn-primary !py-2 !px-3 text-xs" :disabled="wm.saving || !wm.token" @click="saveWebmaster">{{ wm.saving ? 'Проверяем…' : 'Подключить токен' }}</button>
               <button class="btn-ghost !py-2 !px-3 text-xs" :disabled="wm.syncing || !webmaster.configured" @click="syncWebmaster">{{ wm.syncing ? 'Загружаем…' : 'Синхронизировать запросы' }}</button>
             </div>
             <p v-if="wm.message" class="text-xs text-emerald-500">{{ wm.message }}</p>
             <p v-if="wm.error" class="text-xs text-red-500">{{ wm.error }}</p>
-            <p class="text-[11px] text-slate-500">Токен выдаётся в OAuth-приложении Яндекса с доступом к Вебмастеру. Хранится в зашифрованном виде на сервере.</p>
+            <p class="text-[11px] text-slate-500">Токен хранится в зашифрованном виде на сервере. Если хост ещё не добавлен в Вебмастер — сначала подтвердите его в панели Вебмастера.</p>
           </div>
         </div>
       </div>

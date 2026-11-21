@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import { join } from 'node:path';
 import { getSetting } from '../settings.js';
 
-const FONT = join(import.meta.dirname, '..', 'assets', 'LiberationSans-Regular.ttf');
+const FONT = join(import.meta.dirname, '..', '..', 'assets', 'LiberationSans-Regular.ttf');
 
 /** Реквизиты продавца для счетов (заполняются в админке → Настройки). */
 export function invoiceSeller() {
@@ -83,8 +83,9 @@ export function generateInvoicePdf(order) {
   const doc = new PDFDocument({ size: 'A4', margin: 42, autoFirstPage: true });
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
-  try { doc.registerFont('InvoiceFont', FONT); doc.font('InvoiceFont'); } catch { /* fallback */ }
+  try { doc.registerFont('InvoiceFont', FONT); doc.font('InvoiceFont'); } catch (e) { console.error('invoice font:', e.message); }
   const font = 'InvoiceFont';
+  doc.font(font);
 
   doc.fontSize(16).text('СЧЁТ НА ОПЛАТУ', { align: 'center' });
   doc.moveDown(0.3);
@@ -131,7 +132,7 @@ export function generateInvoicePdf(order) {
   doc.text('№', left, top, { width: 24 });
   doc.text('Наименование услуги', left + 26, top, { width: 280 });
   doc.text('Кол-во', left + 310, top, { width: 55, align: 'right' });
-  doc.text('Сумма, ₽', left + 370, top, { width: 100, align: 'right' });
+  doc.text('Сумма, руб.', left + 360, top, { width: 110, align: 'right' });
   doc.moveTo(left, top + 14).lineTo(right, top + 14).stroke();
   const rowY = top + 20;
   doc.text('1', left, rowY, { width: 24 });
@@ -140,7 +141,7 @@ export function generateInvoicePdf(order) {
   doc.text(rub, left + 370, rowY, { width: 100, align: 'right' });
   doc.moveTo(left, rowY + 32).lineTo(right, rowY + 32).stroke();
   doc.text('Итого к оплате:', left + 200, rowY + 40, { width: 140, align: 'right' });
-  doc.fontSize(11).text(`${rub} ₽`, left + 350, rowY + 38, { width: 120, align: 'right' });
+  doc.fontSize(11).text(`${rub} руб.`, left + 340, rowY + 38, { width: 130, align: 'right' });
   doc.fontSize(9).text('Без НДС (плательщик налога на профессиональный доход)', left, rowY + 58, { width: right - left });
   doc.moveDown(0.6);
 

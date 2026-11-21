@@ -30,6 +30,9 @@ import { registerAdminSecurityRoutes } from './routes-admin-security.js';
 import { registerAdminAiRoutes } from './routes-admin-ai.js';
 import { registerAdminBillingRoutes } from './routes-admin-billing.js';
 import { registerAiSupportRoutes } from './routes-ai-support.js';
+import { registerAnalyticsRoutes } from './routes-analytics.js';
+import { registerAdminSeoRoutes } from './routes-admin-seo.js';
+import { detectBot, recordBotHit, pruneAnalytics } from './lib/analytics.js';
 import { seedKnowledgeBase } from './lib/kb.js';
 import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, pruneAppLogs } from './lib/app-log.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
@@ -48,6 +51,19 @@ app.addHook('onRequest', sameOriginGuard);
 app.addHook('onRequest', rateLimitHook());
 installAppLogHooks(app);
 installProcessLogHandlers();
+
+// Учёт визитов поисковых ботов по серверным запросам (люди учитываются маяком на странице).
+app.addHook('onResponse', async (req, reply) => {
+  try {
+    if (req.method !== 'GET') return;
+    const ua = req.headers['user-agent'] || '';
+    const engine = detectBot(ua);
+    if (!engine) return;
+    const path = String(req.raw.url || '/').split('?')[0];
+    if (path.startsWith('/api/') || path.startsWith('/assets/')) return;
+    recordBotHit({ path, engine, ua, status: reply.statusCode });
+  } catch { /* аналитика не должна влиять на ответ */ }
+});
 setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
 setInterval(() => db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now','-365 days')").run(), 86400000).unref();
 setInterval(() => db.prepare("DELETE FROM login_attempts WHERE last_at < datetime('now','-30 days')").run(), 86400000).unref();
@@ -58,9 +74,12 @@ setInterval(cleanupExpiredJobs, 3600000).unref();
 setInterval(() => pruneAppLogs(), 3600000).unref();
 pruneAppLogs();
 cleanupExpiredJobs();
+pruneAnalytics();
 
 await app.register(cookie);
 await registerRoutes(app);
+await registerAnalyticsRoutes(app);
+await registerAdminSeoRoutes(app);
 await registerJobRoutes(app);
 await registerLabelRoutes(app);
 await registerBillingRoutes(app);

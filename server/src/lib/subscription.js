@@ -1,4 +1,5 @@
 import { db } from '../db.js';
+import { recordConversion } from './analytics.js';
 import { getPlan, planOf, normalizePlanId } from '../plans.js';
 import { getSetting } from '../settings.js';
 import { notifyStatusChange } from '../notify.js';
@@ -188,6 +189,7 @@ export function startTrial(user) {
       'INSERT INTO usage_periods (user_id, plan, source, period_start, period_end) VALUES (?,?,?,?,?)'
     ).run(user.id, 'pro', 'trial', sqlNow(now), sqlNow(ends));
   })();
+  recordConversion('trial', user.id);
   notifyStatusChange(user, `Активирован пробный период PRO на ${days} дней`);
   return { trial: trialInfo({ id: user.id }), plan: getPlan('pro'), days };
 }

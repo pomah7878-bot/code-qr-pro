@@ -572,7 +572,53 @@ const MIGRATIONS = [
    CREATE UNIQUE INDEX idx_jobs_idem ON generation_jobs(user_id, idem_key) WHERE idem_key IS NOT NULL;`,
   // v36 — согласие на обработку персональных данных и принятие документов при регистрации
   `ALTER TABLE users ADD COLUMN consent_at TEXT;
-   ALTER TABLE users ADD COLUMN consent_version TEXT;`
+   ALTER TABLE users ADD COLUMN consent_version TEXT;`,
+  // v37 — первичная веб-аналитика: просмотры публичных страниц, боты, поисковые запросы, конверсии
+  `CREATE TABLE IF NOT EXISTS site_visits (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     day TEXT NOT NULL,
+     path TEXT NOT NULL DEFAULT '/',
+     referrer TEXT NOT NULL DEFAULT '',
+     source TEXT NOT NULL DEFAULT 'direct',
+     medium TEXT NOT NULL DEFAULT '',
+     campaign TEXT NOT NULL DEFAULT '',
+     query TEXT NOT NULL DEFAULT '',
+     device TEXT NOT NULL DEFAULT 'desktop',
+     engine TEXT NOT NULL DEFAULT '',
+     is_bot INTEGER NOT NULL DEFAULT 0,
+     session_id TEXT NOT NULL DEFAULT '',
+     visitor_id TEXT NOT NULL DEFAULT '',
+     user_id INTEGER,
+     status INTEGER NOT NULL DEFAULT 200,
+     origin TEXT NOT NULL DEFAULT 'live'
+   );
+   CREATE INDEX IF NOT EXISTS idx_site_visits_day ON site_visits(day);
+   CREATE INDEX IF NOT EXISTS idx_site_visits_source ON site_visits(day, source);
+   CREATE INDEX IF NOT EXISTS idx_site_visits_bot ON site_visits(day, is_bot, engine);
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_site_visits_unique ON site_visits(day, session_id, path) WHERE is_bot = 0 AND session_id <> '';
+   CREATE TABLE IF NOT EXISTS seo_queries (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     engine TEXT NOT NULL DEFAULT 'yandex',
+     query TEXT NOT NULL,
+     clicks INTEGER NOT NULL DEFAULT 0,
+     impressions INTEGER NOT NULL DEFAULT 0,
+     position REAL NOT NULL DEFAULT 0,
+     date_from TEXT NOT NULL DEFAULT '',
+     date_to TEXT NOT NULL DEFAULT '',
+     imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+     UNIQUE(engine, query, date_from, date_to)
+   );
+   CREATE INDEX IF NOT EXISTS idx_seo_queries_to ON seo_queries(date_to);
+   CREATE TABLE IF NOT EXISTS site_conversions (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     day TEXT NOT NULL,
+     type TEXT NOT NULL,
+     user_id INTEGER,
+     amount REAL NOT NULL DEFAULT 0
+   );
+   CREATE INDEX IF NOT EXISTS idx_site_conversions_day ON site_conversions(day, type);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

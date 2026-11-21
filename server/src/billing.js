@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { db } from './db.js';
+import { recordConversion } from './lib/analytics.js';
 import { getPlan, normalizePlanId, getPremiumOffers, offerFinalPrice, archiveAddon, getTestPrice } from './plans.js';
 import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, activeSubscription, currentPeriod } from './lib/subscription.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
@@ -167,6 +168,7 @@ function fulfillOrder(order, payment) {
   db.prepare("INSERT OR IGNORE INTO payment_events (external_id, provider, order_id, status, payload_hash) VALUES (?,?,?,?,?)")
     .run(payment.id, 'yookassa', order.id, payment.status || 'succeeded', createHash('sha256').update(JSON.stringify(payment.metadata || {})).digest('hex').slice(0, 32));
   const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+  recordConversion('payment', paid.user_id, Number(paid.amount) || 0);
   redeemPromo(paid);
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
   notifyPayment(paid, user);

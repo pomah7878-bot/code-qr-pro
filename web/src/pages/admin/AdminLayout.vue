@@ -39,6 +39,7 @@ const groups = computed(() => {
     {
       title: 'Маркетинг',
       links: [
+        { to: '/app/admin/analytics', label: 'SEO и аналитика', adminOnly: true },
         { to: '/app/admin/marketing', label: 'Рассылки и акции', adminOnly: true },
         { to: '/app/admin/ads', label: 'Реклама', adminOnly: true }
       ]

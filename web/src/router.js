@@ -39,6 +39,7 @@ const Assistant = () => import('./pages/Assistant.vue');
 const Help = () => import('./pages/Help.vue');
 const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
 const AdminBilling = () => import('./pages/admin/AdminBilling.vue');
+const AdminAnalytics = () => import('./pages/admin/AdminAnalytics.vue');
 const Articles = () => import('./pages/Articles.vue');
 const Article = () => import('./pages/Article.vue');
 const Faq = () => import('./pages/Faq.vue');
@@ -85,6 +86,7 @@ const router = createRouter({
         { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },
         { path: 'support', component: AdminSupport, meta: { adminOnly: true } },
         { path: 'ai', component: AdminAi, meta: { adminOnly: true } },
+        { path: 'analytics', component: AdminAnalytics, meta: { adminOnly: true } },
         { path: 'marketing', component: AdminMarketing, meta: { adminOnly: true } },
         { path: 'ads', component: AdminAds, meta: { adminOnly: true } },
         { path: 'storage', component: AdminStorage, meta: { adminOnly: true } },

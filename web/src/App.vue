@@ -7,12 +7,15 @@ import { openAssistant } from './lib/assistant-ui.js';
 import AssistantWidget from './components/AssistantWidget.vue';
 import BrandIcon from './components/BrandIcon.vue';
 import SiteFooter from './components/SiteFooter.vue';
+import { trackPageview } from './lib/analytics.js';
 
 const router = useRouter();
 const route = useRoute();
 const menuOpen = ref(false);
 const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app'));
 const isPublicPage = computed(() => !route.path.startsWith('/app'));
+onMounted(() => trackPageview(route.fullPath));
+watch(() => route.fullPath, (to, from) => { if (to !== from) trackPageview(to); });
 const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 

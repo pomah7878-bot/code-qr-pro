@@ -1,5 +1,6 @@
 import { randomInt, createHash, timingSafeEqual } from 'node:crypto';
 import { db, usageToday } from './db.js';
+import { recordConversion } from './lib/analytics.js';
 import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser, sessionDaysFor } from './auth.js';
 import { PLANS, planOf, publicPlans, listPlans } from './plans.js';
 import { entitlements } from './lib/subscription.js';
@@ -147,6 +148,7 @@ export async function registerRoutes(app) {
       db.prepare("UPDATE users SET role='admin' WHERE id=?").run(info.lastInsertRowid);
     }
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
+    recordConversion('registration', user.id);
     const { token, expires } = createSession(user.id, {
       ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
     });

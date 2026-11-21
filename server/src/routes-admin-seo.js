@@ -5,7 +5,7 @@ import { db } from './db.js';
 import { getSetting } from './settings.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
-import { webmasterStatus, saveWebmaster, syncWebmasterQueries, testWebmaster } from './lib/webmaster.js';
+import { webmasterStatus, webmasterSnapshot, saveWebmaster, syncWebmasterQueries, syncWebmasterExtra, testWebmaster } from './lib/webmaster.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SEARCH_SOURCES = new Set(['yandex', 'google', 'bing', 'mailru', 'duckduckgo', 'dzen']);
@@ -28,7 +28,7 @@ function niceSource(s) {
   return map[s] || s || 'Неизвестно';
 }
 
-function seoHealth(articles) {
+function seoHealth(articles, wmSnapshot = null) {
   const dist = join(__dirname, '..', '..', 'web', 'dist');
   let robots = '';
   try { robots = readFileSync(join(dist, 'robots.txt'), 'utf8'); } catch { /* ignore */ }
@@ -43,6 +43,14 @@ function seoHealth(articles) {
     { id: 'faqld', label: 'Структурированные данные FAQ', ok: true, detail: 'JSON-LD FAQPage на странице вопросов', weight: 1 },
     { id: 'mobile', label: 'Мобильная адаптация', ok: true, detail: 'Публичные страницы без горизонтальной прокрутки на 390px', weight: 1 }
   ];
+  if (wmSnapshot?.summary) {
+    const sev = wmSnapshot.summary.problems || {};
+    const fatal = Number(sev.FATAL) || 0;
+    const critical = Number(sev.CRITICAL) || 0;
+    checks.push({ id: 'wm_pages', label: 'Страницы в поиске Яндекса', ok: wmSnapshot.summary.searchablePages > 0, detail: `${wmSnapshot.summary.searchablePages} в поиске, ${wmSnapshot.summary.excludedPages} исключено · ИКС ${wmSnapshot.summary.sqi}`, weight: 2 });
+    checks.push({ id: 'wm_problems', label: 'Диагностика Вебмастера', ok: fatal === 0 && critical === 0, detail: fatal || critical ? `${fatal} фатальных, ${critical} критичных проблем` : 'Фатальных и критичных проблем нет', weight: 2 });
+    checks.push({ id: 'wm_sitemaps', label: 'Sitemap в Вебмастере', ok: wmSnapshot.sitemaps.count > 0 && wmSnapshot.sitemaps.errors === 0, detail: wmSnapshot.sitemaps.count ? `${wmSnapshot.sitemaps.count} файлов, ${wmSnapshot.sitemaps.urls} URL, ошибок: ${wmSnapshot.sitemaps.errors}` : 'Sitemap ещё не обнаружен', weight: 1 });
+  }
   const total = checks.reduce((s, c) => s + c.weight, 0);
   const done = checks.reduce((s, c) => s + (c.ok ? c.weight : 0), 0);
   return { score: Math.round((done / total) * 100), checks };
@@ -129,7 +137,7 @@ export async function registerAdminSeoRoutes(app) {
               CASE WHEN SUM(impressions)>0 THEN SUM(position*impressions)/SUM(impressions) ELSE AVG(position) END position
        FROM seo_queries WHERE date_to >= ? GROUP BY query ORDER BY impressions DESC, clicks DESC LIMIT 30`
     ).all(from);
-    const webmaster = webmasterStatus();
+    const webmaster = { ...webmasterStatus(), snapshot: webmasterSnapshot() };
     const landing = [...firstPage.entries()].reduce((acc, [, path]) => {
       acc.set(path, (acc.get(path) || 0) + 1);
       return acc;
@@ -181,7 +189,7 @@ export async function registerAdminSeoRoutes(app) {
       webmasterQueries,
       webmaster,
       seo: {
-        ...seoHealth(articles),
+        ...seoHealth(articles, webmasterSnapshot()),
         sitemapUrls: 7 + articles,
         articles,
         faq: FAQ_COUNT,
@@ -217,8 +225,9 @@ export async function registerAdminSeoRoutes(app) {
     try {
       const days = Math.min(90, Math.max(7, Number(req.body?.days) || 30));
       const result = await syncWebmasterQueries(days);
-      audit(req, 'analytics.webmaster_sync', 'settings', 'webmaster', result);
-      return { ok: true, ...result };
+      const extra = await syncWebmasterExtra().catch((e) => ({ errors: [String(e?.message || e)] }));
+      audit(req, 'analytics.webmaster_sync', 'settings', 'webmaster', { saved: result.saved });
+      return { ok: true, ...result, summary: extra.summary || null, diagnostics: extra.diagnostics || [], sitemaps: extra.sitemaps || null, extraErrors: extra.errors || [] };
     } catch (e) {
       return reply.code(400).send({ error: String(e?.message || e) });
     }

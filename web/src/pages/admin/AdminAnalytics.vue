@@ -29,6 +29,9 @@ const devices = computed(() => data.value?.devices || []);
 const bots = computed(() => data.value?.bots || { total: 0, engines: [], pages: [] });
 const seo = computed(() => data.value?.seo || { score: 0, checks: [], articles: 0, faq: 0, legal: 0 });
 const webmaster = computed(() => data.value?.webmaster || {});
+const wmSnapshot = computed(() => webmaster.value.snapshot || null);
+const sevLabel = { FATAL: 'фатальная', CRITICAL: 'критичная', POSSIBLE_PROBLEM: 'возможная', RECOMMENDATION: 'рекомендация' };
+const sevClass = { FATAL: 'text-red-500 border-red-500/30 bg-red-500/10', CRITICAL: 'text-orange-500 border-orange-500/30 bg-orange-500/10', POSSIBLE_PROBLEM: 'text-amber-500 border-amber-500/30 bg-amber-500/10', RECOMMENDATION: 'text-sky-500 border-sky-500/30 bg-sky-500/10' };
 
 const maxSource = computed(() => Math.max(1, ...sources.value.map((s) => s.visits || 0)));
 const maxDevice = computed(() => Math.max(1, ...devices.value.map((s) => s.visits || 0)));
@@ -98,7 +101,7 @@ async function syncWebmaster() {
   wm.value.syncing = true; wm.value.message = ''; wm.value.error = '';
   try {
     const r = await api.adminWebmasterSync(days.value);
-    wm.value.message = `Загружено запросов: ${r.saved} за ${fmtDate(r.from)} — ${fmtDate(r.to)}`;
+    wm.value.message = `Загружено запросов: ${r.saved} за ${fmtDate(r.from)} — ${fmtDate(r.to)}${r.summary ? ` · ИКС ${r.summary.sqi}, страниц в поиске ${r.summary.searchablePages}` : ''}`;
     await load();
   } catch (e) { wm.value.error = e.message || 'Не удалось синхронизировать запросы'; }
   finally { wm.value.syncing = false; }
@@ -371,6 +374,35 @@ watch(days, load);
           <div v-if="webmaster.configured" class="mt-2 text-[11px] text-slate-500">
             Хост: {{ webmaster.hostId || '—' }} · последняя синхронизация: {{ fmtDateTime(webmaster.lastSyncAt) }}
           </div>
+          <div v-if="wmSnapshot?.summary" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-2">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">ИКС</div>
+              <div class="font-display font-bold text-lg">{{ wmSnapshot.summary.sqi }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-2">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">В поиске</div>
+              <div class="font-display font-bold text-lg">{{ fmt(wmSnapshot.summary.searchablePages) }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-2">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Исключено</div>
+              <div class="font-display font-bold text-lg">{{ fmt(wmSnapshot.summary.excludedPages) }}</div>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-2">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Sitemap</div>
+              <div class="font-display font-bold text-lg">{{ wmSnapshot.sitemaps?.count || 0 }}</div>
+              <div class="text-[10px] text-slate-500">{{ wmSnapshot.sitemaps?.errors ? 'ошибок: ' + wmSnapshot.sitemaps.errors : 'без ошибок' }}</div>
+            </div>
+          </div>
+          <div v-if="wmSnapshot?.diagnostics?.length" class="mt-3">
+            <div class="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Диагностика Вебмастера</div>
+            <div class="space-y-1.5">
+              <div v-for="d in wmSnapshot.diagnostics.slice(0, 6)" :key="d.type" class="flex items-center justify-between gap-2 text-[11px]">
+                <span class="font-mono truncate">{{ d.type }}</span>
+                <span class="shrink-0 px-2 py-0.5 rounded-full border" :class="sevClass[d.severity] || 'text-slate-500 border-slate-200 dark:border-white/10'">{{ sevLabel[d.severity] || d.severity }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="wmSnapshot?.syncedAt" class="mt-2 text-[11px] text-emerald-500">Данные Вебмастера: {{ fmtDateTime(wmSnapshot.syncedAt) }}</div>
 
           <div class="mt-3 space-y-2">
             <div class="flex flex-col sm:flex-row gap-2">

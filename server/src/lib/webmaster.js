@@ -32,6 +32,13 @@ export function webmasterConfigured() {
   return Boolean(getSetting('webmaster_token', '') && getSetting('webmaster_host_id', ''));
 }
 
+export function webmasterSnapshot() {
+  try {
+    const raw = getSetting('webmaster_snapshot', '');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export function webmasterStatus() {
   return {
     configured: webmasterConfigured(),
@@ -68,7 +75,11 @@ export async function resolveWebmaster(token, hostId = '') {
 }
 
 export async function saveWebmaster({ token = '', hostId = '', clientId = '' } = {}) {
-  if (clientId) setSetting('webmaster_client_id', String(clientId).trim().slice(0, 200));
+  if (clientId) {
+    const cleanId = String(clientId).trim().slice(0, 200);
+    if (!/^[A-Za-z0-9_-]{10,100}$/.test(cleanId)) throw new Error('Client ID выглядит некорректно — скопируйте его из настроек OAuth-приложения Яндекса');
+    setSetting('webmaster_client_id', cleanId);
+  }
   const current = getSetting('webmaster_token', '');
   const useToken = String(token || current || '').trim();
   if (!useToken) {
@@ -76,7 +87,11 @@ export async function saveWebmaster({ token = '', hostId = '', clientId = '' } =
     throw new Error('Укажите OAuth-токен Вебмастера');
   }
   const resolved = await resolveWebmaster(useToken, hostId);
-  if (token) setSetting('webmaster_token', useToken);
+  if (token) {
+    setSetting('webmaster_token', useToken);
+    setSetting('webmaster_snapshot', '');
+    setSetting('webmaster_last_sync', '');
+  }
   setSetting('webmaster_user_id', resolved.userId);
   if (resolved.host) {
     setSetting('webmaster_host_id', resolved.host.id);
@@ -141,6 +156,58 @@ export async function syncWebmasterQueries(days = 30) {
   tx(queries);
   setSetting('webmaster_last_sync', new Date().toISOString());
   return { saved, from, to, total: queries.length };
+}
+
+async function safeGet(path, token) {
+  try { return { ok: true, data: await wmFetch(path, token) }; }
+  catch (e) { return { ok: false, error: String(e?.message || e) }; }
+}
+
+/** Дополнительные данные Вебмастера: статистика сайта, диагностика, Sitemap. */
+export async function syncWebmasterExtra() {
+  const token = getSetting('webmaster_token', '');
+  const hostId = getSetting('webmaster_host_id', '');
+  const userId = getSetting('webmaster_user_id', '');
+  if (!token || !hostId || !userId) throw new Error('Яндекс.Вебмастер не подключён');
+  const base = `/user/${encodeURIComponent(userId)}/hosts/${encodeURIComponent(hostId)}`;
+  const [summary, diagnostics, sitemaps] = await Promise.all([
+    safeGet(base + '/summary', token),
+    safeGet(base + '/diagnostics', token),
+    safeGet(base + '/sitemaps', token)
+  ]);
+  const errors = [];
+  if (!summary.ok) errors.push('summary: ' + summary.error);
+  if (!diagnostics.ok) errors.push('diagnostics: ' + diagnostics.error);
+  if (!sitemaps.ok) errors.push('sitemaps: ' + sitemaps.error);
+  const summaryData = summary.ok ? summary.data || {} : {};
+  const diagData = diagnostics.ok ? diagnostics.data || {} : {};
+  const problems = Object.entries(diagData.problems || {})
+    .map(([type, p]) => ({ type, severity: p.severity || '', state: p.state || '', lastStateUpdate: p.last_state_update || '' }))
+    .filter((p) => p.state === 'PRESENT')
+    .sort((a, b) => {
+      const order = { FATAL: 0, CRITICAL: 1, POSSIBLE_PROBLEM: 2, RECOMMENDATION: 3 };
+      return (order[a.severity] ?? 9) - (order[b.severity] ?? 9);
+    });
+  const maps = Array.isArray(sitemaps.ok ? sitemaps.data?.sitemaps : []) ? (sitemaps.data?.sitemaps || []) : [];
+  const snapshot = {
+    syncedAt: new Date().toISOString(),
+    summary: {
+      sqi: Number(summaryData.sqi) || 0,
+      searchablePages: Number(summaryData.searchable_pages_count) || 0,
+      excludedPages: Number(summaryData.excluded_pages_count) || 0,
+      problems: summaryData.site_problems || {}
+    },
+    diagnostics: problems.slice(0, 30),
+    sitemaps: {
+      count: maps.length,
+      urls: maps.reduce((sum, m) => sum + (Number(m.urls_count) || 0), 0),
+      errors: maps.reduce((sum, m) => sum + (Number(m.errors_count) || 0), 0),
+      lastAccess: maps.map((m) => m.last_access_date).filter(Boolean).sort().slice(-1)[0] || ''
+    },
+    errors
+  };
+  setSetting('webmaster_snapshot', JSON.stringify(snapshot));
+  return snapshot;
 }
 
 export async function testWebmaster() {

@@ -1139,14 +1139,16 @@ async function printLabels() {
       <div class="grid md:grid-cols-2 gap-4">
         <div class="glass rounded-2xl p-5 space-y-3">
           <h2 class="font-display font-semibold">Категория и шаблон</h2>
-          <div class="grid grid-cols-2 gap-2">
-            <button v-for="c in categories" :key="c.id" class="rounded-xl border px-3 py-2 text-sm transition flex items-center gap-2 text-left"
-              :class="category === c.id ? 'border-brand-500 bg-brand-500/10 font-semibold' : 'border-slate-200 dark:border-white/10 text-slate-500'"
+          <div class="rounded-2xl border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[.03] p-2 flex flex-wrap gap-1.5">
+            <button v-for="c in categories" :key="c.id" class="rounded-xl border px-3 py-1.5 text-sm transition inline-flex items-center gap-2 text-left whitespace-nowrap shadow-sm"
+              :class="category === c.id ? 'border-brand-500 bg-brand-500/10 font-semibold text-brand-600 dark:text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-white/10 dark:bg-white/[.04] dark:text-slate-300 dark:hover:border-white/20'"
+              :aria-pressed="category === c.id"
               @click="category = c.id">
-              <BrandIcon :name="c.icon" :size="20" />
+              <BrandIcon :name="c.icon" :size="18" />
               <span class="leading-tight">{{ c.title }}</span>
             </button>
           </div>
+          <p class="text-xs text-slate-500">Выберите категорию — шаблон полей этикетки подставится автоматически, при необходимости измените его ниже.</p>
           <div>
             <label class="label !text-xs" for="reprint-format">Формат этикетки</label>
             <select id="reprint-format" v-model="format" class="input !py-2 text-sm">

@@ -13,11 +13,15 @@ const czToken = ref('');
 const error = ref('');
 const notice = ref('');
 const savingCz = ref(false);
+const inv = ref({ name: '', status: '', inn: '', address: '', bank: '', bik: '', account: '', corr: '', phone: '', email: '', ready: false, missing: [] });
+const savingInv = ref(false);
 
 async function load() {
   error.value = '';
   try {
-    cz.value = await api.adminSettings();
+    const data = await api.adminSettings();
+    cz.value = data;
+    if (data.invoice) inv.value = data.invoice;
   } catch (e) {
     error.value = e.message;
   }
@@ -43,6 +47,16 @@ async function saveCz() {
   }
 }
 
+async function saveInvoice() {
+  error.value = ''; notice.value = ''; savingInv.value = true;
+  try {
+    await api.adminSaveSettings({ invoice: inv.value });
+    notice.value = 'Реквизиты для счетов сохранены';
+    await load();
+  } catch (e) { error.value = e.message; }
+  finally { savingInv.value = false; }
+}
+
 onMounted(load);
 </script>
 
@@ -66,6 +80,57 @@ onMounted(load);
     <SmtpCard />
 
     <StorageCard />
+
+    <div class="glass rounded-2xl p-6">
+      <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="orders" :size="19" />Реквизиты для счетов (B2B)</h2>
+      <p class="text-xs text-slate-500 mb-4">
+        Нужны для автоматического счёта юридическим лицам. Без банковских реквизитов оплата по счёту недоступна.
+        Статус: <b :class="inv.ready ? 'text-emerald-500' : 'text-amber-500'">{{ inv.ready ? 'готово' : 'заполните: ' + (inv.missing || []).join(', ') }}</b>
+      </p>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+          <label class="label !text-xs" for="inv-name">Наименование продавца (ФИО / ИП / ООО)</label>
+          <input id="inv-name" v-model="inv.name" class="input !py-2 text-sm" placeholder="Например: Иванов Иван Иванович">
+        </div>
+        <div class="md:col-span-2">
+          <label class="label !text-xs" for="inv-status">Налоговый статус</label>
+          <input id="inv-status" v-model="inv.status" class="input !py-2 text-sm" placeholder="Плательщик налога на профессиональный доход (самозанятый)">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-inn">ИНН</label>
+          <input id="inv-inn" v-model="inv.inn" class="input !py-2 text-sm" inputmode="numeric" placeholder="12 или 10 цифр">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-phone">Телефон для счёта</label>
+          <input id="inv-phone" v-model="inv.phone" class="input !py-2 text-sm" placeholder="+7 …">
+        </div>
+        <div class="md:col-span-2">
+          <label class="label !text-xs" for="inv-address">Адрес для счёта</label>
+          <input id="inv-address" v-model="inv.address" class="input !py-2 text-sm" placeholder="Город, улица, дом">
+        </div>
+        <div class="md:col-span-2">
+          <label class="label !text-xs" for="inv-bank">Банк</label>
+          <input id="inv-bank" v-model="inv.bank" class="input !py-2 text-sm" placeholder="Наименование банка">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-bik">БИК</label>
+          <input id="inv-bik" v-model="inv.bik" class="input !py-2 text-sm" inputmode="numeric" placeholder="9 цифр">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-account">Расчётный счёт</label>
+          <input id="inv-account" v-model="inv.account" class="input !py-2 text-sm" inputmode="numeric" placeholder="20 цифр">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-corr">Корр. счёт</label>
+          <input id="inv-corr" v-model="inv.corr" class="input !py-2 text-sm" inputmode="numeric" placeholder="20 цифр">
+        </div>
+        <div>
+          <label class="label !text-xs" for="inv-email">Email для счёта</label>
+          <input id="inv-email" v-model="inv.email" class="input !py-2 text-sm" placeholder="code-qr-pro@mail.ru">
+        </div>
+      </div>
+      <button class="btn-primary !py-2 mt-4" :disabled="savingInv" @click="saveInvoice">{{ savingInv ? 'Сохраняем…' : 'Сохранить реквизиты' }}</button>
+    </div>
 
     <div class="glass rounded-2xl p-6">
       <h2 class="font-display font-semibold mb-1">Честный ЗНАК (ГИС МТ)</h2>

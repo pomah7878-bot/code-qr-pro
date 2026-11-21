@@ -1,5 +1,6 @@
 import { db } from './db.js';
-import { activatePremium, checkOrder, providerConfigured, getPayment, cancelPayment, refundPayment } from './billing.js';
+import { activateArchive, checkOrder, providerConfigured, getPayment, cancelPayment, refundPayment } from './billing.js';
+import { activateSubscription } from './lib/subscription.js';
 import { notifyStatusChange } from './notify.js';
 import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
 import { audit } from './lib/audit.js';
@@ -55,7 +56,9 @@ export async function registerAdminOrderRoutes(app) {
     const { whereSql, params } = orderFilters(req.query);
     const orders = db.prepare(`
       SELECT o.id, o.plan, o.days, o.amount, o.discount, o.promo_code, o.status, o.provider,
-             o.external_id, o.confirmation_url, o.created_at, o.paid_at, u.email, u.id AS user_id
+             o.external_id, o.confirmation_url, o.created_at, o.paid_at, u.email, u.id AS user_id,
+             o.buyer_type, o.company_name, o.company_inn, o.company_kpp, o.company_address, o.company_email,
+             o.payment_method, o.invoice_number, o.invoice_issued_at
       FROM orders o JOIN users u ON u.id=o.user_id
       ${whereSql}
       ORDER BY o.id DESC LIMIT ? OFFSET ?
@@ -93,7 +96,20 @@ export async function registerAdminOrderRoutes(app) {
     if (order.status !== 'pending') {
       return reply.code(400).send({ error: 'Подтвердить можно только заказ в статусе «ожидает оплаты»' });
     }
-    activatePremium(order.user_id, 'admin', null, order.id, order.days || 30);
+    if (order.kind === 'archive' || order.plan === 'archive') {
+      activateArchive(order.user_id, 'manual', null, order.id, order.days || 1095);
+    } else {
+      activateSubscription({
+        userId: order.user_id,
+        planId: order.plan,
+        days: order.days || 30,
+        provider: order.provider || 'manual',
+        externalId: order.external_id || null,
+        orderId: order.id,
+        source: order.payment_method === 'bank_transfer' ? 'invoice' : 'admin'
+      });
+    }
+    db.prepare("UPDATE orders SET status='paid', paid_at=datetime('now') WHERE id=?").run(order.id);
     redeemPromo(getOrder(order.id));
     const user = getUser(order.user_id);
     notifyStatusChange(user, `Заказ №${order.id} подтверждён вручную (${order.amount} ₽)`);

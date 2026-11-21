@@ -9,7 +9,7 @@ import { webmasterStatus, webmasterSnapshot, saveWebmaster, syncWebmasterQueries
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SEARCH_SOURCES = new Set(['yandex', 'google', 'bing', 'mailru', 'duckduckgo', 'dzen']);
-const FAQ_COUNT = 38;
+const FAQ_COUNT = 39;
 const LEGAL_PAGES = 3;
 
 function daysBack(n) {

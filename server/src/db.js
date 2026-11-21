@@ -573,6 +573,8 @@ const MIGRATIONS = [
   // v36 — согласие на обработку персональных данных и принятие документов при регистрации
   `ALTER TABLE users ADD COLUMN consent_at TEXT;
    ALTER TABLE users ADD COLUMN consent_version TEXT;`,
+  // v38 — зарезервировано (миграция B2B перенесена в v39, чтобы не нарушать порядок версий)
+  `SELECT 1;`,
   // v37 — первичная веб-аналитика: просмотры публичных страниц, боты, поисковые запросы, конверсии
   `CREATE TABLE IF NOT EXISTS site_visits (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -618,7 +620,17 @@ const MIGRATIONS = [
      user_id INTEGER,
      amount REAL NOT NULL DEFAULT 0
    );
-   CREATE INDEX IF NOT EXISTS idx_site_conversions_day ON site_conversions(day, type);`
+   CREATE INDEX IF NOT EXISTS idx_site_conversions_day ON site_conversions(day, type);`,
+  // v39 — B2B-покупка: реквизиты покупателя-юрлица и счёт на оплату
+  `ALTER TABLE orders ADD COLUMN buyer_type TEXT NOT NULL DEFAULT 'individual';
+   ALTER TABLE orders ADD COLUMN company_name TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN company_inn TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN company_kpp TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN company_address TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN company_email TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN invoice_number TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN invoice_issued_at TEXT;
+   ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'card';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

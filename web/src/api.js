@@ -149,6 +149,7 @@ export const api = {
   adminCancelSubscription: (id, b) => req('POST', `/api/admin/billing/user/${id}/cancel`, b),
   adminBillingErrors: () => req('GET', '/api/admin/billing/errors'),
   adminBillingStats: () => req('GET', '/api/admin/billing/stats'),
+  invoiceInfo: () => req('GET', '/api/billing/invoice-info'),
   adminSeoDashboard: (days) => req('GET', '/api/admin/analytics/dashboard?days=' + (days || 30)),
   adminWebmasterStatus: () => req('GET', '/api/admin/analytics/webmaster'),
   adminWebmasterSave: (body) => req('POST', '/api/admin/analytics/webmaster', body),

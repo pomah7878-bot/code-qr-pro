@@ -6,6 +6,7 @@ import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, 
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange } from './notify.js';
 import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
+import { invoiceSeller, validateBuyer } from './lib/invoice.js';
 
 const YK_API = 'https://api.yookassa.ru/v3';
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru';
@@ -144,6 +145,54 @@ export async function createCheckout(user, planId = 'pro', period = 'month', pro
     throw e;
   }
   return db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+}
+
+/** B2B: заказ на оплату по счёту (банковский перевод), без ЮKassa. */
+export function createInvoiceOrder(user, planId = 'pro', period = 'month', promoCode = '', buyerInput = {}) {
+  const seller = invoiceSeller();
+  if (!seller.ready) {
+    const e = new Error('Оплата по счёту пока недоступна: администратор не заполнил банковские реквизиты продавца. Напишите в поддержку.');
+    e.statusCode = 409;
+    e.code = 'invoice_not_configured';
+    throw e;
+  }
+  const check = validateBuyer(buyerInput);
+  if (!check.ok) {
+    const e = new Error(check.error);
+    e.statusCode = 400;
+    e.code = 'invalid_buyer';
+    throw e;
+  }
+  const offer = planOffer(planId, period);
+  let amount = Number(offer.price);
+  let termDays = offer.days;
+  if (!(amount > 0)) { const e = new Error('Некорректная цена тарифа'); e.statusCode = 400; throw e; }
+  if (!(termDays > 0)) termDays = 30;
+  let promo = null;
+  if (promoCode) {
+    const checked = validatePromo({ code: promoCode, userId: user.id, amount, days: termDays, plan: offer.planId });
+    if (checked.error) { const e = new Error(checked.error); e.statusCode = 400; throw e; }
+    promo = checked;
+    amount = checked.finalAmount;
+    termDays = checked.days;
+  }
+  const info = db.prepare(
+    `INSERT INTO orders (user_id, plan, amount, days, promo_code, discount, kind, period, plan_title,
+       buyer_type, company_name, company_inn, company_kpp, company_address, company_email,
+       invoice_issued_at, payment_method, provider)
+     VALUES (?,?,?,?,?,?,?,?,?, 'legal', ?,?,?,?,?, datetime('now'), 'bank_transfer', 'invoice')`
+  ).run(
+    user.id, offer.planId, amount, termDays, promo?.code || null, promo?.discount || 0,
+    offer.kind, offer.period || 'month', offer.title,
+    check.buyer.companyName, check.buyer.companyInn, check.buyer.companyKpp,
+    check.buyer.companyAddress, check.buyer.companyEmail
+  );
+  const orderId = info.lastInsertRowid;
+  const number = `СЧ-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
+  db.prepare('UPDATE orders SET invoice_number=? WHERE id=?').run(number, orderId);
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  notifyStatusChange(user, `Сформирован счёт № ${number} на ${amount} ₽. Доступ активируется после поступления оплаты.`);
+  return order;
 }
 
 /** Подтверждение заказа по серверному платежу (только после GET /payments/:id). */

@@ -3,6 +3,7 @@ import { getSetting, setSetting } from './settings.js';
 import { czStatus } from './cz.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
+import { invoiceSeller } from './lib/invoice.js';
 
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
@@ -16,14 +17,51 @@ export async function registerAdminRoutes(app) {
     cz: czStatus()
   }));
 
-  app.get('/api/admin/settings', { preHandler: requireAdmin }, async () => ({
-    czEnabled: getSetting('cz_enabled', '0') === '1',
-    czApiUrl: getSetting('cz_api_url', 'https://api.mdlp.crpt.ru'),
-    czConfigured: Boolean(getSetting('cz_token', ''))
-  }));
+  app.get('/api/admin/settings', { preHandler: requireAdmin }, async () => {
+    const seller = invoiceSeller();
+    return {
+      czEnabled: getSetting('cz_enabled', '0') === '1',
+      czApiUrl: getSetting('cz_api_url', 'https://api.mdlp.crpt.ru'),
+      czConfigured: Boolean(getSetting('cz_token', '')),
+      invoice: {
+        name: seller.name,
+        status: seller.status,
+        inn: seller.inn,
+        address: seller.address,
+        bank: seller.bank,
+        bik: seller.bik,
+        account: seller.account,
+        corr: seller.corr,
+        phone: seller.phone,
+        email: seller.email,
+        ready: seller.ready,
+        missing: seller.missing
+      }
+    };
+  });
 
   app.put('/api/admin/settings', { preHandler: requireAdmin }, async (req, reply) => {
-    const { czEnabled, czApiUrl, czToken } = req.body || {};
+    const { czEnabled, czApiUrl, czToken, invoice } = req.body || {};
+    if (invoice && typeof invoice === 'object') {
+      const fields = {
+        invoice_name: String(invoice.name || '').trim().slice(0, 200),
+        invoice_status: String(invoice.status || '').trim().slice(0, 200),
+        invoice_inn: String(invoice.inn || '').replace(/\D/g, '').slice(0, 12),
+        invoice_address: String(invoice.address || '').trim().slice(0, 400),
+        invoice_bank: String(invoice.bank || '').trim().slice(0, 200),
+        invoice_bik: String(invoice.bik || '').replace(/\D/g, '').slice(0, 9),
+        invoice_account: String(invoice.account || '').replace(/\D/g, '').slice(0, 20),
+        invoice_corr: String(invoice.corr || '').replace(/\D/g, '').slice(0, 20),
+        invoice_phone: String(invoice.phone || '').trim().slice(0, 60),
+        invoice_email: String(invoice.email || '').trim().slice(0, 200)
+      };
+      if (fields.invoice_inn && !/^\d{10}$|^\d{12}$/.test(fields.invoice_inn)) return reply.code(400).send({ error: 'ИНН продавца — 10 или 12 цифр' });
+      if (fields.invoice_bik && !/^\d{9}$/.test(fields.invoice_bik)) return reply.code(400).send({ error: 'БИК — 9 цифр' });
+      if (fields.invoice_account && !/^\d{20}$/.test(fields.invoice_account)) return reply.code(400).send({ error: 'Расчётный счёт — 20 цифр' });
+      if (fields.invoice_corr && !/^\d{20}$/.test(fields.invoice_corr)) return reply.code(400).send({ error: 'Корр. счёт — 20 цифр' });
+      for (const [key, value] of Object.entries(fields)) if (value !== '') setSetting(key, value);
+      audit(req, 'settings.invoice', 'settings', 'invoice', { ready: invoiceSeller().ready });
+    }
     if (czEnabled !== undefined) setSetting('cz_enabled', czEnabled ? '1' : '0');
     if (czApiUrl !== undefined) {
       if (!/^https:\/\//.test(String(czApiUrl))) return reply.code(400).send({ error: 'URL должен начинаться с https://' });

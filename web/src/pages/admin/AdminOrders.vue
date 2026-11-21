@@ -82,8 +82,8 @@ async function run(order, fn, okText) {
 }
 
 function confirmOrder(o) {
-  if (!window.confirm(`Подтвердить оплату заказа №${o.id} на ${money(o.amount)}?\nPRO активируется на ${o.days} дн.`)) return;
-  run(o, () => api.adminConfirmOrder(o.id), 'Оплата подтверждена, PRO выдан');
+  if (!window.confirm(`Подтвердить оплату заказа №${o.id} на ${money(o.amount)}?\nТариф ${o.plan.toUpperCase()} активируется на ${o.days} дн.`)) return;
+  run(o, () => api.adminConfirmOrder(o.id), `Оплата подтверждена, ${o.plan.toUpperCase()} выдан`);
 }
 
 function cancelOrder(o) {
@@ -211,8 +211,11 @@ onMounted(load);
               <td class="py-3 px-4">
                 <div class="truncate max-w-[220px]">{{ o.email }}</div>
                 <div class="text-[11px] text-slate-500">ID {{ o.user_id }}</div>
+                <div v-if="o.company_name" class="text-[11px] mt-1">{{ o.company_name }}<span class="text-slate-500"> · ИНН {{ o.company_inn }}</span></div>
               </td>
-              <td class="py-3 px-4">{{ o.plan.toUpperCase() }}<span class="text-slate-500"> · {{ o.days }} дн.</span></td>
+              <td class="py-3 px-4">{{ o.plan.toUpperCase() }}<span class="text-slate-500"> · {{ o.days }} дн.</span>
+                <div v-if="o.invoice_number" class="text-[11px] text-slate-500">Счёт {{ o.invoice_number }} · банк. перевод</div>
+              </td>
               <td class="py-3 px-4">
                 <div class="font-semibold">{{ money(o.amount) }}</div>
                 <div v-if="o.discount > 0" class="text-[11px] text-emerald-500">скидка {{ money(o.discount) }}</div>
@@ -227,7 +230,8 @@ onMounted(load);
                 <div class="flex flex-wrap gap-1.5">
                   <template v-if="o.status === 'pending'">
                     <button class="btn-ghost !py-1 !px-2.5 text-xs text-emerald-500" :disabled="actionBusy === o.id" @click="confirmOrder(o)">Подтвердить</button>
-                    <button class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="actionBusy === o.id" @click="recheck(o)">Проверить</button>
+                    <button v-if="o.payment_method !== 'bank_transfer'" class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="actionBusy === o.id" @click="recheck(o)">Проверить</button>
+                    <a v-if="o.invoice_number" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-2.5 text-xs">Счёт PDF</a>
                     <button class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" @click="cancelOrder(o)">Отменить</button>
                   </template>
                   <button v-else-if="o.status === 'paid'" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" @click="openRefund(o)">Возврат</button>

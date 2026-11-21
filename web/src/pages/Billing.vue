@@ -24,6 +24,11 @@ const promoCode = ref('');
 const promo = ref(null);
 const promoBusy = ref(false);
 const autoRenewBusy = ref(false);
+const buyerType = ref('individual');
+const company = ref({ name: '', inn: '', kpp: '', address: '', email: store.user?.email || '' });
+const invoiceInfo = ref({ available: false, missing: [] });
+const invoiceBusy = ref(false);
+const lastInvoice = ref(null);
 
 const plans = computed(() => (info.value?.plans || []).filter((p) => p.id !== 'free'));
 const freePlan = computed(() => (info.value?.plans || []).find((p) => p.id === 'free'));
@@ -77,6 +82,7 @@ async function load() {
   if (data.plan?.id && data.plan.id !== 'free') selectedPlanId.value = data.plan.id;
   orders.value = (await api.orders()).orders;
   archiveInfo.value = await api.billingArchive();
+  try { invoiceInfo.value = await api.invoiceInfo(); } catch { invoiceInfo.value = { available: false, missing: [] }; }
 }
 async function applyPromo() {
   error.value = ''; promo.value = null;
@@ -92,6 +98,30 @@ async function checkout() {
   error.value = ''; notice.value = ''; busy.value = true;
   try {
     const idemKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+    if (buyerType.value === 'legal') {
+      if (!invoiceInfo.value.available) throw new Error('Оплата по счёту пока недоступна: администратор не заполнил банковские реквизиты. Напишите в поддержку.');
+      const d = await api.checkoutPlan({
+        planId: selectedPlan.value.id,
+        period: period.value,
+        promoCode: promo.value?.code,
+        idemKey,
+        buyerType: 'legal',
+        buyer: {
+          companyName: company.value.name,
+          companyInn: company.value.inn,
+          companyKpp: company.value.kpp,
+          companyAddress: company.value.address,
+          companyEmail: company.value.email
+        }
+      });
+      if (d.order?.invoiceUrl) {
+        lastInvoice.value = d.order;
+        notice.value = `Счёт № ${d.order.invoiceNumber} сформирован. Оплатите его банковским переводом — доступ активируется после подтверждения оплаты.`;
+        window.open(d.order.invoiceUrl, '_blank', 'noopener');
+        await load();
+      } else error.value = 'Не удалось сформировать счёт';
+      return;
+    }
     const d = await api.checkoutPlan({
       planId: selectedPlan.value.id,
       period: period.value,
@@ -101,7 +131,7 @@ async function checkout() {
     if (d.order?.confirmationUrl) window.location.href = d.order.confirmationUrl;
     else error.value = 'Не получена ссылка на оплату';
   } catch (e) { error.value = e.message; }
-  busy.value = false;
+  finally { busy.value = false; }
 }
 async function startTrial() {
   error.value = ''; notice.value = ''; trialBusy.value = true;
@@ -136,6 +166,13 @@ async function check(orderId) {
 async function checkoutArchive() {
   error.value = ''; archiveBusy.value = true;
   try {
+    if (buyerType.value === 'legal') {
+      if (!invoiceInfo.value.available) throw new Error('Оплата по счёту пока недоступна: администратор не заполнил банковские реквизиты.');
+      const d = await api.checkoutPlan({ planId: 'archive', buyerType: 'legal', buyer: { companyName: company.value.name, companyInn: company.value.inn, companyKpp: company.value.kpp, companyAddress: company.value.address, companyEmail: company.value.email } });
+      if (d.order?.invoiceUrl) { lastInvoice.value = d.order; notice.value = `Счёт № ${d.order.invoiceNumber} сформирован.`; window.open(d.order.invoiceUrl, '_blank', 'noopener'); await load(); }
+      else error.value = 'Не удалось сформировать счёт';
+      return;
+    }
     const d = await api.checkoutPlan({ planId: 'archive', idemKey: String(Date.now()) + Math.random() });
     if (d.order?.confirmationUrl) window.location.href = d.order.confirmationUrl;
     else error.value = 'Не получена ссылка на оплату';
@@ -243,6 +280,53 @@ onMounted(async () => {
         <div v-else class="text-sm text-slate-500 mt-4">Загружаем лимиты…</div>
       </div>
 
+      <!-- Кто покупает: физлицо или юрлицо со счётом -->
+      <div class="glass rounded-2xl p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="font-semibold">Кто покупает?</div>
+            <div class="text-xs text-slate-500 mt-0.5">Для юридического лица автоматически формируется счёт на оплату.</div>
+          </div>
+          <div class="inline-flex rounded-xl border border-slate-200 dark:border-white/15 p-1">
+            <button class="px-4 py-1.5 rounded-lg text-sm" :class="buyerType === 'individual' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="buyerType = 'individual'">Частное лицо</button>
+            <button class="px-4 py-1.5 rounded-lg text-sm" :class="buyerType === 'legal' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="buyerType = 'legal'">Юридическое лицо</button>
+          </div>
+        </div>
+        <div v-if="buyerType === 'legal'" class="mt-4">
+          <div v-if="!invoiceInfo.available" class="text-xs text-amber-500 mb-3">
+            Счёт пока недоступен: администратор не заполнил банковские реквизиты продавца. Напишите в поддержку.
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2">
+              <label class="label !text-xs" for="b-company">Полное наименование организации</label>
+              <input id="b-company" v-model="company.name" class="input !py-2 text-sm" placeholder="ООО «Пример»">
+            </div>
+            <div>
+              <label class="label !text-xs" for="b-inn">ИНН</label>
+              <input id="b-inn" v-model="company.inn" class="input !py-2 text-sm" inputmode="numeric" placeholder="10 цифр">
+            </div>
+            <div>
+              <label class="label !text-xs" for="b-kpp">КПП</label>
+              <input id="b-kpp" v-model="company.kpp" class="input !py-2 text-sm" inputmode="numeric" placeholder="9 цифр">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="label !text-xs" for="b-address">Юридический адрес</label>
+              <input id="b-address" v-model="company.address" class="input !py-2 text-sm" placeholder="Индекс, город, улица, дом">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="label !text-xs" for="b-email">Email для счёта</label>
+              <input id="b-email" v-model="company.email" class="input !py-2 text-sm" type="email" :placeholder="store.user?.email || 'email'">
+            </div>
+          </div>
+          <p class="text-xs text-slate-500 mt-3">Счёт формируется автоматически в PDF. Оплата — банковским переводом; доступ активируется после подтверждения поступления денег.</p>
+          <div v-if="lastInvoice" class="mt-2">
+            <a :href="lastInvoice.invoiceUrl" target="_blank" rel="noopener" class="text-sm text-brand-400 font-medium hover:underline">
+              Скачать счёт № {{ lastInvoice.invoiceNumber }} (PDF) →
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="font-display font-bold text-xl">Тарифы</h2>
         <div class="inline-flex rounded-xl border border-slate-200 dark:border-white/15 p-1">
@@ -265,9 +349,9 @@ onMounted(async () => {
             <li v-for="f in featuresOf(plan)" :key="f" class="flex items-start gap-1.5"><BrandIcon name="check" :size="13" class="mt-0.5 shrink-0" />{{ f }}</li>
           </ul>
           <button class="mt-4 w-full text-sm" :class="isCurrentPlan(plan.id) ? 'btn-ghost' : 'btn-primary'"
-            :disabled="busy || !providerOk || plan.id === currentPlan?.id"
+            :disabled="busy || (buyerType === 'individual' ? !providerOk : !invoiceInfo.available) || plan.id === currentPlan?.id"
             @click.stop="selectedPlanId = plan.id; checkout()">
-            {{ isCurrentPlan(plan.id) ? 'Продлить' : plan.id === currentPlan?.id ? 'Текущий тариф' : 'Оформить' }}
+            {{ buyerType === 'legal' ? 'Выставить счёт' : (isCurrentPlan(plan.id) ? 'Продлить' : plan.id === currentPlan?.id ? 'Текущий тариф' : 'Оформить') }}
           </button>
         </div>
       </div>
@@ -280,9 +364,12 @@ onMounted(async () => {
           </div>
           <input v-model="promoCode" class="input !py-2 !w-52 text-sm" placeholder="Промокод" aria-label="Промокод" autocomplete="off">
           <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="promoBusy" @click="applyPromo">{{ promoBusy ? 'Проверяем…' : 'Применить' }}</button>
-          <button class="btn-primary ml-auto" :disabled="busy || !providerOk || !selectedPlan" @click="checkout">{{ busy ? 'Создаём заказ…' : 'Перейти к оплате' }}</button>
+          <button class="btn-primary ml-auto" :disabled="busy || (buyerType === 'individual' ? !providerOk : !invoiceInfo.available) || !selectedPlan" @click="checkout">
+            {{ busy ? 'Создаём заказ…' : (buyerType === 'legal' ? 'Выставить счёт (PDF)' : 'Перейти к оплате') }}
+          </button>
         </div>
-        <p class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Чек на email. Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Автопродление по умолчанию выключено.</p>
+        <p v-if="buyerType === 'legal'" class="text-xs text-slate-500 mt-3">Счёт формируется автоматически и скачивается в PDF. Оплата банковским переводом; доступ активируется после подтверждения поступления денег.</p>
+        <p v-else class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Чек на email. Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Автопродление по умолчанию выключено.</p>
         <p class="text-[11px] text-slate-500 mt-2">
           Исполнитель: {{ LEGAL.operator.label }}, {{ LEGAL.operator.status.toLowerCase() }}, ИНН {{ LEGAL.operator.inn }}.
           <router-link to="/offer" class="text-brand-400 hover:underline">Публичная оферта</router-link> ·
@@ -321,10 +408,13 @@ onMounted(async () => {
             <tr v-for="o in orders" :key="o.id" class="border-b border-slate-100 dark:border-white/5">
               <td class="py-2 pr-3 text-slate-500">{{ o.id }}</td>
               <td class="py-2 pr-3">{{ fmt(o.created_at) }}</td>
-              <td class="py-2 pr-3">{{ planTitleOf(o) }}<span class="text-slate-500"> · {{ o.days }} дн.</span></td>
+              <td class="py-2 pr-3">{{ planTitleOf(o) }}<span class="text-slate-500"> · {{ o.days }} дн.</span><span v-if="o.invoice_number" class="block text-[11px] text-slate-500">Счёт {{ o.invoice_number }}</span></td>
               <td class="py-2 pr-3">{{ Number(o.amount).toLocaleString('ru') }} ₽</td>
               <td class="py-2 pr-3" :class="o.status === 'paid' ? 'text-emerald-500' : o.status === 'canceled' ? 'text-red-500' : 'text-amber-500'">{{ statusRu[o.status] || o.status }}</td>
-              <td class="py-2"><button v-if="o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button></td>
+              <td class="py-2">
+                <a v-if="o.buyer_type === 'legal'" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex">Счёт PDF</a>
+                <button v-else-if="o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button>
+              </td>
             </tr>
           </tbody>
         </table>

@@ -1,8 +1,9 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import {
-  createCheckout, checkOrder, providerConfigured, handleYooKassaNotification, planOffer
+  createCheckout, createInvoiceOrder, checkOrder, providerConfigured, handleYooKassaNotification, planOffer
 } from './billing.js';
+import { generateInvoicePdf, invoiceSeller, invoiceNumberFor } from './lib/invoice.js';
 import { archiveAddon, getPremiumOffers, normalizePlanId, listPlans } from './plans.js';
 import { entitlements, startTrial, setAutoRenew, cancelSubscription, trialInfo, SubscriptionError } from './lib/subscription.js';
 import { validatePromo } from './lib/promo.js';
@@ -58,6 +59,16 @@ export async function registerBillingRoutes(app) {
     let period = body.period === 'year' ? 'year' : 'month';
     if (body.days != null && !body.period) period = Number(body.days) >= 300 ? 'year' : 'month';
     try {
+      if (body.buyerType === 'legal' || body.invoice === true) {
+        const order = createInvoiceOrder(req.user, planId, period, body.promoCode || '', body.buyer || body);
+        return {
+          order: {
+            id: order.id, amount: order.amount, status: order.status, plan: order.plan, period: order.period,
+            buyerType: 'legal', paymentMethod: 'bank_transfer', invoiceNumber: order.invoice_number,
+            invoiceUrl: '/api/billing/orders/' + order.id + '/invoice'
+          }
+        };
+      }
       if (planId === 'archive') {
         const order = await createCheckout(req.user, 'archive', 'month', body.promoCode || '');
         return { order: { id: order.id, amount: order.amount, status: order.status, confirmationUrl: order.confirmation_url } };
@@ -126,9 +137,34 @@ export async function registerBillingRoutes(app) {
 
   app.get('/api/billing/orders', { preHandler: requireAuth }, async (req) => ({
     orders: db.prepare(
-      'SELECT id,plan,plan_title,kind,period,amount,currency,status,provider,created_at,paid_at,days FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50'
+      `SELECT id,plan,plan_title,kind,period,amount,currency,status,provider,created_at,paid_at,days,
+        buyer_type,company_name,company_inn,company_kpp,payment_method,invoice_number,invoice_issued_at
+       FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50`
     ).all(req.user.id)
   }));
+
+  // Доступность оплаты по счёту для юрлиц.
+  app.get('/api/billing/invoice-info', { preHandler: requireAuth }, async () => {
+    const seller = invoiceSeller();
+    return { available: seller.ready, missing: seller.ready ? [] : seller.missing };
+  });
+
+  // Счёт на оплату: владелец заказа или администратор.
+  app.get('/api/billing/orders/:id/invoice', { preHandler: requireAuth }, async (req, reply) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
+    if (!order || order.buyer_type !== 'legal') return reply.code(404).send({ error: 'Счёт не найден' });
+    if (order.user_id !== req.user.id && req.user.role !== 'admin') return reply.code(403).send({ error: 'Нет доступа' });
+    const buyer = db.prepare('SELECT email FROM users WHERE id=?').get(order.user_id);
+    try {
+      const pdf = await generateInvoicePdf({ ...order, buyer_email: buyer?.email || '' });
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', `inline; filename="invoice-${order.id}.pdf"`);
+      return reply.send(pdf);
+    } catch (e) {
+      req.log.error(e, 'invoice pdf');
+      return reply.code(500).send({ error: 'Не удалось сформировать счёт' });
+    }
+  });
 
   app.post('/api/billing/auto-renew', { preHandler: requireAuth }, async (req, reply) => {
     try {

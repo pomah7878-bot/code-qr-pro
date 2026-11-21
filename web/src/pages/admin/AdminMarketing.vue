@@ -204,7 +204,7 @@ onMounted(load);
           </div>
           <div>
             <label class="label !text-xs" for="mail-subject">Тема</label>
-            <input id="mail-subject" v-model="email.subject" class="input !py-2 text-sm" maxlength="200" placeholder="Например: скидка 20% на PREMIUM до пятницы" @input="preview = null">
+            <input id="mail-subject" v-model="email.subject" class="input !py-2 text-sm" maxlength="200" placeholder="Например: скидка 20% на PRO до пятницы" @input="preview = null">
           </div>
           <div>
             <label class="label !text-xs" for="mail-body">Текст письма</label>

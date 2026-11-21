@@ -1,7 +1,7 @@
 const SITE = 'https://code-qr.stockcity.ru';
 const HOME = {
   title: 'CODE QR PRO — маркировка «Честный ЗНАК», DataMatrix и печать этикеток',
-  description: 'Генерация GS1 DataMatrix, проверка кодов, наборы с КИН, редактор этикеток, печать PDF и из браузера, Print Bridge и API для 1С. FREE и PREMIUM.'
+  description: 'Генерация GS1 DataMatrix, проверка кодов, наборы с КИН, редактор этикеток, печать PDF и из браузера, Print Bridge и API для 1С. FREE, START, PRO и BUSINESS.'
 };
 
 function ensureMeta(attr, key) {

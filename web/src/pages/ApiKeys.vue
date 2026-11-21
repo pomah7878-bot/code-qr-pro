@@ -37,9 +37,9 @@ onMounted(load);
           'В каждом запросе передавайте ключ в заголовке X-API-Key.',
           'Генерация: POST /api/v1/generate с массивом rows. Проверка статуса: GET /api/v1/jobs/{id}.'
         ]"
-        note="API работает на PREMIUM. Ключ даёт доступ к вашему аккаунту — не публикуйте его."
+        note="API работает на PRO и BUSINESS. Ключ даёт доступ к вашему аккаунту — не публикуйте его."
       />
-      <div v-if="!premium" class="glass rounded-2xl p-6 text-sm">API доступен на тарифе <b class="grad-text">PREMIUM</b>. <router-link to="/app/billing" class="text-brand-400 font-medium">Оформить →</router-link></div>
+      <div v-if="!premium" class="glass rounded-2xl p-6 text-sm">API доступен на тарифе <b class="grad-text">PRO</b>. <router-link to="/app/billing" class="text-brand-400 font-medium">Оформить →</router-link></div>
       <template v-else>
         <div class="glass rounded-2xl p-6">
           <h2 class="font-display font-semibold mb-3">Новый ключ</h2>

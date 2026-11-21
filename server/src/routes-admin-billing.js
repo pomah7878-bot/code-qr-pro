@@ -149,19 +149,6 @@ export async function registerAdminBillingRoutes(app) {
     }
   });
 
-  // --- Платежи ---
-  app.get('/api/admin/billing/payments', { preHandler: requireAdmin }, async (req) => {
-    const limit = Math.min(500, Math.max(1, Number(req.query?.limit) || 100));
-    const status = String(req.query?.status || '').trim();
-    const rows = db.prepare(
-      `SELECT o.*, u.email, u.name
-         FROM orders o LEFT JOIN users u ON u.id=o.user_id
-         ${status ? 'WHERE o.status=?' : ''}
-         ORDER BY o.id DESC LIMIT ?`
-    ).all(...(status ? [status, limit] : [limit]));
-    return { payments: rows };
-  });
-
   // --- Ошибки интеграций и стоимость внешних запросов ---
   app.get('/api/admin/billing/errors', { preHandler: requireAdmin }, async (req) => {
     const limit = Math.min(300, Math.max(1, Number(req.query?.limit) || 100));

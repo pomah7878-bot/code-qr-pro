@@ -2,7 +2,6 @@
 import { join } from 'node:path';
 import { db, today } from './db.js';
 import { JOBS_DIR, enqueue, removeJobFiles } from './jobs.js';
-import { getPremiumOffers } from './plans.js';
 import { providerConfigured } from './billing.js';
 import { notifyConfigured } from './notify.js';
 import { czStatus } from './cz.js';
@@ -65,7 +64,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     const users = db.prepare('SELECT COUNT(*) c FROM users').get().c;
     const newUsers30 = db.prepare("SELECT COUNT(*) c FROM users WHERE date(created_at) >= date('now','-29 days')").get().c;
     const newUsersPrev = db.prepare("SELECT COUNT(*) c FROM users WHERE date(created_at) >= date('now','-59 days') AND date(created_at) < date('now','-29 days')").get().c;
-    const premium = db.prepare("SELECT COUNT(*) c FROM users WHERE plan='premium'").get().c;
+    const premium = db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business')").get().c;
     const blocked = db.prepare("SELECT COUNT(*) c FROM users WHERE status='blocked'").get().c;
     const paidUsers = db.prepare("SELECT COUNT(DISTINCT user_id) c FROM orders WHERE status='paid'").get().c;
     const paidOrders30 = db.prepare("SELECT COUNT(*) c FROM orders WHERE status='paid' AND date(paid_at) >= date('now','-29 days')").get().c;
@@ -75,7 +74,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     const queued = db.prepare("SELECT COUNT(*) c FROM generation_jobs WHERE status IN ('queued','running')").get().c;
     const jobErrors = db.prepare("SELECT COUNT(*) c FROM generation_jobs WHERE status='error' AND created_at >= datetime('now','-1 day')").get().c;
 
-    const monthlyPrice = getPremiumOffers()[0]?.finalPrice || 0;
+    const monthlyPrice = db.prepare("SELECT COALESCE(SUM(p.price_monthly),0) c FROM subscriptions s JOIN plans p ON p.id=s.plan WHERE s.status='active' AND s.expires_at > datetime('now')").get().c;
     return {
       days,
       revenue: { today: revenueToday, week: revenue7, month: revenue30, prevMonth: revenuePrev },
@@ -84,7 +83,7 @@ export async function registerAdminAnalyticsRoutes(app) {
       orders: { pending: pendingOrders.c, pendingSum: pendingOrders.s, paid30: paidOrders30 },
       jobs: { queue: queued, errors24h: jobErrors },
       money: {
-        mrr: Math.round(premium * monthlyPrice),
+        mrr: Math.round(monthlyPrice),
         arpu: paidUsers ? Math.round(revenue30 / paidUsers) : 0,
         avgCheck: paidOrders30 ? Math.round(revenue30 / paidOrders30) : 0,
         conversion: users ? Math.round((paidUsers / users) * 1000) / 10 : 0

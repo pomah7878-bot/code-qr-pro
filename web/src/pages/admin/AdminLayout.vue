@@ -2,59 +2,95 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { store } from '../../store.js';
-import SideNav from '../../components/SideNav.vue';
 
 const route = useRoute();
-const isAdmin = computed(() => store.user?.role === 'admin');
-const links = computed(() => {
+const isStaff = computed(() => ['admin', 'support'].includes(store.user?.role));
+
+const groups = computed(() => {
   const all = [
-    { to: '/app/admin', label: 'Обзор', adminOnly: true },
-    { to: '/app/admin/users', label: 'Клиенты' },
-    { to: '/app/admin/orders', label: 'Платежи', adminOnly: true },
-    { to: '/app/admin/billing', label: 'Тарифы и подписки', adminOnly: true },
-    { to: '/app/admin/jobs', label: 'Задания' },
-    { to: '/app/admin/storage', label: 'Хранилище', adminOnly: true },
-    { to: '/app/admin/marketing', label: 'Маркетинг', adminOnly: true },
-    { to: '/app/admin/ads', label: 'Реклама', adminOnly: true },
-    { to: '/app/admin/audit', label: 'Аудит', adminOnly: true },
-    { to: '/app/admin/logs', label: 'Ошибки', adminOnly: true },
-    { to: '/app/admin/support', label: 'Поддержка', adminOnly: true },
-    { to: '/app/admin/ai', label: 'AI-помощник', adminOnly: true },
-    { to: '/app/help', label: 'Помощь', adminOnly: true },
-    { to: '/app/admin/settings', label: 'Настройки', adminOnly: true }
+    {
+      title: 'Обзор',
+      links: [{ to: '/app/admin', label: 'Сводка', adminOnly: true }]
+    },
+    {
+      title: 'Клиенты и деньги',
+      links: [
+        { to: '/app/admin/users', label: 'Клиенты' },
+        { to: '/app/admin/orders', label: 'Платежи', adminOnly: true },
+        { to: '/app/admin/billing', label: 'Тарифы и подписки', adminOnly: true }
+      ]
+    },
+    {
+      title: 'Сервис',
+      links: [
+        { to: '/app/admin/jobs', label: 'Задания' },
+        { to: '/app/admin/storage', label: 'Хранилище', adminOnly: true },
+        { to: '/app/admin/logs', label: 'Ошибки', adminOnly: true },
+        { to: '/app/admin/audit', label: 'Аудит', adminOnly: true }
+      ]
+    },
+    {
+      title: 'Поддержка и AI',
+      links: [
+        { to: '/app/admin/support', label: 'Обращения', adminOnly: true },
+        { to: '/app/admin/ai', label: 'AI-помощник', adminOnly: true }
+      ]
+    },
+    {
+      title: 'Маркетинг',
+      links: [
+        { to: '/app/admin/marketing', label: 'Рассылки и акции', adminOnly: true },
+        { to: '/app/admin/ads', label: 'Реклама', adminOnly: true }
+      ]
+    },
+    {
+      title: 'Система',
+      links: [{ to: '/app/admin/settings', label: 'Настройки', adminOnly: true }]
+    }
   ];
-  return store.user?.role === 'admin' ? all : all.filter((l) => !l.adminOnly);
+  const role = store.user?.role;
+  return all
+    .map((g) => ({ ...g, links: g.links.filter((l) => role === 'admin' || !l.adminOnly) }))
+    .filter((g) => g.links.length);
 });
+
 const isActive = (to) => (to === '/app/admin' ? route.path === '/app/admin' : route.path === to || route.path.startsWith(to + '/'));
 </script>
 
 <template>
-  <div class="max-w-[1680px] mx-auto px-4 py-10 grid lg:grid-cols-[240px_1fr] gap-8">
-    <SideNav active="/app/admin" />
-    <section v-if="!isAdmin" class="glass rounded-2xl p-8 text-center text-slate-500">
-      Раздел доступен только администратору
+  <div class="max-w-[1680px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <section v-if="!isStaff" class="glass rounded-2xl p-8 text-center text-slate-500">
+      Раздел доступен только администратору и поддержке
     </section>
-    <section v-else class="space-y-6 min-w-0">
+    <section v-else class="space-y-5 min-w-0">
       <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="font-display font-bold text-2xl sm:text-3xl">Админ-панель</h1>
-          <p class="text-xs text-slate-500 mt-1">CODE QR PRO · управление клиентами, платежами и сервисом</p>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">CODE QR PRO · клиенты, платежи, тарифы, задания и поддержка</p>
         </div>
+        <router-link to="/app" class="btn-ghost !py-2 text-sm">← В кабинет</router-link>
       </div>
 
-      <nav class="flex flex-wrap gap-2" aria-label="Разделы админки">
-        <router-link
-          v-for="l in links" :key="l.to" :to="l.to"
-          class="px-4 py-2.5 rounded-xl text-sm border transition"
-          :class="isActive(l.to)
-            ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 border-brand-500/40 font-semibold text-slate-800 dark:text-white'
-            : 'border-slate-200 dark:border-white/10 text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'">
-          {{ l.label }}
-          <span
-            v-if="l.to === '/app/admin/support' && store.supportOpen > 0"
-            class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold align-middle"
-          >{{ store.supportOpen }}</span>
-        </router-link>
+      <nav class="glass rounded-2xl p-3 sm:p-4" aria-label="Разделы админки">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div v-for="g in groups" :key="g.title" class="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/40 dark:bg-white/5 p-2">
+            <div class="px-2 pt-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{{ g.title }}</div>
+            <div class="flex flex-wrap gap-1.5">
+              <router-link
+                v-for="l in g.links" :key="l.to" :to="l.to"
+                class="px-3 py-2 rounded-lg text-sm border transition"
+                :class="isActive(l.to)
+                  ? 'bg-gradient-to-r from-brand-500/20 to-accent-500/10 border-brand-500/40 font-semibold text-slate-800 dark:text-white'
+                  : 'border-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'">
+                {{ l.label }}
+                <span
+                  v-if="l.to === '/app/admin/support' && store.supportOpen > 0"
+                  class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold align-middle"
+                >{{ store.supportOpen }}</span>
+              </router-link>
+            </div>
+          </div>
+        </div>
       </nav>
 
       <router-view />

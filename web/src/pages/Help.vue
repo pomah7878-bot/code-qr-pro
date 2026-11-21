@@ -62,7 +62,7 @@ const blocks = [
             <div>
               <div class="flex items-center gap-2">
                 <div class="font-display font-semibold">AI-помощник</div>
-                <span class="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-brand-500/10 border border-brand-500/30 text-brand-400">PREMIUM</span>
+                <span class="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-brand-500/10 border border-brand-500/30 text-brand-400">PRO</span>
               </div>
               <div class="text-xs text-slate-500 mt-0.5">Отвечает по «Честному ЗНАКу» и работе сервиса. Сложные вопросы передаёт администратору.</div>
             </div>

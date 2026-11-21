@@ -331,7 +331,7 @@ const itemStatus = { ok: 'ожидает', generated: 'готов', invalid: 'о
               <button class="btn-ghost !py-2.5" @click="downloadForCz"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />CSV для отчёта ЧЗ</button>
               <a v-if="canExport('zip')" :href="`/api/jobs/${job.id}/export?format=zip`" class="btn-primary !py-2.5"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />ZIP</a>
               <a v-if="canExport('pdf')" :href="`/api/jobs/${job.id}/export?format=pdf`" class="btn-primary !py-2.5"><BrandIcon name="download" :size="15" class="inline-block mr-1 -mt-0.5" />PDF А4</a>
-              <span v-if="!canExport('zip')" class="chip-soon self-center">ZIP/PDF — PREMIUM</span>
+              <span v-if="!canExport('zip')" class="chip-soon self-center">ZIP/PDF — PRO</span>
               <button v-if="job.status === 'error'" class="btn-ghost !py-2.5" @click="retryJob(job.id)"><BrandIcon name="refresh" :size="15" class="inline-block mr-1 -mt-0.5" />Повторить</button>
               <button class="btn-ghost !py-2.5 text-red-500" @click="removeJob(job.id)">Удалить</button>
             </div>

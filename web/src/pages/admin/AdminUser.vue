@@ -15,7 +15,6 @@ const loading = ref(true);
 const error = ref('');
 const notice = ref('');
 const tab = ref('orders');
-const grantDays = ref(30);
 const noteDraft = ref('');
 const roleDraft = ref('');
 const savingNote = ref(false);
@@ -29,7 +28,7 @@ const AI_QUESTIONS = [
   'Клиент не может войти — в чём причина?',
   'Не скачивается PDF или ошибка печати',
   'Исчерпан дневной лимит кодов',
-  'Оплата не прошла, PREMIUM не активировался',
+  'Оплата не прошла, PRO не активировался',
   'Проверь общее состояние аккаунта'
 ];
 const AI_ACTION_LABELS = {
@@ -59,8 +58,6 @@ const LOGIN_REASON = {
 };
 
 const ACTION_LABELS = {
-  'user.grant': 'Выдан PREMIUM',
-  'user.revoke': 'Снят PREMIUM',
   'user.block': 'Блокировка',
   'user.unblock': 'Разблокировка',
   'user.role': 'Смена роли',
@@ -364,30 +361,6 @@ function runAiAction(action) {
   fn();
 }
 
-async function grant() {
-  error.value = '';
-  notice.value = '';
-  const n = Math.round(Number(grantDays.value));
-  if (!Number.isFinite(n) || n < 1 || n > 3650) {
-    error.value = 'Срок: от 1 до 3650 дней';
-    return;
-  }
-  try {
-    const r = await api.adminGrant(id.value, n);
-    notice.value = 'PREMIUM выдан до ' + fmtDate(r.premiumUntil);
-    await load();
-  } catch (e) { error.value = e.message; }
-}
-
-async function revoke() {
-  if (!window.confirm('Снять PREMIUM и перевести клиента на FREE? Действие сразу ограничит доступ.')) return;
-  error.value = '';
-  try {
-    await api.adminRevoke(id.value);
-    notice.value = 'PREMIUM снят';
-    await load();
-  } catch (e) { error.value = e.message; }
-}
 
 async function toggleBlock() {
   if (user.value.status === 'blocked') {
@@ -528,7 +501,7 @@ onMounted(load);
               </span>
               <span class="chip-soon" :class="user.plan === 'premium' ? '!text-brand-400' : ''">{{ user.plan.toUpperCase() }}</span>
               <span v-if="user.role !== 'user'" class="chip-soon">{{ user.role }}</span>
-              <span v-if="premiumUntil" class="text-slate-500">PREMIUM до {{ fmtDate(premiumUntil) }} · {{ days }} дн.</span>
+              <span v-if="premiumUntil" class="text-slate-500">PRO до {{ fmtDate(premiumUntil) }} · {{ days }} дн.</span>
             </div>
             <p v-if="user.blockedReason" class="text-xs text-red-500 mt-1">Причина блокировки: {{ user.blockedReason }}</p>
           </div>
@@ -541,28 +514,19 @@ onMounted(load);
       </div>
 
       <div v-if="isAdmin" class="grid md:grid-cols-2 gap-5">
-        <!-- PREMIUM -->
+        <!-- Подписка: управление тарифом в отдельном разделе -->
         <div class="glass rounded-2xl p-5">
           <div class="flex items-center justify-between gap-2">
-            <h3 class="font-display font-semibold">PREMIUM</h3>
-            <span class="text-xs" :class="premiumUntil ? 'text-emerald-500' : 'text-slate-400'">{{ premiumUntil ? 'активен' : 'не активен' }}</span>
+            <h3 class="font-display font-semibold">Подписка</h3>
+            <span class="text-xs" :class="premiumUntil ? 'text-emerald-500' : 'text-slate-400'">{{ premiumUntil ? 'активна' : 'не активна' }}</span>
           </div>
           <div v-if="premiumUntil" class="mt-3">
             <div class="text-2xl font-extrabold">{{ fmtDate(premiumUntil) }}</div>
-            <div class="text-xs text-slate-500">осталось {{ days }} дн.</div>
+            <div class="text-xs text-slate-500">осталось {{ days }} дн. · тариф {{ String(user.plan || '').toUpperCase() }}</div>
           </div>
           <p v-else class="text-sm text-slate-500 mt-3">Подписка не активна.</p>
-
-          <div class="flex flex-wrap gap-2 mt-4">
-            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="grantDays = 30; grant()">+30 дней</button>
-            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="grantDays = 90; grant()">+90 дней</button>
-            <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="grantDays = 365; grant()">+365 дней</button>
-          </div>
-          <div class="flex flex-wrap gap-2 mt-3">
-            <input v-model.number="grantDays" type="number" min="1" max="3650" class="input !py-2 !w-24 text-sm" aria-label="Срок в днях">
-            <button class="btn-primary !py-2 !px-4 text-sm" @click="grant">Выдать</button>
-            <button v-if="premiumUntil" class="btn-ghost !py-2 !px-3 text-sm text-red-500" @click="revoke">Снять</button>
-          </div>
+          <p class="text-xs text-slate-500 mt-3">Назначение тарифа, продление, триал и возвраты — в разделе «Тарифы и подписки».</p>
+          <router-link to="/app/admin/billing" class="btn-ghost !py-2 text-sm mt-3">Управлять тарифом →</router-link>
         </div>
 
         <!-- Действия -->
@@ -860,7 +824,7 @@ onMounted(load);
         <label class="label mt-3" for="mail-text">Текст</label>
         <textarea id="mail-text" v-model="mail.text" rows="6" maxlength="5000" class="input text-sm" placeholder="Здравствуйте! …"></textarea>
       </template>
-      <p v-else class="text-xs text-slate-500 mt-2">Текст шаблона подставится автоматически (имя клиента, срок PREMIUM). Фирменное оформление — фирменный шаблон CODE QR PRO.</p>
+      <p v-else class="text-xs text-slate-500 mt-2">Текст шаблона подставится автоматически (имя клиента, срок PRO). Фирменное оформление — фирменный шаблон CODE QR PRO.</p>
 
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <button class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="mail.previewBusy" @click="previewMail">
@@ -879,7 +843,7 @@ onMounted(load);
     </Modal>
 
     <Modal :open="comp.open" title="Компенсация за инцидент" @close="comp.open = false">
-      <p class="text-sm text-slate-500">Продлевает PREMIUM и отправляет клиенту письмо с извинением. В журнал попадёт причина.</p>
+      <p class="text-sm text-slate-500">Продлевает PRO и отправляет клиенту письмо с извинением. В журнал попадёт причина.</p>
       <label class="label mt-3" for="comp-days">На сколько дней</label>
       <input id="comp-days" v-model.number="comp.days" type="number" min="1" max="90" class="input text-sm">
       <label class="label mt-3" for="comp-reason">Причина</label>

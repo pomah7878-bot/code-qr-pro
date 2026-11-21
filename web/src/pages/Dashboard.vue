@@ -53,7 +53,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             </span>
             <div>
               <div class="flex items-center gap-2">
-                <div class="font-display font-semibold">Новое в PREMIUM</div>
+                <div class="font-display font-semibold">Новое в PRO</div>
                 <span class="text-[9px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-full px-2 py-0.5">AI</span>
               </div>
               <div class="text-xs text-slate-500 mt-0.5">
@@ -62,7 +62,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
-            <router-link v-if="!isPremium" to="/app/billing" class="btn-primary !py-2 !px-4 text-sm">Оформить PREMIUM</router-link>
+            <router-link v-if="!isPremium" to="/app/billing" class="btn-primary !py-2 !px-4 text-sm">Оформить PRO</router-link>
             <router-link v-else to="/app/help" class="btn-ghost !py-2 !px-3 text-sm">Что нового</router-link>
             <button class="btn-ghost !py-2 !px-3 text-sm" @click="openAssistant()">Спросить AI</button>
           </div>
@@ -132,7 +132,7 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             <p class="text-slate-500">Редактор шаблонов и печать на термопринтеры через Print Bridge.</p>
           </router-link>
           <router-link to="/app/billing" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
-            <div class="font-semibold mb-1"><BrandIcon name="billing" :size="16" class="inline-block mr-1.5 -mt-0.5" />PREMIUM →</div>
+            <div class="font-semibold mb-1"><BrandIcon name="billing" :size="16" class="inline-block mr-1.5 -mt-0.5" />Подписка →</div>
             <p class="text-slate-500">Оплата подписки, расширенные лимиты и API.</p>
           </router-link>
         </div>

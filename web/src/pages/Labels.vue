@@ -729,7 +729,7 @@ async function bridgePing() {
 async function bridgePrint(savePng) {
   error.value = ''; notice.value = ''; bridge.busy = true; previewPng.value = '';
   try {
-    if (!premium.value) throw new Error('Печать этикеток доступна на тарифе PREMIUM');
+    if (!premium.value) throw new Error('Печать этикеток доступна на тарифе PRO и выше');
     if (!currentItem.value) throw new Error('Нет строки данных для печати');
     const prepared = await api.prepareLabel({ template: tpl, data: currentItem.value, row: Number(row.value) });
     const res = await fetch(bridge.url + '/print', {

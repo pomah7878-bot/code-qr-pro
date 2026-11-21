@@ -24,7 +24,7 @@ const QUICK = [
   'Клиент не может войти — в чём причина?',
   'Не скачивается PDF или ошибка печати',
   'Исчерпан дневной лимит кодов',
-  'Оплата не прошла, PREMIUM не активировался',
+  'Оплата не прошла, PRO не активировался',
   'Проверь общее состояние аккаунта'
 ];
 const ACTION_LABELS = {
@@ -159,9 +159,9 @@ async function runAction(action) {
     return act(() => api.adminRevokeApiKeys(user.id), (r) => `Отозвано ключей: ${r.removed}`);
   }
   if (action === 'compensate') {
-    const days = Number(prompt('Компенсация: на сколько дней продлить PREMIUM?', '3'));
+    const days = Number(prompt('Компенсация: на сколько дней продлить PRO?', '3'));
     if (!Number.isFinite(days) || days < 1) return;
-    return act(() => api.adminCompensate(user.id, days, 'AI-помощник'), (r) => `PREMIUM продлён до ${String(r.premiumUntil).slice(0, 10)}`);
+    return act(() => api.adminCompensate(user.id, days, 'AI-помощник'), (r) => `PRO продлён до ${String(r.premiumUntil).slice(0, 10)}`);
   }
   if (action === 'view_as_client') {
     return act(async () => {

@@ -82,8 +82,8 @@ async function run(order, fn, okText) {
 }
 
 function confirmOrder(o) {
-  if (!window.confirm(`Подтвердить оплату заказа №${o.id} на ${money(o.amount)}?\nPREMIUM активируется на ${o.days} дн.`)) return;
-  run(o, () => api.adminConfirmOrder(o.id), 'Оплата подтверждена, PREMIUM выдан');
+  if (!window.confirm(`Подтвердить оплату заказа №${o.id} на ${money(o.amount)}?\nPRO активируется на ${o.days} дн.`)) return;
+  run(o, () => api.adminConfirmOrder(o.id), 'Оплата подтверждена, PRO выдан');
 }
 
 function cancelOrder(o) {
@@ -110,7 +110,7 @@ async function doRefund() {
     refundOpen.value = false;
     notice.value = r.pending
       ? 'Возврат отправлен в ЮKassa и обрабатывается'
-      : 'Возврат выполнен' + (refundRevoke.value ? ', PREMIUM снят' : '');
+      : 'Возврат выполнен' + (refundRevoke.value ? ', PRO снят' : '');
     await load();
   } catch (e) {
     error.value = e.message;
@@ -257,7 +257,7 @@ onMounted(load);
         </p>
         <label class="flex items-start gap-2 mt-4 text-sm">
           <input v-model="refundRevoke" type="checkbox" class="mt-1">
-          <span>Снять PREMIUM после возврата<br><span class="text-xs text-slate-500">Если снять галочку, доступ останется до конца оплаченного срока.</span></span>
+          <span>Снять PRO после возврата<br><span class="text-xs text-slate-500">Если снять галочку, доступ останется до конца оплаченного срока.</span></span>
         </label>
         <p class="text-xs text-amber-500 mt-3">Возврат затрагивает реальные деньги. ЮKassa принимает его необратимо.</p>
         <div class="flex justify-end gap-2 mt-4">

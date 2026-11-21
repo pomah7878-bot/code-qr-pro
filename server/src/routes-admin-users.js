@@ -58,7 +58,7 @@ function userFilters(query) {
     where.push('(' + parts.join(' OR ') + ')');
   }
   const plan = String(query?.plan || '');
-  if (['free', 'premium'].includes(plan)) {
+  if (['free', 'start', 'pro', 'business'].includes(plan)) {
     where.push('u.plan = ?');
     params.push(plan);
   }
@@ -114,7 +114,7 @@ export async function registerAdminUserRoutes(app) {
       FROM users u ${whereSql} ORDER BY u.id DESC LIMIT 10000
     `).all(...params);
     return sendCsv(reply, 'code-qr-users.csv',
-      ['ID', 'Email', 'Имя', 'Роль', 'Тариф', 'Статус', 'Регистрация', 'Последний вход', 'PREMIUM до'],
+      ['ID', 'Email', 'Имя', 'Роль', 'Тариф', 'Статус', 'Регистрация', 'Последний вход', 'Подписка до'],
       rows.map((u) => [u.id, u.email, u.name, u.role, u.plan, u.status, u.created_at, u.last_login_at || '', u.premium_until || ''])
     );
   });
@@ -141,33 +141,6 @@ export async function registerAdminUserRoutes(app) {
       sessions,
       review
     };
-  });
-
-  // Выдать или продлить PREMIUM на произвольный срок
-  app.post('/api/admin/users/:id/grant', { preHandler: requireAdmin }, async (req, reply) => {
-    const days = Math.round(Number(req.body?.days));
-    if (!Number.isFinite(days) || days < 1 || days > 3650) {
-      return reply.code(400).send({ error: 'Срок: от 1 до 3650 дней' });
-    }
-    const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
-    activatePremium(user.id, 'admin', null, null, days);
-    notifyStatusChange(user, `Администратор выдал PREMIUM на ${days} дн.`);
-    audit(req, 'user.grant', 'user', user.id, { days });
-    const sub = activeSub(user.id);
-    return { ok: true, premiumUntil: sub?.expires_at || null, user: publicAdminUser(getUser(user.id)) };
-  });
-
-  app.post('/api/admin/users/:id/revoke', { preHandler: requireAdmin }, async (req, reply) => {
-    const user = getUser(req.params.id);
-    if (!user) return reply.code(404).send({ error: 'Пользователь не найден' });
-    db.transaction(() => {
-      db.prepare("UPDATE subscriptions SET status='expired' WHERE user_id=? AND status='active'").run(user.id);
-      db.prepare("UPDATE users SET plan='free' WHERE id=?").run(user.id);
-    })();
-    notifyStatusChange(user, 'Администратор снял PREMIUM');
-    audit(req, 'user.revoke', 'user', user.id, {});
-    return { ok: true, user: publicAdminUser(getUser(user.id)) };
   });
 
   // Блокировка: сессии удаляются, вход запрещён
@@ -358,7 +331,7 @@ export async function registerAdminUserRoutes(app) {
     }
   });
 
-  // Компенсация за инцидент: продлить PREMIUM и (опционально) написать клиенту.
+  // Компенсация за инцидент: продлить PRO и (опционально) написать клиенту.
   app.post('/api/admin/users/:id/compensate', { preHandler: requireAdmin }, async (req, reply) => {
     const days = Math.round(Number(req.body?.days));
     if (!Number.isFinite(days) || days < 1 || days > 90) {
@@ -369,7 +342,7 @@ export async function registerAdminUserRoutes(app) {
     const reason = String(req.body?.reason || '').slice(0, 200);
     activatePremium(user.id, 'compensation', null, null, days);
     const sub = activeSub(user.id);
-    notifyStatusChange(user, `Компенсация: PREMIUM продлён на ${days} дн.${reason ? ' (' + reason + ')' : ''}`);
+    notifyStatusChange(user, `Компенсация: PRO продлён на ${days} дн.${reason ? ' (' + reason + ')' : ''}`);
     const notified = await notifyClient(user, 'compensation', { days, reason, until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' });
     audit(req, 'user.compensate', 'user', user.id, { days, reason, notified });
     return { ok: true, days, premiumUntil: sub?.expires_at || null, notified };

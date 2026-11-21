@@ -82,7 +82,9 @@ onMounted(load);
         <select id="admin-user-plan" v-model="filters.plan" class="input !py-2 text-sm">
           <option value="">Все</option>
           <option value="free">FREE</option>
-          <option value="premium">PREMIUM</option>
+          <option value="start">START</option>
+          <option value="pro">PRO</option>
+          <option value="business">BUSINESS</option>
         </select>
       </div>
       <div>
@@ -144,7 +146,7 @@ onMounted(load);
                 <span v-else class="text-slate-400">—</span>
               </td>
               <td class="py-3 px-4">
-                <div class="font-semibold" :class="u.plan === 'premium' ? 'grad-text' : ''">{{ u.plan.toUpperCase() }}</div>
+                <div class="font-semibold" :class="u.plan !== 'free' ? 'grad-text' : ''">{{ u.plan.toUpperCase() }}</div>
                 <div v-if="u.premium_until" class="text-[11px] text-slate-500">до {{ fmtDate(u.premium_until) }}</div>
               </td>
               <td class="py-3 px-4 hidden lg:table-cell">{{ u.codes_today }}</td>

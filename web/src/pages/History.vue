@@ -106,7 +106,7 @@ onMounted(load);
         <div class="flex flex-wrap items-center gap-2 mt-2">
           <span>Занято {{ storagePct }}% архива.</span>
           <span>Архивы хранятся в сжатом ZIP на сервере сервиса и автоматически удаляются через {{ plan.historyDays }} дней. Скачайте нужное заранее.</span>
-          <router-link v-if="!canZip" to="/app/billing" class="text-brand-400 font-medium">PREMIUM: 365 дней и 2 ГБ →</router-link>
+          <router-link v-if="!canZip" to="/app/billing" class="text-brand-400 font-medium">PRO: 30 дней и 2 ГБ →</router-link>
           <router-link v-else-if="plan.historyDays < 1095" to="/app/billing" class="text-brand-400 font-medium">Нужно дольше? Архив на 3 года →</router-link>
         </div>
       </div>

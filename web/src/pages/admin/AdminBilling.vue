@@ -6,7 +6,6 @@ const tab = ref('plans');
 const plans = ref([]);
 const archive = ref(null);
 const subs = ref([]);
-const payments = ref([]);
 const errors = ref(null);
 const stats = ref(null);
 const search = ref('');
@@ -36,10 +35,6 @@ async function loadSubs() {
   const d = await api.adminBillingSubscriptions({ query: search.value, limit: 100 });
   subs.value = d.users || [];
 }
-async function loadPayments() {
-  const d = await api.adminBillingPayments({ limit: 200 });
-  payments.value = d.payments || [];
-}
 async function loadErrors() {
   errors.value = await api.adminBillingErrors();
   stats.value = await api.adminBillingStats();
@@ -50,7 +45,6 @@ async function loadTab() {
   try {
     if (tab.value === 'plans') await loadPlans();
     if (tab.value === 'subs') await loadSubs();
-    if (tab.value === 'payments') await loadPayments();
     if (tab.value === 'errors') await loadErrors();
   } catch (e) { error.value = e.message; }
   loading.value = false;
@@ -156,7 +150,7 @@ onMounted(loadTab);
         <p class="text-slate-500 text-sm">Цены, лимиты, доступы, ручные назначения и платежи. Все изменения пишутся в журнал аудита.</p>
       </div>
       <div class="inline-flex rounded-xl border border-slate-200 dark:border-white/15 p-1">
-        <button v-for="t in [['plans','Тарифы'],['subs','Подписки'],['payments','Платежи'],['errors','Ошибки и статистика']]" :key="t[0]"
+        <button v-for="t in [['plans','Тарифы'],['subs','Подписки'],['errors','Ошибки и статистика']]" :key="t[0]"
           class="px-3 py-1.5 rounded-lg text-sm" :class="tab === t[0] ? 'bg-brand-500 text-white' : 'text-slate-500'"
           @click="tab = t[0]; loadTab()">{{ t[1] }}</button>
       </div>
@@ -256,26 +250,6 @@ onMounted(loadTab);
           </tbody>
         </table>
       </div>
-    </div>
-
-    <!-- Платежи -->
-    <div v-if="tab === 'payments'" class="glass rounded-2xl p-4 overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead><tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
-          <th class="py-2 pr-3">№</th><th class="py-2 pr-3">Дата</th><th class="py-2 pr-3">Email</th><th class="py-2 pr-3">Тариф</th><th class="py-2 pr-3">Сумма</th><th class="py-2 pr-3">Статус</th><th class="py-2 pr-3">Провайдер</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="o in payments" :key="o.id" class="border-b border-slate-100 dark:border-white/5">
-            <td class="py-2 pr-3 text-slate-500">{{ o.id }}</td>
-            <td class="py-2 pr-3">{{ fmt(o.created_at) }}</td>
-            <td class="py-2 pr-3">{{ o.email }}</td>
-            <td class="py-2 pr-3">{{ o.plan_title || o.plan }}<span class="text-slate-500"> · {{ o.days }} дн.</span></td>
-            <td class="py-2 pr-3">{{ money(o.amount) }} ₽</td>
-            <td class="py-2 pr-3" :class="o.status === 'paid' ? 'text-emerald-500' : o.status === 'canceled' ? 'text-red-500' : 'text-amber-500'">{{ o.status }}</td>
-            <td class="py-2 pr-3 text-slate-500">{{ o.provider }}</td>
-          </tr>
-        </tbody>
-      </table>
     </div>
 
     <!-- Ошибки и статистика -->

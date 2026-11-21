@@ -36,7 +36,7 @@ const attention = computed(() => {
   if (!o) return [];
   const items = [];
   if (o.orders.pending) items.push({ text: `${o.orders.pending} ${o.orders.pending === 1 ? 'заказ ждёт' : 'заказов ждут'} подтверждения оплаты`, to: '/app/admin/orders?status=pending', tone: 'amber' });
-  if (o.subscriptions.expiring7) items.push({ text: `${o.subscriptions.expiring7} подписок истекают в ближайшие 7 дней`, to: '/app/admin/users?plan=premium', tone: 'amber' });
+  if (o.subscriptions.expiring7) items.push({ text: `${o.subscriptions.expiring7} подписок истекают в ближайшие 7 дней`, to: '/app/admin/billing', tone: 'amber' });
   if (o.jobs.errors24h) items.push({ text: `${o.jobs.errors24h} заданий упали за сутки`, to: '/app/admin/jobs?status=error', tone: 'red' });
   return items;
 });
@@ -146,7 +146,7 @@ onMounted(load);
         </router-link>
         <div class="glass rounded-2xl p-4">
           <div class="text-xl font-extrabold grad-text">{{ overview.users.premium }}</div>
-          <div class="text-xs text-slate-500">PREMIUM · {{ overview.subscriptions.expiring7 }} истекают</div>
+          <div class="text-xs text-slate-500">На платных тарифах · {{ overview.subscriptions.expiring7 }} истекают</div>
         </div>
         <div class="glass rounded-2xl p-4">
           <div class="text-xl font-extrabold">{{ overview.money.conversion }}%</div>

@@ -1,6 +1,5 @@
 import { db, today } from './db.js';
 import { getSetting, setSetting } from './settings.js';
-import { getPremiumOffers, getTestPrice, planDef, savePlanLimits } from './plans.js';
 import { czStatus } from './cz.js';
 import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
@@ -8,7 +7,7 @@ import { audit } from './lib/audit.js';
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
     users: db.prepare('SELECT COUNT(*) c FROM users').get().c,
-    premium: db.prepare("SELECT COUNT(*) c FROM users WHERE plan='premium'").get().c,
+    paid: db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business')").get().c,
     blocked: db.prepare("SELECT COUNT(*) c FROM users WHERE status='blocked'").get().c,
     jobs: db.prepare('SELECT COUNT(*) c FROM generation_jobs').get().c,
     codesToday: db.prepare('SELECT COALESCE(SUM(codes_generated),0) c FROM usage_daily WHERE day=?').get(today()).c,
@@ -38,53 +37,4 @@ export async function registerAdminRoutes(app) {
     return { ok: true };
   });
 
-  // === Лимиты тарифов ===
-  app.get('/api/admin/plans', { preHandler: requireAdmin }, async () => ({
-    free: planDef('free'),
-    premium: planDef('premium')
-  }));
-
-  app.put('/api/admin/plans', { preHandler: requireAdmin }, async (req, reply) => {
-    const result = savePlanLimits(req.body?.plans);
-    if (result.error) return reply.code(400).send({ error: result.error });
-    audit(req, 'settings.plans', 'settings', 'plans', { plans: req.body?.plans });
-    return { free: planDef('free'), premium: planDef('premium') };
-  });
-
-  // === Управление тарифами PREMIUM ===
-  app.get('/api/admin/pricing', { preHandler: requireAdmin }, async () => ({
-    offers: getPremiumOffers(),
-    testPrice: getTestPrice()
-  }));
-
-  app.put('/api/admin/pricing', { preHandler: requireAdmin }, async (req, reply) => {
-    const { offers, testPrice } = req.body || {};
-    if (offers !== undefined) {
-      if (!Array.isArray(offers) || offers.length === 0 || offers.length > 12) {
-        return reply.code(400).send({ error: 'Нужен 1–12 периодов подписки' });
-      }
-      const seen = new Set();
-      const clean = [];
-      for (const o of offers) {
-        const days = Math.round(Number(o.days));
-        const price = Math.round(Number(o.price) * 100) / 100;
-        const discount = o.discount === undefined || o.discount === '' ? 0 : Math.round(Number(o.discount));
-        if (!Number.isFinite(days) || days < 1 || days > 3650) return reply.code(400).send({ error: 'Срок: 1–3650 дней' });
-        if (!Number.isFinite(price) || price < 1 || price > 1000000) return reply.code(400).send({ error: 'Цена: 1–1 000 000 ₽' });
-        if (!Number.isFinite(discount) || discount < 0 || discount > 90) return reply.code(400).send({ error: 'Скидка: 0–90%' });
-        if (seen.has(days)) return reply.code(400).send({ error: 'Периоды не должны повторяться' });
-        seen.add(days);
-        clean.push({ days, price, discount });
-      }
-      clean.sort((a, b) => a.days - b.days);
-      setSetting('premium_offers', JSON.stringify(clean));
-    }
-    if (testPrice !== undefined) {
-      const tp = Math.round(Number(testPrice) * 100) / 100;
-      if (!Number.isFinite(tp) || tp < 1 || tp > 1000000) return reply.code(400).send({ error: 'Цена TEST: 1–1 000 000 ₽' });
-      setSetting('test_price', String(tp));
-    }
-    audit(req, 'settings.pricing', 'settings', 'pricing', { offers, testPrice });
-    return { offers: getPremiumOffers(), testPrice: getTestPrice() };
-  });
 }

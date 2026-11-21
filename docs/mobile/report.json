@@ -1,0 +1,748 @@
+[
+  {
+    "page": "landing",
+    "url": "/",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "orb anim-glow w-[500px] h-[500px] bg-violet-600/20 -top-40 -left-40",
+        "w": 500,
+        "left": -160,
+        "right": 340
+      },
+      {
+        "tag": "div",
+        "cls": "orb anim-glow w-[400px] h-[400px] bg-accent-500/15 top-[600px] -right-",
+        "w": 400,
+        "left": 118,
+        "right": 518
+      },
+      {
+        "tag": "div",
+        "cls": "orb anim-glow w-[400px] h-[400px] bg-violet-600/15 top-20 left-1/2 -tr",
+        "w": 400,
+        "left": -5,
+        "right": 395
+      }
+    ],
+    "smallButtons": 3,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "pricing",
+    "url": "/pricing",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [],
+    "smallButtons": 0,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "login",
+    "url": "/login",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "overview",
+    "url": "/app",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "billing",
+    "url": "/app/billing",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "generate",
+    "url": "/app/generate",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "reprint",
+    "url": "/app/reprint",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "history",
+    "url": "/app/history",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 3,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "labels",
+    "url": "/app/labels",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "router-link-active router-link-exact-active flex items-center gap-1.5 ",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "sets",
+    "url": "/app/sets",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "router-link-active router-link-exact-active flex items-center gap-1.5 ",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 3,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "cz",
+    "url": "/app/cz",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "assistant",
+    "url": "/app/assistant",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 1,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "help",
+    "url": "/app/help",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 1,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "security",
+    "url": "/app/security",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  },
+  {
+    "page": "apikeys",
+    "url": "/app/apikeys",
+    "title": "CODE QR PRO",
+    "vw": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "offenders": [
+      {
+        "tag": "div",
+        "cls": "flex gap-2 pb-1 min-w-max",
+        "w": 1531,
+        "left": 16,
+        "right": 1547
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 105,
+        "left": 340,
+        "right": 446
+      },
+      {
+        "tag": "span",
+        "cls": "",
+        "w": 55,
+        "left": 377,
+        "right": 433
+      },
+      {
+        "tag": "a",
+        "cls": "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium w",
+        "w": 97,
+        "left": 454,
+        "right": 550
+      },
+      {
+        "tag": "svg",
+        "cls": "[object SVGAnimatedString]",
+        "w": 18,
+        "left": 467,
+        "right": 485
+      },
+      {
+        "tag": "path",
+        "cls": "[object SVGAnimatedString]",
+        "w": 12,
+        "left": 470,
+        "right": 482
+      }
+    ],
+    "smallButtons": 2,
+    "hasHorizontalScroll": false
+  }
+]

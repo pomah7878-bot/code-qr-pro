@@ -114,12 +114,12 @@ const openFaq = ref(null);
     <div class="orb anim-glow w-[400px] h-[400px] bg-accent-500/15 top-[600px] -right-32" style="animation-delay:1.5s"></div>
 
     <!-- HERO -->
-    <section class="relative max-w-[1680px] mx-auto px-4 pt-12 pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+    <section class="relative max-w-[1680px] mx-auto px-4 pt-8 pb-10 sm:pt-12 sm:pb-16 lg:pt-20 lg:pb-24 grid lg:grid-cols-2 gap-8 sm:gap-10 lg:gap-14 items-center">
       <div>
         <div class="reveal inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-300 border border-violet-500/30 bg-violet-500/10 rounded-full px-4 py-1.5 mb-6">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Маркировка, наборы и печать
         </div>
-        <h1 class="reveal reveal-d1 font-display font-extrabold text-[2rem] leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05] mb-6">
+        <h1 class="reveal reveal-d1 font-display font-extrabold text-[1.9rem] leading-[1.1] sm:text-4xl md:text-6xl md:leading-[1.05] mb-5 sm:mb-6">
           Коды маркировки<br><span class="grad-text grad-animated">за минуты,</span><br>а не за дни
         </h1>
         <p class="reveal reveal-d2 text-lg text-slate-600 dark:text-slate-300 mb-8 max-w-lg leading-relaxed">
@@ -130,7 +130,7 @@ const openFaq = ref(null);
           <router-link to="/register" class="btn-glow">Начать бесплатно →</router-link>
           <a href="#pricing" class="btn-ghost !py-4 !px-6">Тарифы</a>
         </div>
-        <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — {{ freeCodeLimit.toLocaleString('ru') }} кодов в день. Без карты. Регистрация за 30 секунд.</p>
+        <p class="reveal reveal-d4 mt-5 text-sm text-slate-500">FREE — {{ freeCodeLimit.toLocaleString('ru') }} операций в день. Без карты. Регистрация за 30 секунд.</p>
         <!-- счётчики -->
         <div class="reveal reveal-d5 grid grid-cols-3 gap-2 sm:gap-4 mt-10 max-w-xl">
           <div class="min-w-0"><div class="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl leading-none tracking-tight whitespace-nowrap grad-text">{{ counters.codes.toLocaleString('ru') }}</div><div class="text-[11px] sm:text-xs text-slate-500 mt-2 leading-snug">операций/мес на PRO</div></div>
@@ -139,7 +139,7 @@ const openFaq = ref(null);
         </div>
       </div>
       <!-- QR-визуал со сканером -->
-      <div class="reveal reveal-d2 relative anim-float order-first lg:order-last">
+      <div class="reveal reveal-d2 relative anim-float hidden sm:block order-first lg:order-last">
         <div class="absolute inset-0 orb bg-violet-600/25 w-full h-full"></div>
         <div class="relative glass rounded-3xl p-6 sm:p-8 max-w-sm lg:max-w-md mx-auto">
           <img src="/qr-icon.svg" alt="CODE QR PRO" class="w-full h-auto drop-shadow-2xl">

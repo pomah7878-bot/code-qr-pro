@@ -2,7 +2,10 @@
 import { store } from '../store.js';
 import BrandIcon from './BrandIcon.vue';
 import { openAssistant } from '../lib/assistant-ui.js';
+import { ref, onMounted, nextTick, watch } from 'vue';
+import { useRoute } from 'vue-router';
 defineProps({ active: String });
+const route = useRoute();
 const items = [
   { icon: 'overview', t: 'Обзор', to: '/app' },
   { icon: 'history', t: 'История', to: '/app/history' },
@@ -22,11 +25,20 @@ const items = [
 function onClick(n) {
   if (n.action === 'assistant') openAssistant();
 }
+const mobileNav = ref(null);
+function centerActive() {
+  nextTick(() => {
+    const el = mobileNav.value?.querySelector('.router-link-active');
+    if (el && el.scrollIntoView) el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  });
+}
+onMounted(centerActive);
+watch(() => route.path, centerActive);
 </script>
 
 <template>
   <!-- mobile: горизонтальная лента -->
-  <nav class="lg:hidden -mx-4 px-4 overflow-x-auto">
+  <nav ref="mobileNav" class="lg:hidden -mx-4 px-4 overflow-x-auto scroll-smooth snap-x">
     <div class="flex gap-2 pb-1 min-w-max">
       <template v-for="n in items" :key="n.t">
         <a v-if="n.href" :href="n.href" target="_blank" rel="noopener"

@@ -754,6 +754,12 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
     <section class="space-y-6 min-w-0">
       <h1 class="font-display font-bold text-3xl">Редактор этикеток</h1>
 
+      <div class="lg:hidden glass rounded-2xl p-4 border border-brand-500/30 text-sm">
+        <b>С телефона удобнее «Повторная печать».</b>
+        Редактор этикеток рассчитан на компьютер — для быстрой печати готовых кодов с телефона откройте
+        <router-link to="/app/reprint" class="text-brand-400 font-medium">Повторную печать →</router-link>
+      </div>
+
       <PageGuide
         id="labels"
         title="Этикетки за 3 шага"

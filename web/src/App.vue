@@ -161,7 +161,7 @@ async function changePassword() {
         </div>
       </transition>
     </header>
-    <main class="flex-1"><router-view /></main>
+    <main class="flex-1" :class="showAssistant ? 'pb-24 lg:pb-0' : ''"><router-view /></main>
     <footer class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
       CODE QR PRO · code-qr.stockcity.ru · GS1 DataMatrix и маркировка «Честный ЗНАК»
     </footer>

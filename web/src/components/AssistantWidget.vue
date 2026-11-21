@@ -249,7 +249,7 @@ onUnmounted(() => {
     <!-- Компактная круглая кнопка AI-помощника: не перекрывает рабочие экраны -->
     <div class="ai-dock fixed z-40 print:hidden" :class="{ 'is-open': assistantUi.open }">
       <button
-        class="ai-launcher relative flex items-center justify-center rounded-full text-white w-14 h-14 p-0"
+        class="ai-launcher relative flex items-center justify-center rounded-full text-white w-[58px] h-[58px] p-0"
         :class="{ 'ai-peek': peeking, 'ai-pressed': pressed, 'ai-hover': hovering }"
         :aria-label="assistantUi.open ? 'Свернуть AI-помощника' : 'Открыть AI-помощника'"
         :title="assistantUi.open ? 'Свернуть AI-помощника' : 'AI-помощник — спросить'"
@@ -257,8 +257,15 @@ onUnmounted(() => {
         @mouseenter="hovering = true"
         @mouseleave="hovering = false"
       >
-        <span class="ai-shimmer" aria-hidden="true"></span>
-        <BrandIcon :name="assistantUi.open ? 'close' : 'ai'" :size="26" solid="#ffffff" />
+        <span class="ai-launcher-glow" aria-hidden="true"></span>
+        <span class="ai-launcher-ring" aria-hidden="true"></span>
+        <span class="ai-launcher-core">
+          <span class="ai-launcher-shine" aria-hidden="true"></span>
+          <RobotMascot :state="mascotState" :size="38" crop="head" />
+          <span class="ai-shimmer" aria-hidden="true"></span>
+        </span>
+        <span class="ai-spark ai-spark-a" aria-hidden="true"></span>
+        <span class="ai-spark ai-spark-b" aria-hidden="true"></span>
         <span class="ai-notify-dot" :class="{ 'is-on': idleHint }" aria-hidden="true"></span>
       </button>
     </div>
@@ -701,10 +708,97 @@ onUnmounted(() => {
   30% { transform: rotate(18deg); }
   60% { transform: rotate(-10deg); }
 }
+/* Премиальная круглая кнопка: вращающееся кольцо, стеклянное ядро, робот и искры */
+.ai-launcher {
+  width: 58px !important;
+  height: 58px !important;
+  padding: 2px !important;
+  border-radius: 9999px;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.ai-launcher::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #8b5cf6, #d946ef, #22d3ee, #6366f1, #8b5cf6);
+  z-index: 0;
+  animation: ai-ring-spin 7s linear infinite;
+  filter: saturate(1.15);
+}
+.ai-launcher::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.55), rgba(217, 70, 239, 0.22) 45%, transparent 70%);
+  filter: blur(9px);
+  z-index: -1;
+  opacity: 0.85;
+  animation: ai-glow-pulse 4.5s ease-in-out infinite;
+}
+.ai-launcher-core {
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 18%, #3b1f78 0%, #1a1033 55%, #0b0718 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.45), inset 0 -8px 14px rgba(0, 0, 0, 0.55);
+  clip-path: circle(50% at 50% 50%);
+}
+.ai-launcher-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.06) 38%, transparent 60%);
+  pointer-events: none;
+  z-index: 3;
+}
+.ai-launcher-core .ai-shimmer {
+  border-radius: 9999px;
+  overflow: hidden;
+  opacity: 0.8;
+}
+.ai-spark {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 8px 1px rgba(255, 255, 255, 0.9);
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  animation: ai-spark 3.6s ease-in-out infinite;
+}
+.ai-spark-a { top: 4px; right: 7px; animation-delay: 0.6s; }
+.ai-spark-b { bottom: 7px; left: 6px; width: 3.5px; height: 3.5px; animation-delay: 2s; }
+.ai-launcher:hover {
+  transform: translateY(-2px) scale(1.06);
+}
+.ai-launcher:hover::before { animation-duration: 2.2s; }
+.ai-launcher:hover::after { opacity: 1; }
+@keyframes ai-ring-spin { to { transform: rotate(360deg); } }
+@keyframes ai-glow-pulse {
+  0%, 100% { opacity: 0.65; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+@keyframes ai-spark {
+  0%, 70%, 100% { opacity: 0; transform: scale(0.4); }
+  80%, 88% { opacity: 1; transform: scale(1); }
+}
 @media (prefers-reduced-motion: reduce) {
   .ai-launcher,
   .ai-launcher.ai-peek,
   .ai-launcher.ai-pressed,
+  .ai-launcher::before,
+  .ai-launcher::after,
+  .ai-spark,
   .ai-shimmer::after,
   .ai-notify-dot.is-on,
   .ai-hint-emoji {

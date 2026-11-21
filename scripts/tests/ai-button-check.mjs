@@ -31,12 +31,17 @@ ok('Нет робота над кнопкой', metrics.robot===false);
 ok('Нет всплывающей подсказки', metrics.hint===false);
 ok('Кнопка в углу, не растянута по ширине', metrics.right>=8 && metrics.right<=45 && metrics.bottom>=8 && metrics.bottom<=40, JSON.stringify(metrics));
 ok('Внутри кнопки нет длинного текста', (metrics.text||'').length<=4, metrics.text);
-const overlap=JSON.parse(await ev(`(() => {
-  const btn=document.querySelector('.ai-launcher'); const main=document.querySelector('main');
-  const r=btn.getBoundingClientRect();
-  const el=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
-  return JSON.stringify({ top: el===btn || btn?.contains(el), tag: el?.tagName||'' });
-})()`));
+let overlap = { top: false, tag: '' };
+try {
+  const raw = await ev(`(() => {
+    const btn = document.querySelector('.ai-launcher');
+    if (!btn) return '{}';
+    const r = btn.getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return JSON.stringify({ top: el === btn || (btn.contains && btn.contains(el)), tag: el ? el.tagName : '' });
+  })()`);
+  overlap = JSON.parse(raw || '{}');
+} catch { /* treat as not clickable */ }
 ok('Кнопка кликабельна (сверху)', overlap.top, JSON.stringify(overlap));
 await ev(`(() => { document.querySelector('.ai-launcher')?.click(); return 1; })()`); await sleep(900);
 const opened=JSON.parse(await ev(`(() => { const d=document.querySelector('.ai-panel'); const dock=document.querySelector('.ai-dock'); return JSON.stringify({ dialog:Boolean(d), dockHidden: dock?getComputedStyle(dock).display==='none':true }); })()`));
@@ -44,8 +49,8 @@ ok('Диалог открывается, кнопка скрывается', ope
 await ev(`(() => { const b=document.querySelector('.ai-panel button[aria-label="Закрыть"]'); if(b)b.click(); return 1; })()`); await sleep(500);
 const closed=await ev(`Boolean(document.querySelector('.ai-panel'))`);
 ok('Диалог закрывается', closed===false);
-const shot=await send('Page.captureScreenshot',{format:'png'}); fs.writeFileSync('docs/ai-button-round.png',Buffer.from(shot.result.data,'base64'));
-console.log('screenshot: docs/ai-button-round.png');
+const shot=await send('Page.captureScreenshot',{format:'png'}); fs.writeFileSync('docs/ai-button-premium.png',Buffer.from(shot.result.data,'base64'));
+console.log('screenshot: docs/ai-button-premium.png');
 console.log('console errors:', errors.length, JSON.stringify(errors.slice(0,3)));
 const failed=checks.filter(x=>!x).length; console.log(`итог: ${checks.length-failed}/${checks.length}`);
 ws.close(); chrome.kill(); process.exit(failed?1:0);

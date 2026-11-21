@@ -108,7 +108,9 @@ if (existsSync(dist)) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');
     }
-    if (path === '/') return reply.sendFile('index.html');
+    const publicPaths = new Set(['/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
+    const isPublic = publicPaths.has(path) || path.startsWith('/articles/');
+    if (path === '/' || isPublic) return reply.sendFile('index.html');
     reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');
     return reply.sendFile('index.html');
   });

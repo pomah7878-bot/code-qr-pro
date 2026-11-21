@@ -340,6 +340,9 @@ const openFaq = ref(null);
           <div v-show="openFaq === i" class="px-5 pb-5 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{{ f.a }}</div>
         </div>
       </div>
+      <div class="reveal text-center mt-8">
+        <router-link to="/faq" class="text-brand-400 font-medium text-sm">Все ответы на вопросы →</router-link>
+      </div>
     </section>
 
     <!-- FINAL CTA -->
@@ -353,5 +356,6 @@ const openFaq = ref(null);
         </div>
       </div>
     </section>
+
   </div>
 </template>

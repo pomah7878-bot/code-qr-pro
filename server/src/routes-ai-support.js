@@ -5,7 +5,7 @@ import { audit } from './lib/audit.js';
 import { logEvent } from './lib/app-log.js';
 import { aiConfig, aiConfigured, askAi } from './lib/ai-client.js';
 import { planOf } from './plans.js';
-import { searchKnowledge, kbContext, markKbCalls, listKbArticles, saveKbArticle, deleteKbArticle } from './lib/kb.js';
+import { searchKnowledge, kbContext, markKbCalls, listKbArticles, listPublicKbArticles, getPublicKbArticle, saveKbArticle, deleteKbArticle } from './lib/kb.js';
 import { notifySupportTicket } from './notify.js';
 import { publicUrl } from './lib/public-url.js';
 import { buildAiContext, formatAiContext } from './lib/ai-context.js';
@@ -457,6 +457,30 @@ export async function registerAiSupportRoutes(app) {
 
     if (error) return reply.code(502).send({ error, ticketId: id });
     return { ok: true, ticketId: id, ...result, model, backend: cfg.backend, durationMs };
+  });
+
+  // --- база знаний: публичные статьи (без черновиков) ---
+  app.get('/api/public/articles', async () => ({ articles: listPublicKbArticles() }));
+
+  app.get('/api/public/articles/:slug', async (req, reply) => {
+    const article = getPublicKbArticle(req.params.slug);
+    if (!article) return reply.code(404).send({ error: 'Статья не найдена' });
+    return { article };
+  });
+
+  // --- sitemap: публичные страницы + статьи ---
+  app.get('/sitemap.xml', async (req, reply) => {
+    const base = String(process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru').replace(/\/+$/, '');
+    const staticPages = ['', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy'];
+    const entries = [
+      ...staticPages.map((p) => ({ loc: base + (p || '/'), lastmod: new Date().toISOString().slice(0, 10) })),
+      ...listPublicKbArticles().map((a) => ({ loc: base + '/articles/' + encodeURIComponent(a.slug), lastmod: String(a.updated_at || '').slice(0, 10) }))
+    ];
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      entries.map((e) => '  <url><loc>' + e.loc.replace(/&/g, '&amp;') + '</loc>' + (e.lastmod ? '<lastmod>' + e.lastmod + '</lastmod>' : '') + '</url>').join('\n') +
+      '\n</urlset>';
+    return reply.type('application/xml').send(xml);
   });
 
   // --- база знаний: просмотр для админа ---

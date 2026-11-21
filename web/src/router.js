@@ -39,12 +39,22 @@ const Assistant = () => import('./pages/Assistant.vue');
 const Help = () => import('./pages/Help.vue');
 const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
 const AdminBilling = () => import('./pages/admin/AdminBilling.vue');
+const Articles = () => import('./pages/Articles.vue');
+const Article = () => import('./pages/Article.vue');
+const Faq = () => import('./pages/Faq.vue');
+const Legal = () => import('./pages/Legal.vue');
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Landing },
     { path: '/pricing', component: Pricing },
+    { path: '/articles', component: Articles },
+    { path: '/articles/:slug', component: Article, props: true },
+    { path: '/faq', component: Faq },
+    { path: '/offer', component: Legal, props: { slug: 'offer' } },
+    { path: '/terms', component: Legal, props: { slug: 'terms' } },
+    { path: '/privacy', component: Legal, props: { slug: 'privacy' } },
     { path: '/login', component: Login },
     { path: '/register', component: Register },
     { path: '/app', component: Dashboard, meta: { auth: true } },

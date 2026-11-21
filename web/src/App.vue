@@ -6,11 +6,13 @@ import { api } from './api.js';
 import { openAssistant } from './lib/assistant-ui.js';
 import AssistantWidget from './components/AssistantWidget.vue';
 import BrandIcon from './components/BrandIcon.vue';
+import SiteFooter from './components/SiteFooter.vue';
 
 const router = useRouter();
 const route = useRoute();
 const menuOpen = ref(false);
 const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app'));
+const isPublicPage = computed(() => !route.path.startsWith('/app'));
 const pwd = reactive({ current: '', next: '', repeat: '', busy: false, error: '' });
 const needChange = computed(() => Boolean(store.user?.mustChangePassword));
 
@@ -103,6 +105,11 @@ async function changePassword() {
 
         <!-- desktop nav -->
         <nav class="hidden md:flex items-center gap-2">
+          <template v-if="isPublicPage">
+            <router-link to="/pricing" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Тарифы</router-link>
+            <router-link to="/articles" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Статьи</router-link>
+            <router-link to="/faq" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Вопросы</router-link>
+          </template>
           <button class="btn-ghost !px-3" @click="toggleTheme" title="Сменить тему">
             <BrandIcon name="moon" :size="18" class="dark:hidden" /><BrandIcon name="sun" :size="18" class="hidden dark:inline" />
           </button>
@@ -141,6 +148,12 @@ async function changePassword() {
       <!-- mobile dropdown menu -->
       <transition name="menu">
         <div v-if="menuOpen" class="md:hidden border-t border-slate-200 dark:border-white/10 px-4 py-3 space-y-1 bg-white/95 dark:bg-ink-950/95 backdrop-blur-xl">
+          <template v-if="isPublicPage">
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/pricing')">Тарифы</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/articles')">Статьи</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/faq')">Частые вопросы</button>
+            <div class="h-px bg-slate-200 dark:bg-white/10 my-1"></div>
+          </template>
           <template v-if="store.user">
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app')"><BrandIcon name="overview" :size="18" class="inline-block mr-2 -mt-0.5" />Кабинет</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/app/history')"><BrandIcon name="history" :size="18" class="inline-block mr-2 -mt-0.5" />История</button>
@@ -162,7 +175,8 @@ async function changePassword() {
       </transition>
     </header>
     <main class="flex-1" :class="showAssistant ? 'pb-24 lg:pb-0' : ''"><router-view /></main>
-    <footer class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
+    <SiteFooter v-if="isPublicPage" />
+    <footer v-else class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
       CODE QR PRO · code-qr.stockcity.ru · GS1 DataMatrix и маркировка «Честный ЗНАК»
     </footer>
 

@@ -569,7 +569,10 @@ const MIGRATIONS = [
    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('trial_notice_days', '2');`,
   // v35 — идемпотентность генерации: повторный запрос с тем же ключом не создаёт дубль задания
   `ALTER TABLE generation_jobs ADD COLUMN idem_key TEXT;
-   CREATE UNIQUE INDEX idx_jobs_idem ON generation_jobs(user_id, idem_key) WHERE idem_key IS NOT NULL;`
+   CREATE UNIQUE INDEX idx_jobs_idem ON generation_jobs(user_id, idem_key) WHERE idem_key IS NOT NULL;`,
+  // v36 — согласие на обработку персональных данных и принятие документов при регистрации
+  `ALTER TABLE users ADD COLUMN consent_at TEXT;
+   ALTER TABLE users ADD COLUMN consent_version TEXT;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

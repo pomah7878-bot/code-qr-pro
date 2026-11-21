@@ -28,7 +28,11 @@ export function seedKnowledgeBase() {
        summary = excluded.summary,
        body = excluded.body,
        tags = excluded.tags,
-       updated_at = datetime('now')`
+       updated_at = datetime('now')
+     WHERE kb_articles.title <> excluded.title
+        OR kb_articles.summary <> excluded.summary
+        OR kb_articles.body <> excluded.body
+        OR kb_articles.tags <> excluded.tags`
   );
   const tx = db.transaction((list) => {
     for (const a of list) {
@@ -93,6 +97,26 @@ export function markKbCalls(ids) {
   if (!ids?.length) return;
   const stmt = db.prepare('UPDATE kb_articles SET calls = calls + 1 WHERE id = ?');
   for (const id of ids) stmt.run(id);
+}
+
+function publicArticle(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    tags: String(row.tags || '').split(',').map((t) => t.trim()).filter(Boolean)
+  };
+}
+
+export function listPublicKbArticles() {
+  return db.prepare(
+    'SELECT slug, title, summary, tags, updated_at FROM kb_articles WHERE published = 1 ORDER BY title'
+  ).all().map(publicArticle);
+}
+
+export function getPublicKbArticle(slug) {
+  return publicArticle(db.prepare(
+    'SELECT slug, title, summary, body, tags, updated_at FROM kb_articles WHERE slug = ? AND published = 1'
+  ).get(String(slug || '')));
 }
 
 export function listKbArticles() {

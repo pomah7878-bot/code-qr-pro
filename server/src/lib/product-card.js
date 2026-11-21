@@ -35,13 +35,18 @@ async function publicMobileCheck(code) {
   if (!code) return null;
   try {
     const normalized = normalizeCzCode(code);
-    const url = `https://mobile.api.crpt.ru/mobile/check?code=${encodeURIComponent(normalized)}&codeType=datamatrix`;
-    const res = await fetch(url, {
+    // POST form-urlencoded: с GET мобильный API отдаёт 403 (проверено с РФ-сервера),
+    // а POST работает и возвращает полную карточку.
+    const res = await fetch('https://mobile.api.crpt.ru/mobile/check', {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
+        Origin: 'https://code-qr.stockcity.ru',
         'User-Agent': 'Chestnyznak/4.47.0 (chestnyznak-mcp)'
       },
-      signal: AbortSignal.timeout(12000)
+      body: `code=${encodeURIComponent(normalized)}`,
+      signal: AbortSignal.timeout(15000)
     });
     if (!res.ok) return null;
     const raw = await res.json().catch(() => null);

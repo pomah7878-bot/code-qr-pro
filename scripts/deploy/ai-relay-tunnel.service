@@ -1,0 +1,15 @@
+[Unit]
+Description=SSH tunnel to AI relay (Kilo free models via UK host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -N -i /root/.ssh/ai_relay_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -L 127.0.0.1:3110:127.0.0.1:3110 root@2.27.86.180
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

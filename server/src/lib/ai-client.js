@@ -12,6 +12,8 @@ import { getSetting } from '../settings.js';
  * Все получают только собранные факты (см. ai-context.js), без доступа к базе.
  */
 
+// На РФ-сервере бесплатные модели доступны только через relay на старом (UK) хосте.
+const KILO_TOKEN = String(process.env.KILO_RELAY_TOKEN || '');
 const KILO_BASE = String(process.env.KILO_BASE_URL || 'https://api.kilo.ai/api/gateway').replace(/\/+$/, '');
 // kilo-auto/free — авто-роутер по бесплатному пулу Kilo; openrouter/free — резервный бесплатный роутер.
 const FREE_MODELS = ['kilo-auto/free', 'openrouter/free'];
@@ -175,7 +177,11 @@ export async function askKiloFree({ system, user, model = 'kilo-auto/free', time
   const attempt = async (tokens) => {
     const res = await fetch(`${KILO_BASE}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'dsh-our-free-model' },
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'dsh-our-free-model',
+        ...(KILO_TOKEN ? { 'x-relay-token': KILO_TOKEN } : {})
+      },
       body: JSON.stringify({
         model,
         messages: [

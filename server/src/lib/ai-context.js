@@ -16,7 +16,7 @@ const maskEmail = (email) => {
 
 const ISO = (v) => (v ? String(v).replace(' ', 'T') + 'Z' : null);
 
-export function buildAiContext(userId) {
+function buildAiContextRaw(userId) {
   const id = Number(userId);
   const user = db.prepare(
     `SELECT id, email, name, role, plan, status, created_at, last_login_at, blocked_at, blocked_reason,
@@ -164,4 +164,31 @@ export function formatAiContext(ctx) {
   }
   lines.push(`Система: серверных ошибок за час: ${ctx.system.serverErrorsLastHour}.`);
   return lines.join('\n');
+}
+
+// --- Обезличивание перед отправкой во внешние модели ---
+const maskIp = (ip) => {
+  const s = String(ip || '');
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return s.replace(/\.\d{1,3}$/, '.x');
+  if (s.includes(':')) return s.split(':').slice(0, 3).join(':') + ':x';
+  return s;
+};
+const scrub = (v) => String(v ?? '')
+  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<email>')
+  .replace(/\b[a-f0-9]{32,}\b/gi, '<token>')
+  .replace(/\b(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}\b/g, '$1.x');
+const withIp = (rows) => (rows || []).map((r) => (r && typeof r === 'object' && 'ip' in r ? { ...r, ip: maskIp(r.ip) } : r));
+
+export function buildAiContext(userId) {
+  const c = buildAiContextRaw(userId);
+  if (!c) return c;
+  c.user.name = c.user.name ? `${String(c.user.name).slice(0, 1)}.` : '';
+  c.user.blockedReason = scrub(c.user.blockedReason);
+  c.loginEvents = withIp(c.loginEvents);
+  c.sessions = withIp(c.sessions);
+  c.rateLimits = withIp(c.rateLimits);
+  c.adminActions = withIp(c.adminActions).map((r) => ({ ...r, meta: scrub(r.meta) }));
+  c.appLogs = (c.appLogs || []).map((r) => ({ ...r, message: scrub(r.message), url: scrub(r.url) }));
+  c.mailErrors = (c.mailErrors || []).map((r) => ({ ...r, message: scrub(r.message) }));
+  return c;
 }

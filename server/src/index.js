@@ -35,7 +35,7 @@ import { registerAdminSeoRoutes } from './routes-admin-seo.js';
 import { detectBot, recordBotHit, pruneAnalytics } from './lib/analytics.js';
 import { seedKnowledgeBase } from './lib/kb.js';
 import { startTelegramBot } from './lib/telegram-bot.js';
-import { injectSeo } from './lib/seo-head.js';
+import { injectSeo, seoForPath } from './lib/seo-head.js';
 import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, pruneAppLogs } from './lib/app-log.js';
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { startSubscriptionSweeper } from './lib/subscription.js';
@@ -123,15 +123,28 @@ if (existsSync(dist)) {
     }
   });
   app.setNotFoundHandler((req, reply) => {
-    const path = String(req.raw.url || '/').split('?')[0];
+    const rawUrl = String(req.raw.url || '/');
+    const path = rawUrl.split('?')[0];
     if (path.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });
     if (path.startsWith('/assets/')) return reply.code(404).send({ error: 'Not found' });
+    // Единый canonical-формат без завершающего слэша: /pricing/ -> /pricing,
+    // /articles/ -> /articles. Иначе SPA отдаёт 200/404 вперемешку и плодит дубли.
+    if (path !== '/' && path.endsWith('/')) {
+      const clean = path.replace(/\/+$/, '') || '/';
+      const query = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?')) : '';
+      return reply.redirect(301, clean + query);
+    }
     const isPrivate = path === '/login' || path === '/register' || path === '/app' || path.startsWith('/app/');
     if (isPrivate) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');
     }
     const publicPaths = new Set(['/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
+    // Несуществующая статья должна отдавать 404, а не soft-200 с главной.
+    if (path.startsWith('/articles/') && !seoForPath(path)) {
+      reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');
+      return reply.sendFile('index.html');
+    }
     const isPublic = publicPaths.has(path) || path.startsWith('/articles/');
     if (path === '/' || isPublic) {
       // Отдаём роботам уже правильный canonical/title/description. SPA всё равно

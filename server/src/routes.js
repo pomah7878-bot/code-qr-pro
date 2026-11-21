@@ -12,7 +12,7 @@ import { publicUrl } from './lib/public-url.js';
 import { logLogin } from './lib/auth-events.js';
 import { VIEW_COOKIE, getViewSession, destroyViewSession } from './lib/view-session.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE = /^[^\s@<>(),;:"\\\[\]]{1,64}@[^\s@<>(),;:"\\\[\]]{1,255}\.[^\s@<>(),;:"\\\[\]]{1,63}$/;
 const attempts = new Map(); // ip -> { n, reset }
 
 function rateLimit(ip, max = 10, windowMs = 60_000) {
@@ -22,6 +22,8 @@ function rateLimit(ip, max = 10, windowMs = 60_000) {
   a.n++;
   return a.n <= max;
 }
+
+setInterval(() => { const t = Date.now(); for (const [k, v] of attempts) if (t > v.reset) attempts.delete(k); }, 60_000).unref();
 
 const COOKIE = 'cq_session';
 const RESET_SECRET = process.env.PASSWORD_RESET_SECRET || process.env.APP_SECRET || 'code-qr-pro-password-reset';
@@ -132,7 +134,7 @@ export async function registerRoutes(app) {
   });
 
   app.post('/api/auth/register', async (req, reply) => {
-    if (!rateLimit(req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+    if (!rateLimit("register:" + req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const { email, password, name, consent, consentVersion } = req.body || {};
     if (consent !== true) {
       return reply.code(400).send({ error: 'Подтвердите принятие Пользовательского соглашения, Публичной оферты и согласие на обработку персональных данных' });
@@ -160,7 +162,7 @@ export async function registerRoutes(app) {
   });
 
   app.post('/api/auth/login', async (req, reply) => {
-    if (!rateLimit(req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+    if (!rateLimit("login:" + req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const { email, password } = req.body || {};
     const normalizedEmail = String(email || '').toLowerCase().trim();
     if (!normalizedEmail) return reply.code(401).send({ error: 'Неверный email или пароль' });
@@ -238,7 +240,7 @@ export async function registerRoutes(app) {
     return reply.redirect('/app', 302);
   });
 
-  app.post('/api/auth/forgot', async (req, reply) => {    if (!rateLimit(req.ip, 5, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+  app.post('/api/auth/forgot', async (req, reply) => {    if (!rateLimit("forgot:" + req.ip, 5, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
     if (!smtpConfigured()) return reply.code(503).send({ error: 'Отправка почты не настроена. Обратитесь в поддержку.' });
@@ -282,24 +284,24 @@ export async function registerRoutes(app) {
   });
 
   app.post('/api/auth/reset', async (req, reply) => {
-    if (!rateLimit(req.ip, 10, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
+    if (!rateLimit("reset:" + req.ip, 10, 60_000)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
     const email = String(req.body?.email || '').trim().toLowerCase();
     const code = String(req.body?.code || '').trim();
     const password = req.body?.password;
-    if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) return reply.code(400).send({ error: 'Неверный код или email' });
+    if (!EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) return reply.code(400).send({ error: 'Неверный код или email, либо код истёк. Запросите новый код' });
     if (typeof password !== 'string' || password.length < 8) return reply.code(400).send({ error: 'Новый пароль минимум 8 символов' });
     if (password.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
 
     const user = db.prepare('SELECT * FROM users WHERE email=?').get(email);
-    if (!user) return reply.code(400).send({ error: 'Неверный код или email' });
+    if (!user) return reply.code(400).send({ error: 'Неверный код или email, либо код истёк. Запросите новый код' });
     const row = db.prepare("SELECT * FROM password_resets WHERE user_id=? AND used_at IS NULL AND expires_at > datetime('now') ORDER BY id DESC LIMIT 1").get(user.id);
-    if (!row || row.attempts >= 5) return reply.code(400).send({ error: 'Код истёк или неверен. Запросите новый.' });
+    if (!row || row.attempts >= 5) return reply.code(400).send({ error: 'Неверный код или email, либо код истёк. Запросите новый код' });
 
     const hash = resetCodeHash(user.id, code);
     const ok = row.code_hash.length === hash.length && timingSafeEqual(Buffer.from(row.code_hash), Buffer.from(hash));
     if (!ok) {
       db.prepare('UPDATE password_resets SET attempts=attempts+1 WHERE id=?').run(row.id);
-      return reply.code(400).send({ error: 'Неверный код или email' });
+      return reply.code(400).send({ error: 'Неверный код или email, либо код истёк. Запросите новый код' });
     }
 
     db.transaction(() => {

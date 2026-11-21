@@ -89,7 +89,14 @@ function elementPlan(el, data) {
     }
     const opts = { bcid, text, scale: 6, includetext: false };
     if (bcid === 'code128' || bcid === 'code39' || bcid === 'gs1-128') opts.height = 12;
-    else if (bcid === 'ean13' || bcid === 'ean8' || bcid === 'upca' || bcid === 'itf14') { opts.height = 12; opts.includetext = true; opts.textxalign = 'center'; }
+    else if (bcid === 'ean13' || bcid === 'ean8' || bcid === 'upca' || bcid === 'itf14') {
+      opts.height = 12;
+      opts.includetext = true;
+      opts.textxalign = 'center';
+      // bwip-js по умолчанию рисует цифры вплотную к штрихам (и при сжатии в PDF они
+      // попадают на полосы). Отрицательный offset опускает цифры под штрихкод.
+      opts.textyoffset = -10;
+    }
     else if (bcid === 'qrcode') opts.scale = 4;
     else if (bcid === 'pdf417') opts.scale = 3;
     return { base, opts };

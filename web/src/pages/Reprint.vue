@@ -883,9 +883,10 @@ function buildTemplate() {
   if (!tiny && fields.ean13) {
     const eanVal = eanDigits(product.barcode);
     if (eanVal.length === 13) {
-      const eanH = Math.min(12, Math.max(7, H * 0.22));
-      const eanY = Math.max(belowY + 0.6, H - m - eanH);
-      if (eanY + eanH <= H - m + 0.5) {
+      // Больше высоты полосам EAN, цифры рисуются под ними (bwip-js textyoffset).
+      const eanH = Math.min(12, Math.max(8, H * 0.25));
+      const eanY = Math.max(belowY + 0.4, H - m - eanH);
+      if (eanY + eanH <= H - m + 0.4) {
         elements.push({ id: 'ean', type: 'ean13', field: 'barcode', x: m, y: eanY, w: W - 2 * m, h: eanH, fontSize: 8, align: 'left' });
         eanPlaced = true;
       }

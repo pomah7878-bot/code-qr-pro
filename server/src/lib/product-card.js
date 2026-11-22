@@ -20,6 +20,23 @@ const OPEN_FACTS = [
 
 const inflight = new Map();
 const errorCache = new Map();
+// Повторная проверка того же кода в пределах TTL не списывает новую операцию.
+const statusCache = new Map();
+const statusCacheTtl = () => Math.max(60, settingNumber('cache_status_ttl_seconds', 900));
+function readStatusCache(key) {
+  const hit = statusCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > statusCacheTtl()) { statusCache.delete(key); return null; }
+  return hit.data;
+}
+function saveStatusCache(key, data) {
+  if (!data) return;
+  statusCache.set(key, { at: Date.now(), data });
+  if (statusCache.size > 2000) {
+    const oldest = statusCache.keys().next();
+    if (!oldest.done) statusCache.delete(oldest.value);
+  }
+}
 
 const settingNumber = (key, fallback) => {
   const v = Number(getSetting(key, String(fallback)));
@@ -109,7 +126,9 @@ async function mobileRequest(kind, { code = '', gtin = '' } = {}) {
 export async function checkCodeOnline(code) {
   const normalized = normalizeCzCode(code) || String(code || '').trim();
   if (!normalized) throw new Error('Пустой код');
-  const { data } = await mobileRequest('status', { code: normalized });
+  let data = readStatusCache(normalized);
+  const cached = Boolean(data);
+  if (!data) { data = (await mobileRequest('status', { code: normalized })).data; saveStatusCache(normalized, data); }
   const status = normalizeStatus(data);
   return {
     found: data?.codeFounded !== false && Boolean(status.found),
@@ -121,6 +140,7 @@ export async function checkCodeOnline(code) {
     name: status.name || '',
     producer: status.producer || '',
     warnings: status.warnings || [],
+    cached,
     source: 'cz-mobile'
   };
 }
@@ -566,7 +586,13 @@ export async function productCard({ user = null, userId = null, code = '', gtin 
     } else {
       try {
         const normalized = normalizeCzCode(source) || source;
-        const { data } = await dedupe(`code:${normalized}`, () => mobileRequest('status', { code: normalized }));
+        let data = readStatusCache(normalized);
+        const fromCache = Boolean(data);
+        if (fromCache) { checksCached += 1; }
+        else {
+          data = (await dedupe(`code:${normalized}`, () => mobileRequest('status', { code: normalized }))).data;
+          saveStatusCache(normalized, data);
+        }
         const status = normalizeStatus(data);
         if (status.found) {
           Object.assign(card, mergeCards(card, status));
@@ -585,7 +611,7 @@ export async function productCard({ user = null, userId = null, code = '', gtin 
           card.sourceLabel = status.sourceLabel;
           card.fetchedAt = new Date().toISOString();
           sources.push({ id: 'cz-status', label: status.sourceLabel, fetchedAt: card.fetchedAt, status: status.statusRaw, crypto: status.crypto });
-          if (actor) {
+          if (actor && !fromCache) {
             consumeChecks(actor, 1, { idemKey: `${idemKey}:status:${card.gtin}`, context: 'status', external: true });
             checksConsumed += 1;
           }

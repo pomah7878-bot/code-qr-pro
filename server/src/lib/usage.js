@@ -17,8 +17,9 @@ export class UsageError extends Error {
 }
 
 const clampCount = (n) => Math.max(1, Math.min(100000, Math.round(Number(n) || 1)));
-const kindColumn = (kind) => (kind === 'check' ? 'checks_used' : 'ops_used');
+const kindColumn = (kind) => ({ check: 'checks_used', export: 'exports_used', api: 'api_calls_used' }[kind] || 'ops_used');
 const dailyColumn = (kind) => (kind === 'check' ? 'checks_used' : 'ops_used');
+const limitFor = (period, kind) => Number(kind === 'check' ? period.checksLimit : kind === 'export' ? period.exportsLimit : kind === 'api' ? period.apiLimit : period.opsLimit) || 0;
 
 function findEvent(userId, idemKey) {
   if (!idemKey) return null;
@@ -29,7 +30,7 @@ function capacity(user, kind, count) {
   const period = currentPeriod(user);
   const row = ensureUsagePeriod(user, period);
   const used = Number(row[kindColumn(kind)]) || 0;
-  const limit = kind === 'check' ? Number(period.checksLimit) || 0 : Number(period.opsLimit) || 0;
+  const limit = limitFor(period, kind);
   const left = Math.max(0, limit - used);
   let dailyLeft = null;
   let dailyLimit = 0;
@@ -77,8 +78,12 @@ export function consume(user, kind = 'operation', count = 1, { idemKey = '', con
     throw new UsageError(
       kind === 'check'
         ? `Закончились расширенные проверки: осталось ${c.left} из ${c.limit}. Проверки обновятся ${c.period.periodEnd ? String(c.period.periodEnd).slice(0, 10) : 'в новом периоде'}.`
-        : `Закончились операции: осталось ${c.left} из ${c.limit}. Лимит обновится ${c.period.periodEnd ? String(c.period.periodEnd).slice(0, 10) : 'в новом периоде'}.`,
-      { kind, needed: n, left: c.left, limit: c.limit, dailyLeft: c.dailyLeft, dailyLimit: c.dailyLimit, resetAt: c.period.periodEnd, code: kind === 'check' ? 'checks_limit' : 'ops_limit' }
+        : kind === 'export'
+          ? `Закончился лимит экспорта: осталось ${c.left} из ${c.limit}. Лимит обновится ${c.period.periodEnd ? String(c.period.periodEnd).slice(0, 10) : 'в новом периоде'}.`
+          : kind === 'api'
+            ? `Закончился лимит API: осталось ${c.left} из ${c.limit}. Лимит обновится ${c.period.periodEnd ? String(c.period.periodEnd).slice(0, 10) : 'в новом периоде'}.`
+            : `Закончились операции: осталось ${c.left} из ${c.limit}. Лимит обновится ${c.period.periodEnd ? String(c.period.periodEnd).slice(0, 10) : 'в новом периоде'}.`,
+      { kind, needed: n, left: c.left, limit: c.limit, dailyLeft: c.dailyLeft, dailyLimit: c.dailyLimit, resetAt: c.period.periodEnd, code: kind === 'check' ? 'checks_limit' : kind === 'export' ? 'exports_limit' : kind === 'api' ? 'api_limit' : 'ops_limit' }
     );
   }
   if (c.dailyLeft !== null && c.dailyLeft < n) {
@@ -97,11 +102,13 @@ export function consume(user, kind = 'operation', count = 1, { idemKey = '', con
       db.prepare(
         `UPDATE usage_periods SET ${kindColumn(kind)} = ${kindColumn(kind)} + ?, updated_at=datetime('now') WHERE id=?`
       ).run(n, c.row.id);
-      db.prepare(
-        `INSERT INTO usage_daily (user_id, day, codes_generated, ${dailyColumn(kind)})
-         VALUES (?, date('now'), 0, ?)
-         ON CONFLICT(user_id, day) DO UPDATE SET ${dailyColumn(kind)} = ${dailyColumn(kind)} + excluded.${dailyColumn(kind)}`
-      ).run(user.id, n);
+      if (kind === 'operation' || kind === 'check') {
+        db.prepare(
+          `INSERT INTO usage_daily (user_id, day, codes_generated, ${dailyColumn(kind)})
+           VALUES (?, date('now'), 0, ?)
+           ON CONFLICT(user_id, day) DO UPDATE SET ${dailyColumn(kind)} = ${dailyColumn(kind)} + excluded.${dailyColumn(kind)}`
+        ).run(user.id, n);
+      }
     })();
   } catch (e) {
     // гонка по idempotency key: другой запрос уже списал — не списываем повторно
@@ -128,6 +135,8 @@ export function consume(user, kind = 'operation', count = 1, { idemKey = '', con
 
 export const consumeOperations = (user, count = 1, opts = {}) => consume(user, 'operation', count, opts);
 export const consumeChecks = (user, count = 1, opts = {}) => consume(user, 'check', count, opts);
+export const consumeExports = (user, count = 1, opts = {}) => consume(user, 'export', count, opts);
+export const consumeApiCalls = (user, count = 1, opts = {}) => consume(user, 'api', count, opts);
 
 /** Журнал внешних запросов (стоимость/ошибки интеграций). */
 export function recordExternalRequest({ userId = null, adapter = '', ok = false, statusCode = 0, latencyMs = 0, error = '', costUnits = 1 } = {}) {

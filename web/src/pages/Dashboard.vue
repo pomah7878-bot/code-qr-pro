@@ -19,7 +19,7 @@ const isPremium = computed(() => store.plan?.id && store.plan.id !== 'free');
 const bestOffer = ref(null);
 const premiumFrom = computed(() => {
   const o = bestOffer.value;
-  if (!o) return 349;
+  if (!o) return 590;
   return Math.round(o.perMonth ?? o.finalPrice ?? o.price);
 });
 let plansSyncOff = null;
@@ -118,8 +118,8 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
           <div class="h-3 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden mt-4">
             <div class="h-full rounded-full transition-all" :class="usagePct >= 80 ? 'bg-amber-500' : 'bg-gradient-to-r from-brand-500 to-accent-500'" :style="{ width: usagePct + '%' }"></div>
           </div>
-          <p class="text-xs text-slate-500 mt-3">Расширенные проверки: {{ store.usage?.checks?.used ?? 0 }} / {{ store.usage?.checks?.limit ?? 0 }} · до {{ store.usage?.periodEnd ? fmtDate(store.usage.periodEnd) : 'конца периода' }}</p>
-          <router-link v-if="store.usage?.warnings?.ops80 || store.usage?.warnings?.checks80" to="/app/billing" class="text-xs text-amber-500 font-medium mt-2 inline-block">Лимит близок к концу — посмотреть тарифы →</router-link>
+          <p class="text-xs text-slate-500 mt-3">Расширенные проверки: {{ store.usage?.checks?.used ?? 0 }} / {{ store.usage?.checks?.limit ?? 0 }} · экспорт: {{ store.usage?.exports?.used ?? 0 }} / {{ store.usage?.exports?.limit ?? 0 }} · до {{ store.usage?.periodEnd ? fmtDate(store.usage.periodEnd) : 'конца периода' }}</p>
+          <router-link v-if="store.usage?.warnings?.ops80 || store.usage?.warnings?.checks80 || store.usage?.warnings?.exports80 || store.usage?.warnings?.api80" to="/app/billing" class="text-xs text-amber-500 font-medium mt-2 inline-block">Лимит близок к концу — посмотреть тарифы →</router-link>
         </div>
       </div>
 

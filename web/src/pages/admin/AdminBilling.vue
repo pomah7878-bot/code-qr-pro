@@ -80,6 +80,8 @@ async function savePlan(id) {
       opsPerPeriod: p.opsPerPeriod,
       dailyOps: p.dailyOps,
       checksPerPeriod: p.checksPerPeriod,
+      exportsPerPeriod: p.exportsPerPeriod,
+      apiCallsPerPeriod: p.apiCallsPerPeriod,
       batchMax: p.batchMax,
       historyDays: p.historyDays,
       archiveMb: p.archiveMb,
@@ -106,6 +108,8 @@ async function createPlan() {
       opsPerPeriod: 100,
       dailyOps: 0,
       checksPerPeriod: 0,
+      exportsPerPeriod: 0,
+      apiCallsPerPeriod: 0,
       batchMax: 100,
       historyDays: 7,
       archiveMb: 100,
@@ -121,7 +125,7 @@ async function createPlan() {
 }
 async function toggleActive(p) {
   try {
-    await api.adminSaveBillingPlan({ ...p, active: !p.active, features: p.features, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, opsPerPeriod: p.opsPerPeriod, dailyOps: p.dailyOps, checksPerPeriod: p.checksPerPeriod, batchMax: p.batchMax, historyDays: p.historyDays, archiveMb: p.archiveMb, formats: p.formats });
+    await api.adminSaveBillingPlan({ ...p, active: !p.active, features: p.features, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, opsPerPeriod: p.opsPerPeriod, dailyOps: p.dailyOps, checksPerPeriod: p.checksPerPeriod, exportsPerPeriod: p.exportsPerPeriod, apiCallsPerPeriod: p.apiCallsPerPeriod, batchMax: p.batchMax, historyDays: p.historyDays, archiveMb: p.archiveMb, formats: p.formats });
     notifyPlansChanged();
     await loadPlans();
   } catch (e) { error.value = e.message; }
@@ -205,6 +209,8 @@ onMounted(loadTab);
             <label>Операций/период<input v-model.number="edit[plan.id].opsPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Операций/день<input v-model.number="edit[plan.id].dailyOps" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Проверок/период<input v-model.number="edit[plan.id].checksPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
+            <label>Экспортов/период<input v-model.number="edit[plan.id].exportsPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
+            <label>API-запросов/период<input v-model.number="edit[plan.id].apiCallsPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Пакет строк<input v-model.number="edit[plan.id].batchMax" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>История, дней<input v-model.number="edit[plan.id].historyDays" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Архив, МБ<input v-model.number="edit[plan.id].archiveMb" type="number" class="input !py-1.5 text-sm mt-1"></label>

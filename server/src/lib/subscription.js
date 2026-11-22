@@ -10,7 +10,7 @@ import { notifyClient } from './client-mail.js';
  * Использование лимитов живёт в usage.js и привязано к периоду из currentPeriod().
  */
 
-const PAID_PLANS = new Set(['start', 'pro', 'business']);
+const PAID_PLANS = new Set(['start', 'pro', 'business', 'enterprise']);
 
 const sqlNow = (d = new Date()) => d.toISOString().replace('T', ' ').slice(0, 19);
 const asDate = (value) => {
@@ -61,6 +61,8 @@ export function currentPeriod(user) {
       periodEnd: String(paid.expires_at || ''),
       opsLimit: Number(subPlan.opsPerPeriod) || 0,
       checksLimit: Number(subPlan.checksPerPeriod) || 0,
+      exportsLimit: Number(subPlan.exportsPerPeriod) || 0,
+      apiLimit: Number(subPlan.apiCallsPerPeriod) || 0,
       dailyLimit: Number(subPlan.dailyOps) || 0,
       subscription: paid,
       trial: trialInfo(user, now)
@@ -77,6 +79,8 @@ export function currentPeriod(user) {
       periodEnd: trial.endsAt,
       opsLimit: Number(pro.opsPerPeriod) || 0,
       checksLimit: Math.max(0, Number(getSetting('trial_checks', '50')) || 50),
+      exportsLimit: Number(pro.exportsPerPeriod) || 0,
+      apiLimit: 0,
       dailyLimit: 0,
       subscription: null,
       trial
@@ -92,6 +96,8 @@ export function currentPeriod(user) {
     periodEnd: sqlNow(nextMonth(now)),
     opsLimit: Number(free.opsPerPeriod) || 0,
     checksLimit: Number(free.checksPerPeriod) || 0,
+    exportsLimit: Number(free.exportsPerPeriod) || 0,
+    apiLimit: Number(free.apiCallsPerPeriod) || 0,
     dailyLimit: Number(free.dailyOps) || 0,
     subscription: subPlan && paid ? paid : null,
     trial
@@ -112,14 +118,20 @@ export function usageSummary(user, period = currentPeriod(user)) {
   const row = ensureUsagePeriod(user, period);
   const opsUsed = Number(row.ops_used) || 0;
   const checksUsed = Number(row.checks_used) || 0;
+  const exportsUsed = Number(row.exports_used) || 0;
+  const apiUsed = Number(row.api_calls_used) || 0;
   const daily = db.prepare(
     "SELECT ops_used, checks_used FROM usage_daily WHERE user_id=? AND day=date('now')"
   ).get(user.id) || { ops_used: 0, checks_used: 0 };
   const opsLimit = Number(period.opsLimit) || 0;
   const checksLimit = Number(period.checksLimit) || 0;
+  const exportsLimit = Number(period.exportsLimit) || 0;
+  const apiLimit = Number(period.apiLimit) || 0;
   const dailyLimit = Number(period.dailyLimit) || 0;
   const opsLeft = opsLimit > 0 ? Math.max(0, opsLimit - opsUsed) : Infinity;
   const checksLeft = checksLimit > 0 ? Math.max(0, checksLimit - checksUsed) : 0;
+  const exportsLeft = exportsLimit > 0 ? Math.max(0, exportsLimit - exportsUsed) : Infinity;
+  const apiLeft = apiLimit > 0 ? Math.max(0, apiLimit - apiUsed) : Infinity;
   const dailyLeft = dailyLimit > 0 ? Math.max(0, dailyLimit - (Number(daily.ops_used) || 0)) : Infinity;
   const pct = (used, limit) => (limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0);
   return {
@@ -129,6 +141,8 @@ export function usageSummary(user, period = currentPeriod(user)) {
     periodEnd: period.periodEnd,
     ops: { used: opsUsed, limit: opsLimit, left: Number.isFinite(opsLeft) ? opsLeft : null, percent: pct(opsUsed, opsLimit) },
     checks: { used: checksUsed, limit: checksLimit, left: checksLeft, percent: pct(checksUsed, checksLimit) },
+    exports: { used: exportsUsed, limit: exportsLimit, left: Number.isFinite(exportsLeft) ? exportsLeft : null, percent: pct(exportsUsed, exportsLimit) },
+    api: { used: apiUsed, limit: apiLimit, left: Number.isFinite(apiLeft) ? apiLeft : null, percent: pct(apiUsed, apiLimit) },
     daily: { used: Number(daily.ops_used) || 0, limit: dailyLimit, left: Number.isFinite(dailyLeft) ? dailyLeft : null },
     trial: period.trial,
     subscription: period.subscription ? {
@@ -140,6 +154,10 @@ export function usageSummary(user, period = currentPeriod(user)) {
     warnings: {
       ops80: opsLimit > 0 && opsUsed >= opsLimit * 0.8,
       checks80: checksLimit > 0 && checksUsed >= checksLimit * 0.8,
+      exports80: exportsLimit > 0 && exportsUsed >= exportsLimit * 0.8,
+      exports100: exportsLimit > 0 && exportsUsed >= exportsLimit,
+      api80: apiLimit > 0 && apiUsed >= apiLimit * 0.8,
+      api100: apiLimit > 0 && apiUsed >= apiLimit,
       ops100: opsLimit > 0 && opsUsed >= opsLimit,
       checks100: checksLimit > 0 && checksUsed >= checksLimit
     }
@@ -319,7 +337,7 @@ export function expireSubscriptionsAndTrials() {
   }
   // Платные тарифы без активной подписки → FREE
   const paidWithoutSub = db.prepare(
-    `SELECT * FROM users WHERE plan IN ('start','pro','business')
+    `SELECT * FROM users WHERE plan IN ('start','pro','business','enterprise')
        AND id NOT IN (SELECT user_id FROM subscriptions WHERE status='active' AND expires_at > datetime('now'))
        AND NOT (plan='pro' AND trial_used=1 AND trial_ends_at > datetime('now'))`
   ).all();

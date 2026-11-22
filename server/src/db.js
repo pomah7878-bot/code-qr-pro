@@ -669,7 +669,53 @@ const MIGRATIONS = [
      matched_at TEXT
    );
    CREATE INDEX IF NOT EXISTS idx_bank_tx_status ON bank_transactions(status, created_at);
-   CREATE INDEX IF NOT EXISTS idx_bank_tx_amount ON bank_transactions(amount);`
+   CREATE INDEX IF NOT EXISTS idx_bank_tx_amount ON bank_transactions(amount);`,
+  // v44 — раздельные лимиты: генерация, проверки, экспорт, API; новые тарифы
+  `ALTER TABLE plans ADD COLUMN exports_per_period INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE plans ADD COLUMN api_calls_per_period INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE usage_periods ADD COLUMN exports_used INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE usage_periods ADD COLUMN api_calls_used INTEGER NOT NULL DEFAULT 0;
+
+  UPDATE plans SET title='FREE', description='Для знакомства с сервисом и небольших объёмов',
+    price_monthly=0, price_yearly=0, ops_per_period=600, daily_ops=20, checks_per_period=0,
+    exports_per_period=20, api_calls_per_period=0, batch_max=20, history_days=7, archive_mb=50,
+    formats='["png","svg","pdf"]', features='{"labelEditor":false,"printBridge":false,"apiAccess":false,"aiAssistant":true,"templates":false,"employees":1,"extendedChecks":false}',
+    sort_order=1, recommended=0, active=1, updated_at=datetime('now') WHERE id='free';
+
+  UPDATE plans SET title='START', active=0, recommended=0, sort_order=90, exports_per_period=200, api_calls_per_period=0, updated_at=datetime('now') WHERE id='start';
+
+  UPDATE plans SET title='PRO', description='Для небольших производств, складов и селлеров',
+    price_monthly=590, price_yearly=5900, ops_per_period=20000, daily_ops=0, checks_per_period=2000,
+    exports_per_period=1000, api_calls_per_period=20000, batch_max=10000, history_days=365, archive_mb=2048,
+    formats='["png","svg","pdf","zip"]', features='{"labelEditor":true,"printBridge":true,"apiAccess":true,"aiAssistant":true,"templates":true,"employees":3,"extendedChecks":true}',
+    sort_order=3, recommended=0, active=1, updated_at=datetime('now') WHERE id='pro';
+
+  UPDATE plans SET title='BUSINESS', description='Для растущих производств и маркетплейсов — рекомендуем',
+    price_monthly=1490, price_yearly=14900, ops_per_period=100000, daily_ops=0, checks_per_period=10000,
+    exports_per_period=5000, api_calls_per_period=100000, batch_max=50000, history_days=1095, archive_mb=10240,
+    formats='["png","svg","pdf","zip"]', features='{"labelEditor":true,"printBridge":true,"apiAccess":true,"aiAssistant":true,"templates":true,"employees":10,"extendedChecks":true}',
+    sort_order=4, recommended=1, active=1, updated_at=datetime('now') WHERE id='business';
+
+  INSERT INTO plans (id,title,description,price_monthly,price_yearly,ops_per_period,daily_ops,checks_per_period,
+    exports_per_period,api_calls_per_period,batch_max,formats,history_days,archive_mb,features,sort_order,recommended,active,updated_at)
+  VALUES ('enterprise','ENTERPRISE','Для больших объёмов, нескольких юрлиц и интеграций',
+    3990,39900,500000,0,50000,50000,1000000,100000,
+    '["png","svg","pdf","zip"]',3650,30720,
+    '{"labelEditor":true,"printBridge":true,"apiAccess":true,"aiAssistant":true,"templates":true,"employees":50,"extendedChecks":true}',
+    5,0,1,datetime('now'))
+  ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,
+    price_monthly=excluded.price_monthly,price_yearly=excluded.price_yearly,ops_per_period=excluded.ops_per_period,
+    daily_ops=excluded.daily_ops,checks_per_period=excluded.checks_per_period,exports_per_period=excluded.exports_per_period,
+    api_calls_per_period=excluded.api_calls_per_period,batch_max=excluded.batch_max,formats=excluded.formats,
+    history_days=excluded.history_days,archive_mb=excluded.archive_mb,features=excluded.features,
+    sort_order=excluded.sort_order,recommended=excluded.recommended,active=excluded.active,updated_at=datetime('now');
+
+  UPDATE plans SET recommended=0;
+  UPDATE plans SET recommended=1 WHERE id='business';
+  DELETE FROM app_settings WHERE key='premium_offers';
+  INSERT INTO app_settings (key,value) VALUES ('trial_days','7') ON CONFLICT(key) DO UPDATE SET value='7';`,
+  // v45 — сохранить экспортный лимит для legacy-тарифа START
+  `UPDATE plans SET exports_per_period=200 WHERE id='start' AND exports_per_period=0;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

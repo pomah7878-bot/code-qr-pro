@@ -1,7 +1,7 @@
 const SITE = 'https://code-qr.stockcity.ru';
 const HOME = {
   title: 'CODE QR PRO — маркировка «Честный ЗНАК», DataMatrix и печать этикеток',
-  description: 'Генерация GS1 DataMatrix, проверка кодов, наборы с КИН, редактор этикеток, печать PDF и из браузера, Print Bridge и API для 1С. FREE, START, PRO и BUSINESS.'
+  description: 'Генерация GS1 DataMatrix, проверка кодов, наборы с КИН, редактор этикеток, печать PDF и из браузера, Print Bridge и API для 1С. FREE, PRO, BUSINESS и ENTERPRISE.'
 };
 
 const PUBLIC_PAGES = {
@@ -11,7 +11,7 @@ const PUBLIC_PAGES = {
   },
   '/pricing': {
     title: 'Тарифы и цены — CODE QR PRO',
-    description: 'Тарифы FREE, START, PRO и BUSINESS: операции, расширенные проверки, история, API и печать. Цены за месяц и год.'
+    description: 'Тарифы FREE, PRO, BUSINESS и ENTERPRISE: операции, расширенные проверки, история, API и печать. Цены за месяц и год.'
   },
   '/articles': {
     title: 'Статьи и инструкции по маркировке — CODE QR PRO',

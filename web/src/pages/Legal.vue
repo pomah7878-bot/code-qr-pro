@@ -113,6 +113,8 @@ watch(() => props.slug, async () => {
                     <th class="py-2 pr-3 whitespace-nowrap">Цена/год</th>
                     <th class="py-2 pr-3">Операции</th>
                     <th class="py-2 pr-3">Проверки</th>
+                    <th class="py-2 pr-3">Экспорт</th>
+                    <th class="py-2 pr-3">API</th>
                     <th class="py-2 pr-3">История</th>
                     <th class="py-2 pr-3">Архив</th>
                     <th class="py-2">Функции</th>
@@ -125,13 +127,15 @@ watch(() => props.slug, async () => {
                     <td class="py-2 pr-3 whitespace-nowrap">{{ money(p.priceYearly) }} ₽</td>
                     <td class="py-2 pr-3">{{ planOps(p) }}</td>
                     <td class="py-2 pr-3">{{ p.checksPerPeriod > 0 ? Number(p.checksPerPeriod).toLocaleString('ru') : '—' }}</td>
+                    <td class="py-2 pr-3">{{ Number(p.exportsPerPeriod || 0).toLocaleString('ru') }}</td>
+                    <td class="py-2 pr-3">{{ Number(p.apiCallsPerPeriod || 0).toLocaleString('ru') }}</td>
                     <td class="py-2 pr-3 whitespace-nowrap">{{ p.historyDays }} дн.</td>
                     <td class="py-2 pr-3 whitespace-nowrap">{{ Number(p.archiveMb || 0).toLocaleString('ru') }} МБ</td>
                     <td class="py-2">{{ [planFormats(p), planFunctions(p)].filter(Boolean).join(' · ') || '—' }}</td>
                   </tr>
                 </tbody>
               </table>
-              <p class="text-[11px] text-slate-500 mt-2">Цены и лимиты обновляются автоматически из настроек тарифов. Годовая оплата = 10 месячных платежей (2 месяца в подарок).</p>
+              <p class="text-[11px] text-slate-500 mt-2">Цены и лимиты обновляются автоматически из настроек тарифов. Генерация, расширенные проверки, экспорт и API учитываются раздельно. Годовая оплата = 10 месячных платежей (2 месяца в подарок).</p>
             </div>
           </section>
         </div>

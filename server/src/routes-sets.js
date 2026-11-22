@@ -5,6 +5,7 @@ import { renderSetsPdf, normalizeSetPayload, validateSetPayload, validGtin, pref
 import { logActivity } from './lib/activity.js';
 import { labelHtml, printDocument } from './lib/print-html.js';
 import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
+import { consumeExports, UsageError } from './lib/usage.js';
 
 const rowToTemplate = (r) => ({
   id: r.id,
@@ -64,6 +65,8 @@ export async function registerSetRoutes(app) {
     const p = normalizeSetPayload(req.body);
     const error = validateSetPayload(p);
     if (error) return reply.code(400).send({ error });
+    try { consumeExports(req.user, 1, { context: 'sets_pdf' }); }
+    catch (e) { if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, quota: e.payload }); throw e; }
     try {
       const pdf = await renderSetsPdf(p);
       logActivity(req.user, 'sets_pdf', 'PDF наборов', {
@@ -88,6 +91,8 @@ export async function registerSetRoutes(app) {
     const p = normalizeSetPayload(req.body);
     const error = validateSetPayload(p);
     if (error) return reply.code(400).send({ error });
+    try { consumeExports(req.user, 1, { context: 'sets_pdf_ticket' }); }
+    catch (e) { if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, quota: e.payload }); throw e; }
     try {
       const pdf = await renderSetsPdf(p);
       const id = putPdfTicket(req.user.id, pdf, 'nabor.pdf');

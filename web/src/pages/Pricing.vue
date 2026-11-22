@@ -16,11 +16,13 @@ const perMonth = (plan) => Math.round(price(plan) / (period.value === 'year' ? 1
 const features = (plan) => [
   `${Number(plan.opsPerPeriod || 0).toLocaleString('ru')} операций ${plan.dailyOps ? `(до ${plan.dailyOps}/сутки)` : 'в месяц'}`,
   plan.checksPerPeriod > 0 ? `${Number(plan.checksPerPeriod).toLocaleString('ru')} расширенных проверок` : 'Локальная проверка кодов',
+  `${Number(plan.exportsPerPeriod || 0).toLocaleString('ru')} экспортов`,
+  plan.features?.apiAccess ? `${Number(plan.apiCallsPerPeriod || 0).toLocaleString('ru')} API-запросов` : 'API недоступен',
   `Форматы выгрузки: ${(plan.formats || []).map((f) => f.toUpperCase()).join(', ')}`,
   plan.features?.labelEditor ? 'Редактор этикеток и Print Bridge' : 'Готовые шаблоны без редактора',
   plan.features?.templates ? 'Сохранение шаблонов' : 'Без сохранения шаблонов',
   plan.features?.apiAccess ? 'API для 1С и складов' : 'API недоступен',
-  plan.features?.aiAssistant ? (plan.id === 'free' || plan.id === 'start' ? 'AI-помощник (базовый)' : 'AI-помощник без ограничений') : 'Без AI-помощника',
+  plan.features?.aiAssistant ? (plan.id === 'free' ? 'AI-помощник (базовый)' : 'AI-помощник без ограничений') : 'Без AI-помощника',
   `${plan.features?.employees || 1} сотрудник(ов)`,
   `История ${plan.historyDays} дней`
 ];
@@ -72,6 +74,7 @@ onUnmounted(() => { plansSyncOff?.(); });
     </div>
 
     <div class="glass rounded-2xl p-6 mt-8 text-sm text-slate-500">
+      <p><b>Важно:</b> автоматического повышения тарифа нет — при исчерпании лимита нужно вручную выбрать новый тариф. Стоимость самих кодов маркировки «Честный ЗНАК» в подписку не входит.</p>
       <p><b>Пробный период PRO</b> — 7 календарных дней, один раз на аккаунт, 50 расширенных проверок. После окончания автоматически FREE, деньги не списываются.</p>
       <p class="mt-2">Оплата через ЮKassa (карта, СБП). Подписка активируется только после подтверждения платежа на сервере. Чек самозанятого (НПД) предоставляется по запросу на code-qr-pro@mail.ru. Автопродление по умолчанию выключено.</p>
       <p class="mt-2">Операции и расширенные проверки учитываются раздельно. Неуспешные запросы к внешним источникам лимит не списывают.</p>

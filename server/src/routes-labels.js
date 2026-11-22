@@ -1,6 +1,6 @@
 import { db } from './db.js';
 import { planOf } from './plans.js';
-import { consumeOperations, UsageError } from './lib/usage.js';
+import { consumeOperations, consumeExports, UsageError } from './lib/usage.js';
 import { requireAuth } from './routes.js';
 import { resolveElements, resolveElementsMany, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
@@ -287,6 +287,7 @@ export async function registerLabelRoutes(app) {
     const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
     try {
       consumeOperations(req.user, dataRows.length, { idemKey: idem ? `${idem}:pdf` : '', context: 'labels_pdf' });
+      consumeExports(req.user, 1, { idemKey: idem ? `${idem}:pdf_export` : '', context: 'labels_pdf_export' });
     } catch (e) {
       if (e instanceof UsageError) {
         reply.code(e.statusCode || 402).send({ error: e.message, ...e.payload });

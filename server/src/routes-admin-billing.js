@@ -184,5 +184,5 @@ export async function registerAdminBillingRoutes(app) {
 }
 
 function normalizeProtected(id) {
-  return ['free', 'start', 'pro', 'business'].includes(String(id || '').toLowerCase());
+  return ['free', 'start', 'pro', 'business', 'enterprise'].includes(String(id || '').toLowerCase());
 }

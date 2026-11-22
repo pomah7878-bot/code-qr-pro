@@ -10,7 +10,7 @@ import { npdSettings, testNpdConnection, issueNpdReceiptForOrder, resendNpdRecei
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
     users: db.prepare('SELECT COUNT(*) c FROM users').get().c,
-    paid: db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business')").get().c,
+    paid: db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business','enterprise')").get().c,
     blocked: db.prepare("SELECT COUNT(*) c FROM users WHERE status='blocked'").get().c,
     jobs: db.prepare('SELECT COUNT(*) c FROM generation_jobs').get().c,
     codesToday: db.prepare('SELECT COALESCE(SUM(codes_generated),0) c FROM usage_daily WHERE day=?').get(today()).c,

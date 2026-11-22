@@ -14,10 +14,14 @@ export function planFeatureRows(plan, { onlyEnabled = false } = {}) {
   if (!plan) return [];
   const ops = Number(plan.opsPerPeriod ?? plan.ops_per_period ?? 0);
   const checks = Number(plan.checksPerPeriod ?? plan.checks_per_period ?? 0);
+  const exportsLimit = Number(plan.exportsPerPeriod ?? plan.exports_per_period ?? 0);
+  const apiLimit = Number(plan.apiCallsPerPeriod ?? plan.api_calls_per_period ?? 0);
   const rows = [
     { text: `${ops.toLocaleString('ru')} операций в месяц`, on: true },
     { text: Number(plan.dailyOps ?? plan.daily_ops) > 0 ? `До ${plan.dailyOps ?? plan.daily_ops} операций в сутки` : 'Без суточного ограничения', on: true },
     { text: checks > 0 ? `${checks.toLocaleString('ru')} расширенных проверок` : 'Без расширенных проверок', on: checks > 0 },
+    { text: exportsLimit > 0 ? `${exportsLimit.toLocaleString('ru')} экспортов` : 'Без экспорта', on: exportsLimit > 0 },
+    { text: apiLimit > 0 ? `${apiLimit.toLocaleString('ru')} API-запросов` : 'Без API-лимита', on: apiLimit > 0 },
     { text: `Пакет до ${Number(plan.batchMax ?? plan.batch_max ?? 0).toLocaleString('ru')} строк`, on: true },
     { text: `Выгрузка: ${formatList(plan)}`, on: true },
     { text: 'Редактор этикеток и печать с термопринтера', on: Boolean(plan.features?.labelEditor ?? plan.labelEditor) },

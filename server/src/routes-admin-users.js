@@ -58,7 +58,7 @@ function userFilters(query) {
     where.push('(' + parts.join(' OR ') + ')');
   }
   const plan = String(query?.plan || '');
-  if (['free', 'start', 'pro', 'business'].includes(plan)) {
+  if (['free', 'start', 'pro', 'business', 'enterprise'].includes(plan)) {
     where.push('u.plan = ?');
     params.push(plan);
   }

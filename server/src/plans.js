@@ -13,6 +13,7 @@ const BUILTIN_DEFAULTS = {
     id: 'free', title: 'FREE',
     price_monthly: 0, price_yearly: 0,
     ops_per_period: 600, daily_ops: 20, checks_per_period: 0,
+    exports_per_period: 20, api_calls_per_period: 0,
     batch_max: 20,
     formats: ['png', 'svg', 'pdf'], history_days: 7, archive_mb: 50,
     features: { labelEditor: false, printBridge: false, apiAccess: false, aiAssistant: true, templates: false, employees: 1, extendedChecks: false },
@@ -22,6 +23,7 @@ const BUILTIN_DEFAULTS = {
     id: 'start', title: 'START',
     price_monthly: 149, price_yearly: 1490,
     ops_per_period: 500, daily_ops: 0, checks_per_period: 0,
+    exports_per_period: 100, api_calls_per_period: 0,
     batch_max: 5000,
     formats: ['png', 'svg', 'pdf'], history_days: 7, archive_mb: 500,
     features: { labelEditor: false, printBridge: false, apiAccess: false, aiAssistant: true, templates: false, employees: 1, extendedChecks: false },
@@ -29,21 +31,33 @@ const BUILTIN_DEFAULTS = {
   },
   pro: {
     id: 'pro', title: 'PRO',
-    price_monthly: 349, price_yearly: 3490,
-    ops_per_period: 5000, daily_ops: 0, checks_per_period: 500,
-    batch_max: 5000,
-    formats: ['png', 'svg', 'pdf', 'zip'], history_days: 30, archive_mb: 2048,
-    features: { labelEditor: true, printBridge: true, apiAccess: true, aiAssistant: true, templates: true, employees: 1, extendedChecks: true },
-    sort_order: 3, recommended: 1, active: 1
+    price_monthly: 590, price_yearly: 5900,
+    ops_per_period: 20000, daily_ops: 0, checks_per_period: 2000,
+    exports_per_period: 1000, api_calls_per_period: 20000,
+    batch_max: 10000,
+    formats: ['png', 'svg', 'pdf', 'zip'], history_days: 365, archive_mb: 2048,
+    features: { labelEditor: true, printBridge: true, apiAccess: true, aiAssistant: true, templates: true, employees: 3, extendedChecks: true },
+    sort_order: 3, recommended: 0, active: 1
   },
   business: {
     id: 'business', title: 'BUSINESS',
-    price_monthly: 799, price_yearly: 7990,
-    ops_per_period: 30000, daily_ops: 0, checks_per_period: 3000,
-    batch_max: 5000,
+    price_monthly: 1490, price_yearly: 14900,
+    ops_per_period: 100000, daily_ops: 0, checks_per_period: 10000,
+    exports_per_period: 5000, api_calls_per_period: 100000,
+    batch_max: 50000,
     formats: ['png', 'svg', 'pdf', 'zip'], history_days: 1095, archive_mb: 10240,
-    features: { labelEditor: true, printBridge: true, apiAccess: true, aiAssistant: true, templates: true, employees: 5, extendedChecks: true },
-    sort_order: 4, recommended: 0, active: 1
+    features: { labelEditor: true, printBridge: true, apiAccess: true, aiAssistant: true, templates: true, employees: 10, extendedChecks: true },
+    sort_order: 4, recommended: 1, active: 1
+  },
+  enterprise: {
+    id: 'enterprise', title: 'ENTERPRISE',
+    price_monthly: 3990, price_yearly: 39900,
+    ops_per_period: 500000, daily_ops: 0, checks_per_period: 50000,
+    exports_per_period: 50000, api_calls_per_period: 1000000,
+    batch_max: 100000,
+    formats: ['png', 'svg', 'pdf', 'zip'], history_days: 3650, archive_mb: 30720,
+    features: { labelEditor: true, printBridge: true, apiAccess: true, aiAssistant: true, templates: true, employees: 50, extendedChecks: true },
+    sort_order: 5, recommended: 0, active: 1
   }
 };
 
@@ -53,11 +67,12 @@ export const PLANS = {
   start: legacyView(rowFromDefaults('start')),
   pro: legacyView(rowFromDefaults('pro')),
   business: legacyView(rowFromDefaults('business')),
+  enterprise: legacyView(rowFromDefaults('enterprise')),
   premium: legacyView(rowFromDefaults('pro')),
   test: legacyView(rowFromDefaults('pro'))
 };
 
-export const PURCHASABLE = ['start', 'pro', 'business', 'archive'];
+export const PURCHASABLE = ['pro', 'business', 'enterprise', 'archive'];
 
 function rowFromDefaults(id) {
   const d = BUILTIN_DEFAULTS[id];
@@ -88,6 +103,10 @@ function dbRowToPlan(row) {
     opsPerPeriod: Number(row.ops_per_period) || 0,
     dailyOps: Number(row.daily_ops) || 0,
     checksPerPeriod: Number(row.checks_per_period) || 0,
+    exportsPerPeriod: Number(row.exports_per_period) || 0,
+    exports_per_period: Number(row.exports_per_period) || 0,
+    apiCallsPerPeriod: Number(row.api_calls_per_period) || 0,
+    api_calls_per_period: Number(row.api_calls_per_period) || 0,
     batch_max: Number(row.batch_max) || 0,
     batchMax: Number(row.batch_max) || 0,
     formats: parseJson(row.formats, ['png', 'svg']),
@@ -148,7 +167,8 @@ function dbRowToPlanFromDefaults(id) {
   return dbRowToPlan({
     id: d.id, title: d.title, description: '', price_monthly: d.price_monthly,
     price_yearly: d.price_yearly, ops_per_period: d.ops_per_period, daily_ops: d.daily_ops,
-    checks_per_period: d.checks_per_period, batch_max: d.batch_max, formats: JSON.stringify(d.formats),
+    checks_per_period: d.checks_per_period, exports_per_period: d.exports_per_period || 0,
+    api_calls_per_period: d.api_calls_per_period || 0, batch_max: d.batch_max, formats: JSON.stringify(d.formats),
     history_days: d.history_days, archive_mb: d.archive_mb, features: JSON.stringify(d.features),
     sort_order: d.sort_order, recommended: d.recommended, active: 1
   });
@@ -212,8 +232,8 @@ export function offerFinalPrice(o) {
 export function getPremiumOffers() {
   const pro = getPlan('pro') || dbRowToPlanFromDefaults('pro');
   let offers = [
-    { days: 30, price: pro.priceMonthly || 349, discount: 0, period: 'month' },
-    { days: 365, price: pro.priceYearly || Math.round((pro.priceMonthly || 349) * 10), discount: 0, period: 'year' }
+    { days: 30, price: pro.priceMonthly || 590, discount: 0, period: 'month' },
+    { days: 365, price: pro.priceYearly || Math.round((pro.priceMonthly || 590) * 10), discount: 0, period: 'year' }
   ];
   try {
     const raw = getSetting('premium_offers', '');
@@ -272,10 +292,12 @@ export function validatePlanInput(input = {}) {
   const ops = num(input.opsPerPeriod ?? input.ops_per_period, 0, 10_000_000, 0);
   const daily = num(input.dailyOps ?? input.daily_ops, 0, 1_000_000, 0);
   const checks = num(input.checksPerPeriod ?? input.checks_per_period, 0, 10_000_000, 0);
+  const exports = num(input.exportsPerPeriod ?? input.exports_per_period, 0, 10_000_000, 0);
+  const apiCalls = num(input.apiCallsPerPeriod ?? input.api_calls_per_period, 0, 10_000_000, 0);
   const batchMax = num(input.batchMax ?? input.batch_max, 1, 100_000, 100);
   const historyDays = num(input.historyDays ?? input.history_days, 1, 3650, 7);
   const archiveMb = num(input.archiveMb ?? input.archive_mb, 10, 102400, 50);
-  if ([priceMonthly, priceYearly, ops, daily, checks, batchMax, historyDays, archiveMb].some((n) => Number.isNaN(n))) {
+  if ([priceMonthly, priceYearly, ops, daily, checks, exports, apiCalls, batchMax, historyDays, archiveMb].some((n) => Number.isNaN(n))) {
     return { error: 'Проверьте числа: лимиты и цены должны быть в допустимых диапазонах' };
   }
   const formats = Array.isArray(input.formats)
@@ -302,6 +324,8 @@ export function validatePlanInput(input = {}) {
       ops_per_period: Math.round(ops),
       daily_ops: Math.round(daily),
       checks_per_period: Math.round(checks),
+      exports_per_period: Math.round(exports),
+      api_calls_per_period: Math.round(apiCalls),
       batch_max: Math.round(batchMax),
       formats: JSON.stringify(formats),
       history_days: Math.round(historyDays),
@@ -321,18 +345,19 @@ export function savePlan(input) {
   db.transaction(() => {
     db.prepare(`INSERT INTO plans
       (id,title,description,price_monthly,price_yearly,ops_per_period,daily_ops,checks_per_period,
-       batch_max,formats,history_days,archive_mb,features,sort_order,recommended,active,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+       exports_per_period,api_calls_per_period,batch_max,formats,history_days,archive_mb,features,sort_order,recommended,active,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         title=excluded.title, description=excluded.description, price_monthly=excluded.price_monthly,
         price_yearly=excluded.price_yearly, ops_per_period=excluded.ops_per_period,
         daily_ops=excluded.daily_ops, checks_per_period=excluded.checks_per_period,
+        exports_per_period=excluded.exports_per_period, api_calls_per_period=excluded.api_calls_per_period,
         batch_max=excluded.batch_max, formats=excluded.formats, history_days=excluded.history_days,
         archive_mb=excluded.archive_mb, features=excluded.features, sort_order=excluded.sort_order,
         recommended=excluded.recommended, active=excluded.active, updated_at=datetime('now')`)
       .run(p.id, p.title, p.description, p.price_monthly, p.price_yearly, p.ops_per_period,
-        p.daily_ops, p.checks_per_period, p.batch_max, p.formats, p.history_days, p.archive_mb,
-        p.features, p.sort_order, p.recommended, p.active);
+        p.daily_ops, p.checks_per_period, p.exports_per_period, p.api_calls_per_period, p.batch_max, p.formats,
+        p.history_days, p.archive_mb, p.features, p.sort_order, p.recommended, p.active);
     // рекомендованным может быть только один тариф
     if (p.recommended) db.prepare('UPDATE plans SET recommended=0 WHERE id<>?').run(p.id);
   })();
@@ -341,7 +366,7 @@ export function savePlan(input) {
 
 export function deletePlan(id) {
   const planId = normalizePlanId(id);
-  if (['free', 'start', 'pro', 'business'].includes(planId)) {
+  if (['free', 'start', 'pro', 'business', 'enterprise'].includes(planId)) {
     const plan = getPlan(planId);
     if (!plan) return { error: 'Тариф не найден' };
     db.prepare('UPDATE plans SET active=0, recommended=0, updated_at=datetime(\'now\') WHERE id=?').run(planId);
@@ -394,7 +419,7 @@ export function savePlanLimits(input) {
       features
     };
   };
-  for (const id of ['free', 'premium', 'start', 'pro', 'business']) {
+  for (const id of ['free', 'premium', 'start', 'pro', 'business', 'enterprise']) {
     if (!input?.[id]) continue;
     const r = sanitizeLimits(input[id]);
     if (r.error) return { error: `${id}: ${r.error}` };

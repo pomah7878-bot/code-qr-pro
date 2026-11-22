@@ -64,7 +64,7 @@ export async function registerAdminAnalyticsRoutes(app) {
     const users = db.prepare('SELECT COUNT(*) c FROM users').get().c;
     const newUsers30 = db.prepare("SELECT COUNT(*) c FROM users WHERE date(created_at) >= date('now','-29 days')").get().c;
     const newUsersPrev = db.prepare("SELECT COUNT(*) c FROM users WHERE date(created_at) >= date('now','-59 days') AND date(created_at) < date('now','-29 days')").get().c;
-    const premium = db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business')").get().c;
+    const premium = db.prepare("SELECT COUNT(*) c FROM users WHERE plan IN ('start','pro','business','enterprise')").get().c;
     const blocked = db.prepare("SELECT COUNT(*) c FROM users WHERE status='blocked'").get().c;
     const paidUsers = db.prepare("SELECT COUNT(DISTINCT user_id) c FROM orders WHERE status='paid'").get().c;
     const paidOrders30 = db.prepare("SELECT COUNT(*) c FROM orders WHERE status='paid' AND date(paid_at) >= date('now','-29 days')").get().c;

@@ -19,7 +19,7 @@ const freeCodeLimit = computed(() => free()?.codesPerDay ?? 20);
 const landingPeriod = ref('month');
 const pricingPlans = computed(() => {
   const list = plans.value || [];
-  return ['free', 'start', 'pro', 'business']
+  return ['free', 'pro', 'business', 'enterprise']
     .map((id) => list.find((p) => p.id === id))
     .filter(Boolean);
 });
@@ -32,10 +32,10 @@ const landingFeatures = (plan) => planFeatureRows(plan, { onlyEnabled: true });
 const landingCta = (plan) => plan.id === 'free'
   ? { to: '/register', label: 'Начать бесплатно' }
   : { to: store.user ? '/app/billing' : '/register', label: 'Выбрать ' + plan.title };
-const premiumCodeLimit = computed(() => premium()?.opsPerPeriod ?? 5000);
+const premiumCodeLimit = computed(() => premium()?.opsPerPeriod ?? 20000);
 const minPerMonth = () => {
   const o = premium()?.offers || [];
-  return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 349;
+  return o.length ? Math.min(...o.map(x => x.perMonth ?? Math.round((x.finalPrice ?? x.price) / x.days * 30))) : 590;
 };
 // лучшее предложение = минимальная цена за месяц
 const bestOffer = () => {

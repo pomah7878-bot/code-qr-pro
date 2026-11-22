@@ -8,7 +8,7 @@ import { getSetting } from './settings.js';
 import { logActivity } from './lib/activity.js';
 import { audit } from './lib/audit.js';
 import { productCard } from './lib/product-card.js';
-import { consumeOperations, UsageError } from './lib/usage.js';
+import { consumeOperations, consumeApiCalls, UsageError } from './lib/usage.js';
 
 const hashKey = (k) => createHash('sha256').update(k).digest('hex');
 
@@ -20,6 +20,8 @@ const requireApiKey = async (req, reply) => {
   if (!user) return reply.code(401).send({ error: 'Неверный API-ключ (заголовок X-API-Key)' });
   if (user.status === 'blocked') return reply.code(403).send({ error: 'Аккаунт заблокирован' });
   if (!planOf(user).apiAccess) return reply.code(403).send({ error: 'API доступен на тарифе PRO и выше', feature: 'apiAccess' });
+  try { consumeApiCalls(user, 1, { context: 'api_request' }); }
+  catch (e) { if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, quota: e.payload }); throw e; }
   db.prepare("UPDATE api_keys SET last_used_at=datetime('now') WHERE id=?").run(row.id);
   req.apiUser = user;
 };

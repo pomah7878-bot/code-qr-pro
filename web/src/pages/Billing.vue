@@ -66,7 +66,7 @@ const featuresOf = (plan) => {
   if (plan.features?.labelEditor) f.push('Редактор этикеток и печать с термопринтера');
   if (plan.features?.templates) f.push('Сохранение шаблонов');
   if (plan.features?.apiAccess) f.push('API для 1С и складов');
-  if (plan.features?.aiAssistant) f.push(plan.id === 'free' || plan.id === 'start' ? 'AI-помощник (базовый)' : 'AI-помощник без ограничений');
+  if (plan.features?.aiAssistant) f.push(plan.id === 'free' ? 'AI-помощник (базовый)' : 'AI-помощник без ограничений');
   if (plan.features?.employees > 1) f.push(`До ${plan.features.employees} сотрудников`);
   f.push(`История ${plan.historyDays} дней`);
   return f;
@@ -74,7 +74,7 @@ const featuresOf = (plan) => {
 
 const fmt = (s) => s ? new Date(String(s).includes('T') ? s : String(s).replace(' ', 'T') + 'Z').toLocaleString('ru', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 const statusRu = { pending: 'ожидает оплаты', paid: 'оплачен', canceled: 'отменён' };
-const planTitleOf = (o) => o.plan_title || ({ start: 'START', pro: 'PRO', business: 'BUSINESS', archive: 'Архив', premium: 'PRO' }[o.plan] || o.plan);
+const planTitleOf = (o) => o.plan_title || ({ start: 'START', pro: 'PRO', business: 'BUSINESS', enterprise: 'ENTERPRISE', archive: 'Архив', premium: 'PRO' }[o.plan] || o.plan);
 
 async function load() {
   const data = await api.subscription();
@@ -256,7 +256,7 @@ onUnmounted(() => { plansSyncOff?.(); });
           </div>
         </div>
 
-        <div v-if="usage" class="grid md:grid-cols-2 gap-4 mt-6">
+        <div v-if="usage" class="grid md:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
           <div>
             <div class="flex items-center justify-between text-sm mb-1">
               <span class="font-medium">Операции</span>
@@ -274,6 +274,31 @@ onUnmounted(() => { plansSyncOff?.(); });
             <div v-if="usage.warnings.ops80 && !usage.warnings.ops100" class="text-xs text-amber-500 mt-1">Использовано 80% лимита операций.</div>
             <div v-if="usage.warnings.ops100" class="text-xs text-red-500 mt-1">Лимит операций исчерпан — генерация и печать остановлены до нового периода.</div>
           </div>
+          <div>
+            <div class="flex items-center justify-between text-sm mb-1">
+              <span class="font-medium">Экспорт</span>
+              <span class="text-slate-500">{{ usage.exports.used.toLocaleString('ru') }} / {{ usage.exports.limit.toLocaleString('ru') }}</span>
+            </div>
+            <div class="h-2.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+              <div class="h-full rounded-full transition-all" :class="usage.warnings.exports100 ? 'bg-red-500' : usage.warnings.exports80 ? 'bg-amber-500' : 'bg-sky-500'" :style="{ width: Math.min(100, usage.exports.percent) + '%' }"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Осталось {{ usage.exports.left === null ? '—' : usage.exports.left.toLocaleString('ru') }}</div>
+            <div v-if="usage.warnings.exports80 && !usage.warnings.exports100" class="text-xs text-amber-500 mt-1">Использовано 80% лимита экспорта.</div>
+            <div v-if="usage.warnings.exports100" class="text-xs text-red-500 mt-1">Лимит экспорта исчерпан до нового периода.</div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-sm mb-1">
+              <span class="font-medium">API</span>
+              <span class="text-slate-500">{{ usage.api.used.toLocaleString('ru') }} / {{ usage.api.limit.toLocaleString('ru') }}</span>
+            </div>
+            <div class="h-2.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
+              <div class="h-full rounded-full transition-all" :class="usage.warnings.api100 ? 'bg-red-500' : usage.warnings.api80 ? 'bg-amber-500' : 'bg-indigo-500'" :style="{ width: Math.min(100, usage.api.percent) + '%' }"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">Осталось {{ usage.api.left === null ? '—' : usage.api.left.toLocaleString('ru') }}</div>
+            <div v-if="usage.warnings.api80 && !usage.warnings.api100" class="text-xs text-amber-500 mt-1">Использовано 80% лимита API.</div>
+            <div v-if="usage.warnings.api100" class="text-xs text-red-500 mt-1">Лимит API исчерпан до нового периода.</div>
+          </div>
+
           <div>
             <div class="flex items-center justify-between text-sm mb-1">
               <span class="font-medium">Расширенные проверки</span>

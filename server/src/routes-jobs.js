@@ -1,5 +1,5 @@
 import { db, today, usageToday } from './db.js';
-import { consumeOperations, UsageError } from './lib/usage.js';
+import { consumeOperations, consumeExports, UsageError } from './lib/usage.js';
 import { planOf } from './plans.js';
 import { requireAuth } from './routes.js';
 import { validateRow } from './gs1.js';
@@ -137,6 +137,8 @@ export async function registerJobRoutes(app) {
     if (!['zip', 'pdf'].includes(format)) return reply.code(400).send({ error: 'Формат экспорта: zip или pdf' });
     if (!plan.formats.includes(format)) return reply.code(403).send({ error: `Экспорт ${format.toUpperCase()} недоступен на вашем тарифе`, feature: 'formats' });
     if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
+    try { const idem = String(req.headers['x-idempotency-key'] || '').slice(0, 100); consumeExports(req.user, 1, { idemKey: idem ? idem + ':export' : '', context: 'job_export' }); }
+    catch (e) { if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, quota: e.payload }); throw e; }
     const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);
     const fname = `code-qr-job-${job.id}.${format}`;
 
@@ -202,6 +204,8 @@ export async function registerJobRoutes(app) {
     if (!job) return;
     const plan = planOf(req.user);
     if (!plan.formats.includes('zip')) return reply.code(403).send({ error: 'Скачивание архива доступно на тарифе PREMIUM' });
+    try { const idem = String(req.headers['x-idempotency-key'] || '').slice(0, 100); consumeExports(req.user, 1, { idemKey: idem ? idem + ':archive' : '', context: 'job_archive' }); }
+    catch (e) { if (e instanceof UsageError) return reply.code(e.statusCode || 402).send({ error: e.message, quota: e.payload }); throw e; }
     let key = job.artifact_key;
     let backend = job.artifact_backend || 'local';
     if (!key || (backend !== 's3' && !artifactExists(key))) {

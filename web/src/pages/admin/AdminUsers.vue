@@ -82,7 +82,8 @@ onMounted(load);
         <select id="admin-user-plan" v-model="filters.plan" class="input !py-2 text-sm">
           <option value="">Все</option>
           <option value="free">FREE</option>
-          <option value="start">START</option>
+          <option value="start">START (legacy)</option>
+          <option value="enterprise">ENTERPRISE</option>
           <option value="pro">PRO</option>
           <option value="business">BUSINESS</option>
         </select>

@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import PublicShell from '../components/PublicShell.vue';
 import BrandIcon from '../components/BrandIcon.vue';
 import { LEGAL, LEGAL_DOCS, LEGAL_DOC_LIST } from '../content/legal.js';
 import { applySeo } from '../lib/seo.js';
+import { api } from '../api.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 
 const props = defineProps({
   slug: { type: String, required: true }
@@ -12,6 +14,33 @@ const props = defineProps({
 const doc = computed(() => LEGAL_DOCS[props.slug] || LEGAL_DOCS.offer);
 const isCurrent = (s) => s === props.slug;
 const sectionId = (i) => 'section-' + (i + 1);
+
+const plans = ref([]);
+const plansSyncOff = ref(null);
+const offerPlans = computed(() => (plans.value || []).filter((p) => p.id !== 'archive' && p.active !== false));
+const money = (n) => Number(n || 0).toLocaleString('ru');
+const planFormats = (p) => (Array.isArray(p.formats) ? p.formats : []).map((x) => String(x).toUpperCase()).join(', ');
+const planFunctions = (p) => {
+  const f = p.features || {};
+  const out = [];
+  if (f.labelEditor) out.push('редактор этикеток');
+  if (f.printBridge) out.push('Print Bridge');
+  if (f.templates) out.push('шаблоны');
+  if (f.apiAccess) out.push('API');
+  if (f.aiAssistant) out.push('AI-помощник');
+  if (f.employees > 1) out.push(`до ${f.employees} сотрудников`);
+  return out.join(', ');
+};
+const planOps = (p) => {
+  const ops = Number(p.opsPerPeriod || 0).toLocaleString('ru');
+  return p.dailyOps ? `${ops} (до ${Number(p.dailyOps).toLocaleString('ru')}/день)` : ops;
+};
+async function loadPlans() {
+  try {
+    const d = await api.plans();
+    plans.value = d.list || d.plans || [];
+  } catch { /* таблица останется скрытой */ }
+}
 
 function printDoc() { window.print(); }
 
@@ -22,8 +51,16 @@ function sync() {
     description: d.short
   });
 }
-onMounted(sync);
-watch(() => props.slug, sync);
+onMounted(async () => {
+  sync();
+  if (props.slug === 'offer') await loadPlans();
+  plansSyncOff.value = onPlansChanged(loadPlans);
+});
+onUnmounted(() => { plansSyncOff.value?.(); });
+watch(() => props.slug, async () => {
+  sync();
+  if (props.slug === 'offer') await loadPlans();
+});
 </script>
 
 <template>
@@ -66,6 +103,35 @@ watch(() => props.slug, sync);
             <h2 class="font-display font-semibold text-lg sm:text-xl mb-3">{{ s.title }}</h2>
             <div class="space-y-3 text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
               <p v-for="(p, j) in s.paragraphs" :key="j" class="whitespace-pre-wrap">{{ p }}</p>
+            </div>
+            <div v-if="props.slug === 'offer' && s.title.startsWith('4.') && offerPlans.length" class="mt-4 overflow-x-auto">
+              <table class="w-full min-w-[760px] text-xs sm:text-sm border-collapse">
+                <thead>
+                  <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
+                    <th class="py-2 pr-3">Тариф</th>
+                    <th class="py-2 pr-3 whitespace-nowrap">Цена/мес</th>
+                    <th class="py-2 pr-3 whitespace-nowrap">Цена/год</th>
+                    <th class="py-2 pr-3">Операции</th>
+                    <th class="py-2 pr-3">Проверки</th>
+                    <th class="py-2 pr-3">История</th>
+                    <th class="py-2 pr-3">Архив</th>
+                    <th class="py-2">Функции</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in offerPlans" :key="p.id" class="border-b border-slate-100 dark:border-white/5 last:border-0 align-top">
+                    <td class="py-2 pr-3 font-semibold whitespace-nowrap">{{ p.title }}</td>
+                    <td class="py-2 pr-3 whitespace-nowrap">{{ money(p.priceMonthly) }} ₽</td>
+                    <td class="py-2 pr-3 whitespace-nowrap">{{ money(p.priceYearly) }} ₽</td>
+                    <td class="py-2 pr-3">{{ planOps(p) }}</td>
+                    <td class="py-2 pr-3">{{ p.checksPerPeriod > 0 ? Number(p.checksPerPeriod).toLocaleString('ru') : '—' }}</td>
+                    <td class="py-2 pr-3 whitespace-nowrap">{{ p.historyDays }} дн.</td>
+                    <td class="py-2 pr-3 whitespace-nowrap">{{ Number(p.archiveMb || 0).toLocaleString('ru') }} МБ</td>
+                    <td class="py-2">{{ [planFormats(p), planFunctions(p)].filter(Boolean).join(' · ') || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="text-[11px] text-slate-500 mt-2">Цены и лимиты обновляются автоматически из настроек тарифов. Годовая оплата = 10 месячных платежей (2 месяца в подарок).</p>
             </div>
           </section>
         </div>

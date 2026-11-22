@@ -4,7 +4,7 @@ export const FAQ_CATEGORIES = [
   { id: 'start', title: 'Начало работы', icon: 'rocket' },
   { id: 'generate', title: 'Генерация и форматы', icon: 'grid' },
   { id: 'print', title: 'Печать и этикетки', icon: 'print' },
-  { id: 'cz', title: '«Честный ЗНАК» и проверка', icon: 'check' },
+  { id: 'cz', title: '«Честный ЗНАК» и проверка', icon: 'cz' },
   { id: 'billing', title: 'Тарифы и оплата', icon: 'card' },
   { id: 'account', title: 'Аккаунт и безопасность', icon: 'shield' },
   { id: 'api', title: 'API и интеграции', icon: 'code' },

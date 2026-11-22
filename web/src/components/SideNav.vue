@@ -16,7 +16,7 @@ const items = [
   ...(!store.user?.teamMember ? [{ icon: 'billing', t: 'Подписка', to: '/app/billing' }, { icon: 'api', t: 'API', to: '/app/apikeys' }] : []),
   { icon: 'cz', t: 'Честный ЗНАК', to: '/app/cz' },
   { icon: 'cz', t: 'Проверка GTIN', href: '/check' },
-  ...(!store.user?.teamMember ? [{ icon: 'overview', t: 'Команда', to: '/app/team' }] : []),
+  ...(!store.user?.teamMember && store.user?.role === 'user' ? [{ icon: 'overview', t: 'Команда', to: '/app/team' }] : []),
   { icon: 'star', t: 'Отзывы', to: '/app/reviews' },
   { icon: 'help', t: 'Помощь', to: '/app/help' },
   { icon: 'ai', t: 'AI-помощник', action: 'assistant' },

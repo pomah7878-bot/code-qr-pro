@@ -14,6 +14,8 @@ const Generator = () => import('./pages/Generator.vue');
 const Labels = () => import('./pages/Labels.vue');
 const Reprint = () => import('./pages/Reprint.vue');
 const Security = () => import('./pages/Security.vue');
+const Team = () => import('./pages/Team.vue');
+const TeamAccept = () => import('./pages/TeamAccept.vue');
 const History = () => import('./pages/History.vue');
 const Sets = () => import('./pages/Sets.vue');
 const Billing = () => import('./pages/Billing.vue');
@@ -74,6 +76,8 @@ const router = createRouter({
     { path: '/app/cz', component: Cz, meta: { auth: true } },
     { path: '/app/reviews', component: Reviews, meta: { auth: true } },
     { path: '/app/security', component: Security, meta: { auth: true } },
+    { path: '/app/team', component: Team, meta: { auth: true, owner: true } },
+    { path: '/team/accept', component: TeamAccept },
     { path: '/app/history', component: History, meta: { auth: true } },
     { path: '/app/assistant', component: Assistant, meta: { auth: true } },
     { path: '/app/help', component: Help, meta: { auth: true } },
@@ -111,6 +115,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (!store.ready) await store.load();
   if (to.meta.auth && !store.user) return '/login';
+  if (to.meta.owner && store.user?.teamMember) return '/app';
   if (to.meta.admin && !['admin', 'support'].includes(store.user?.role)) return '/app';
   if (to.meta.adminOnly && store.user?.role !== 'admin') return '/app/admin/users';
   if ((to.path === '/login' || to.path === '/register') && store.user) return '/app';

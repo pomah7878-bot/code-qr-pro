@@ -8,8 +8,8 @@ export function audit(req, action, targetType = '', targetId = '', meta = {}) {
       VALUES (?,?,?,?,?,?,?,?)`
     ).run(
       req.user?.id || null,
-      req.user?.email || '',
-      req.user?.role || '',
+      req.user?.teamMemberEmail || req.user?.email || '',
+      req.user?.teamMemberId ? 'team:' + (req.user.teamMemberRole || 'operator') : (req.user?.role || ''),
       String(action).slice(0, 80),
       String(targetType).slice(0, 40),
       String(targetId).slice(0, 60),

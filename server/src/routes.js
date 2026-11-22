@@ -120,6 +120,15 @@ export const requireAuth = async (req, reply) => {
     return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
   }
   const path = String(req.url || '').split('?')[0];
+  if (user.teamMemberId && user.teamMemberRole === 'viewer' && !['GET', 'HEAD'].includes(req.method)) {
+    return reply.code(403).send({ error: 'Роль «Просмотр»: только чтение', code: 'team_viewer_readonly' });
+  }
+  if (user.teamMemberId) {
+    const blocked = ['/api/billing', '/api/team', '/api/admin', '/api/keys', '/api/auth/password', '/api/auth/2fa', '/api/settings'];
+    if (blocked.some((prefix) => path === prefix || path.startsWith(prefix + '/'))) {
+      return reply.code(403).send({ error: 'Доступно только владельцу аккаунта', code: 'team_member_forbidden' });
+    }
+  }
   if (!impersonatedBy && user.must_change_password && !PASSWORD_EXEMPT.has(path)) {
     return reply.code(428).send({ error: 'Сначала смените временный пароль', code: 'password_change_required' });
   }

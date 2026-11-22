@@ -715,7 +715,23 @@ const MIGRATIONS = [
   DELETE FROM app_settings WHERE key='premium_offers';
   INSERT INTO app_settings (key,value) VALUES ('trial_days','7') ON CONFLICT(key) DO UPDATE SET value='7';`,
   // v45 — сохранить экспортный лимит для legacy-тарифа START
-  `UPDATE plans SET exports_per_period=200 WHERE id='start' AND exports_per_period=0;`
+  `UPDATE plans SET exports_per_period=200 WHERE id='start' AND exports_per_period=0;`,
+  // v46 — командный доступ: приглашённые сотрудники с сессией владельца
+  `CREATE TABLE IF NOT EXISTS team_members (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     email TEXT NOT NULL,
+     name TEXT NOT NULL DEFAULT '',
+     role TEXT NOT NULL DEFAULT 'operator',
+     token_hash TEXT NOT NULL,
+     status TEXT NOT NULL DEFAULT 'invited',
+     expires_at TEXT,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     last_login_at TEXT,
+     revoked_at TEXT
+   );
+   CREATE INDEX IF NOT EXISTS idx_team_owner ON team_members(owner_id, status);
+   ALTER TABLE sessions ADD COLUMN team_member_id INTEGER;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

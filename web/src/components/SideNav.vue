@@ -13,13 +13,14 @@ const items = [
   { icon: 'label', t: 'Этикетки', to: '/app/labels' },
   { icon: 'set', t: 'Наборы', to: '/app/sets' },
   { icon: 'print', t: 'Повторная печать', to: '/app/reprint' },
-  { icon: 'billing', t: 'Подписка', to: '/app/billing' },
-  { icon: 'api', t: 'API', to: '/app/apikeys' },
+  ...(!store.user?.teamMember ? [{ icon: 'billing', t: 'Подписка', to: '/app/billing' }, { icon: 'api', t: 'API', to: '/app/apikeys' }] : []),
   { icon: 'cz', t: 'Честный ЗНАК', to: '/app/cz' },
+  { icon: 'cz', t: 'Проверка GTIN', href: '/check' },
+  ...(!store.user?.teamMember ? [{ icon: 'overview', t: 'Команда', to: '/app/team' }] : []),
   { icon: 'star', t: 'Отзывы', to: '/app/reviews' },
   { icon: 'help', t: 'Помощь', to: '/app/help' },
   { icon: 'ai', t: 'AI-помощник', action: 'assistant' },
-  { icon: 'lock', t: 'Безопасность', to: '/app/security' },
+  ...(!store.user?.teamMember ? [{ icon: 'lock', t: 'Безопасность', to: '/app/security' }] : []),
   ...(['admin', 'support'].includes(store.user?.role) ? [{ icon: 'settings', t: 'Админка', to: '/app/admin' }] : [])
 ];
 function onClick(n) {
@@ -61,8 +62,9 @@ watch(() => route.path, centerActive);
   <!-- desktop: вертикальный сайдбар -->
   <aside class="hidden lg:block glass rounded-2xl p-4 h-fit">
     <div class="px-3 py-2 mb-2">
-      <div class="font-semibold truncate">{{ store.user?.name || store.user?.email }}</div>
-      <div class="text-xs text-slate-500 truncate">{{ store.user?.email }}</div>
+      <div class="font-semibold truncate">{{ store.user?.teamMember?.name || store.user?.name || store.user?.email }}</div>
+      <div class="text-xs text-slate-500 truncate">{{ store.user?.teamMember?.email || store.user?.email }}</div>
+      <div v-if="store.user?.teamMember" class="text-[10px] text-brand-400 mt-1">Сотрудник · {{ store.user.teamMember.role === 'viewer' ? 'просмотр' : 'доступ' }}</div>
     </div>
     <nav class="space-y-1">
       <template v-for="n in items" :key="n.t">

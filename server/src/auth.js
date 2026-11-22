@@ -23,8 +23,8 @@ export function createSession(userId, meta = {}) {
   const publicId = randomBytes(16).toString('hex');
   const days = Number(meta.days) || SESSION_DAYS;
   const expires = new Date(Date.now() + days * 86400_000).toISOString();
-  db.prepare('INSERT INTO sessions (token, public_id, user_id, expires_at, ip, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))')
-    .run(token, publicId, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200));
+  db.prepare('INSERT INTO sessions (token, public_id, user_id, expires_at, ip, user_agent, last_used_at, team_member_id) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'), ?)')
+    .run(token, publicId, userId, expires, String(meta.ip || '').slice(0, 60), String(meta.ua || '').slice(0, 200), meta.teamMemberId || null);
   return { token, publicId, expires };
 }
 
@@ -33,7 +33,7 @@ export function sessionUser(token) {
   const row = db.prepare(
     `SELECT u.id, u.email, u.name, u.role, u.plan, u.status, u.must_change_password, u.totp_enabled, u.created_at,
             u.cz_token,
-            s.last_used_at, s.created_at AS session_created_at
+            s.last_used_at, s.created_at AS session_created_at, s.team_member_id
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > datetime('now')`
   ).get(token);
@@ -47,6 +47,14 @@ export function sessionUser(token) {
     }
   }
   db.prepare("UPDATE sessions SET last_used_at=datetime('now') WHERE token = ?").run(token);
+  if (row.team_member_id) {
+    const member = db.prepare("SELECT id, owner_id, email, name, role FROM team_members WHERE id=? AND owner_id=? AND status='active' AND revoked_at IS NULL").get(row.team_member_id, row.id);
+    if (!member) return null;
+    row.teamMemberId = member.id;
+    row.teamMemberEmail = member.email;
+    row.teamMemberName = member.name;
+    row.teamMemberRole = member.role;
+  }
   return row;
 }
 
@@ -64,6 +72,9 @@ export function publicUser(u) {
     status: u.status || 'active',
     mustChangePassword: Boolean(u.must_change_password),
     twoFactorEnabled: Boolean(u.totp_enabled),
-    createdAt: u.created_at
+    createdAt: u.created_at,
+    teamMember: u.teamMemberId ? {
+      id: u.teamMemberId, email: u.teamMemberEmail || '', name: u.teamMemberName || '', role: u.teamMemberRole || 'operator'
+    } : null
   };
 }

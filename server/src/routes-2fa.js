@@ -1,6 +1,6 @@
 import bwipjs from 'bwip-js';
 import { db } from './db.js';
-import { verifyPassword, createSession, publicUser, sessionDaysFor } from './auth.js';
+import { verifyPassword, createSession, publicUser, publicWorkspace, workspaceFor, sessionDaysFor } from './auth.js';
 import { requireAuth } from './routes.js';
 import {
   generateSecret, verifyTotp, otpauthUrl, generateBackupCodes, hashBackupCodes, consumeBackupCode
@@ -99,14 +99,16 @@ export async function registerTwoFactorRoutes(app) {
     if (!ok) return reply.code(401).send({ error: 'Неверный код' });
 
     clearTicket(ticket.n);
+    const workspace = user.owner_id ? workspaceFor(user) : null;
+    if (user.owner_id && !workspace) return reply.code(403).send({ error: 'Доступ к аккаунту команды отозван' });
     db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
-    const { token, expires } = createSession(user.id, {
-      ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role)
+    const { token, expires } = createSession(workspace ? workspace.owner.id : user.id, {
+      ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(workspace ? workspace.owner.role : user.role), teamMemberId: workspace?.member.id
     });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
-    req.user = user;
+    req.user = workspace ? { ...workspace.owner, teamMemberId: workspace.member.id, teamMemberEmail: workspace.member.email, teamMemberRole: workspace.member.role } : user;
     logLogin({ userId: user.id, email: user.email, ok: true, reason: '2fa', ip: req.ip, ua: req.headers['user-agent'] });
     audit(req, 'auth.2fa.login', 'user', String(user.id), {});
-    return { user: publicUser(user) };
+    return { user: workspace ? publicWorkspace(workspace.owner, workspace.member) : publicUser(user) };
   });
 }

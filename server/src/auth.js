@@ -48,12 +48,13 @@ export function sessionUser(token) {
   }
   db.prepare("UPDATE sessions SET last_used_at=datetime('now') WHERE token = ?").run(token);
   if (row.team_member_id) {
-    const member = db.prepare("SELECT id, owner_id, email, name, role FROM team_members WHERE id=? AND owner_id=? AND status='active' AND revoked_at IS NULL").get(row.team_member_id, row.id);
+    const member = db.prepare("SELECT id, owner_id, user_id, email, name, role FROM team_members WHERE id=? AND owner_id=? AND status='active' AND revoked_at IS NULL").get(row.team_member_id, row.id);
     if (!member) return null;
     row.teamMemberId = member.id;
     row.teamMemberEmail = member.email;
     row.teamMemberName = member.name;
     row.teamMemberRole = member.role;
+    row.teamMemberUserId = member.user_id || null;
   }
   return row;
 }
@@ -66,6 +67,19 @@ export function destroySession(token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
+export function workspaceFor(user) {
+  if (!user?.owner_id) return null;
+  const member = db.prepare("SELECT * FROM team_members WHERE user_id=? AND owner_id=? AND status='active' AND revoked_at IS NULL").get(user.id, user.owner_id);
+  if (!member) return null;
+  const owner = db.prepare('SELECT * FROM users WHERE id=?').get(user.owner_id);
+  if (!owner || owner.status === 'blocked') return null;
+  return { owner, member };
+}
+
+export function publicWorkspace(owner, member) {
+  return publicUser({ ...owner, teamMemberId: member.id, teamMemberEmail: member.email, teamMemberName: member.name, teamMemberRole: member.role, teamMemberUserId: member.user_id || null });
+}
+
 export function publicUser(u) {
   return {
     id: u.id, email: u.email, name: u.name, role: u.role, plan: u.plan,
@@ -74,7 +88,7 @@ export function publicUser(u) {
     twoFactorEnabled: Boolean(u.totp_enabled),
     createdAt: u.created_at,
     teamMember: u.teamMemberId ? {
-      id: u.teamMemberId, email: u.teamMemberEmail || '', name: u.teamMemberName || '', role: u.teamMemberRole || 'operator'
+      id: u.teamMemberId, userId: u.teamMemberUserId || null, email: u.teamMemberEmail || '', name: u.teamMemberName || '', role: u.teamMemberRole || 'operator'
     } : null
   };
 }

@@ -9,6 +9,10 @@ const error = ref('');
 const notice = ref('');
 const busy = ref(false);
 const info = ref(null);
+const password = ref('');
+const password2 = ref('');
+const acceptTerms = ref(false);
+const formError = ref('');
 const token = String(new URLSearchParams(window.location.search).get('token') || '');
 
 async function load() {
@@ -18,9 +22,13 @@ async function load() {
 }
 
 async function accept() {
-  busy.value = true; error.value = '';
+  error.value = ''; formError.value = '';
+  if (password.value.length < 8) { formError.value = 'Пароль минимум 8 символов'; return; }
+  if (password.value !== password2.value) { formError.value = 'Пароли не совпадают'; return; }
+  if (!acceptTerms.value) { formError.value = 'Подтвердите принятие условий'; return; }
+  busy.value = true;
   try {
-    const r = await api.teamAccept(token);
+    const r = await api.teamAccept({ token, password: password.value, name: info.value?.name || '', acceptTerms: true });
     store.setSession(r);
     router.push('/app');
   } catch (e) { error.value = e.message; }
@@ -46,8 +54,20 @@ onMounted(load);
           <div>Роль: <b>{{ info.roleLabel }}</b></div>
           <div class="text-xs text-slate-500">Ссылка действует до {{ info.expiresAt }}.</div>
         </div>
-        <button class="btn-primary w-full mt-5" :disabled="busy" @click="accept">{{ busy ? 'Входим…' : 'Принять приглашение и войти' }}</button>
-        <p class="text-[11px] text-slate-500 mt-3">Вы получите доступ к данным и инструментам аккаунта владельца. Владелец может отозвать доступ в разделе «Команда».</p>
+        <div class="mt-4 space-y-3">
+          <div>
+            <label class="label !text-xs" for="team-password">Пароль для личного входа</label>
+            <input id="team-password" v-model="password" type="password" class="input !py-2 text-sm" autocomplete="new-password" placeholder="Минимум 8 символов">
+          </div>
+          <div>
+            <label class="label !text-xs" for="team-password2">Повторите пароль</label>
+            <input id="team-password2" v-model="password2" type="password" class="input !py-2 text-sm" autocomplete="new-password">
+          </div>
+          <label class="flex items-start gap-2 text-xs"><input v-model="acceptTerms" type="checkbox" class="mt-0.5">Принимаю условия обслуживания и обработку персональных данных</label>
+          <p v-if="formError" class="text-sm text-red-500">{{ formError }}</p>
+        </div>
+        <button class="btn-primary w-full mt-4" :disabled="busy" @click="accept">{{ busy ? 'Создаём доступ…' : 'Создать личный вход и войти' }}</button>
+        <p class="text-[11px] text-slate-500 mt-3">После активации вы сможете входить на /login по email и паролю. Вы получите доступ к данным аккаунта владельца; он может отозвать доступ в разделе «Команда».</p>
       </template>
     </div>
   </div>

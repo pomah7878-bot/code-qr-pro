@@ -115,13 +115,14 @@ onMounted(load);
               <div class="text-sm font-medium truncate">{{ m.name || m.email }}</div>
               <div class="text-xs text-slate-500 truncate">{{ m.email }} · {{ m.roleLabel || roleLabel(m.role) }} · {{ statusLabel(m.status) }}</div>
             </div>
-            <button class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="reinvite(m)">{{ m.status === 'active' ? 'Новая ссылка' : 'Отправить снова' }}</button>
+            <button v-if="!m.hasAccount" class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="reinvite(m)">Отправить снова</button>
+            <span v-else class="text-[11px] text-slate-500">Личный вход</span>
             <button class="btn-ghost !py-1.5 !px-2.5 text-xs text-red-500" :disabled="busy" @click="removeMember(m)">Отозвать</button>
           </div>
         </div>
 
         <p v-if="data.seats.used > data.seats.limit" class="text-xs text-amber-500">На тарифе сейчас меньше мест, чем сотрудников ({{ data.seats.used }} из {{ data.seats.limit }}). Новые приглашения заблокированы; отзовите лишние доступы или смените тариф.</p>
-        <p class="text-xs text-slate-500">Владелец аккаунта не занимает место в команде. Сотрудник входит по ссылке из письма. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
+        <p class="text-xs text-slate-500">Владелец аккаунта не занимает место в команде. Сотрудник активирует личный вход по ссылке и дальше входит на /login по email и паролю. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
       </template>
       <div v-else-if="!error" class="text-sm text-slate-500">Загрузка…</div>
     </section>

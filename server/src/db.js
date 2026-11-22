@@ -731,7 +731,11 @@ const MIGRATIONS = [
      revoked_at TEXT
    );
    CREATE INDEX IF NOT EXISTS idx_team_owner ON team_members(owner_id, status);
-   ALTER TABLE sessions ADD COLUMN team_member_id INTEGER;`
+   ALTER TABLE sessions ADD COLUMN team_member_id INTEGER;`,
+  // v47 — личные аккаунты сотрудников
+  `ALTER TABLE team_members ADD COLUMN user_id INTEGER;
+   ALTER TABLE users ADD COLUMN owner_id INTEGER;
+   ALTER TABLE users ADD COLUMN member_role TEXT NOT NULL DEFAULT '';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

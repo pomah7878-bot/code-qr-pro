@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import { getPlan } from './plans.js';
-import { createSession, publicUser } from './auth.js';
+import { createSession, publicUser, publicWorkspace, hashPassword } from './auth.js';
 import { sendMail, publicUrl } from './lib/mailer.js';
 import { renderBrandEmail } from './lib/email-template.js';
 import { logLogin } from './lib/auth-events.js';
@@ -54,7 +54,7 @@ async function sendInviteEmail(member, owner, token) {
     title: 'Вас пригласили в команду CODE QR PRO',
     badge: 'Командный доступ',
     preheader: `${owner.name || owner.email} приглашает вас в CODE QR PRO`,
-    intro: `Владелец аккаунта ${owner.name || owner.email} приглашает вас в команду CODE QR PRO.\n\nРоль: ${ROLE_LABEL[member.role] || member.role}.\nСсылка действует 7 дней.`,
+    intro: `Владелец аккаунта ${owner.name || owner.email} приглашает вас в команду CODE QR PRO.\n\nРоль: ${ROLE_LABEL[member.role] || member.role}.\nПерейдите по ссылке и задайте пароль для личного входа. Ссылка действует 7 дней.`,
     notice: 'Если вы не ожидали приглашение — просто проигнорируйте письмо.',
     noticeTone: 'warn',
     ctaLabel: 'Принять приглашение',
@@ -73,13 +73,13 @@ export async function registerTeamRoutes(app) {
   app.get('/api/team', { preHandler: ownerOnly }, async (req) => {
     const owner = req.user;
     const seats = seatInfo(owner);
-    const rows = db.prepare(`SELECT id, email, name, role, status, created_at, last_login_at, expires_at
+    const rows = db.prepare(`SELECT id, user_id, email, name, role, status, created_at, last_login_at, expires_at
       FROM team_members WHERE owner_id=? AND revoked_at IS NULL ORDER BY id DESC`).all(owner.id);
     return {
       seats,
       members: rows.map((m) => ({
         id: m.id, email: m.email, name: m.name, role: m.role, roleLabel: ROLE_LABEL[m.role] || m.role,
-        status: m.status, createdAt: m.created_at, lastLoginAt: m.last_login_at, expiresAt: m.expires_at
+        status: m.status, hasAccount: Boolean(m.user_id), createdAt: m.created_at, lastLoginAt: m.last_login_at, expiresAt: m.expires_at
       }))
     };
   });
@@ -91,6 +91,7 @@ export async function registerTeamRoutes(app) {
     const role = req.body?.role === 'viewer' ? 'viewer' : 'operator';
     if (!EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
     if (email === String(owner.email || '').toLowerCase()) return reply.code(400).send({ error: 'Нельзя пригласить владельца аккаунта' });
+    if (db.prepare('SELECT id FROM users WHERE email=?').get(email)) return reply.code(409).send({ error: 'Этот email уже зарегистрирован. Используйте другой.' });
     const seats = seatInfo(owner);
     if (seats.available <= 0) {
       return reply.code(409).send({ error: `Лимит сотрудников на тарифе ${owner.plan.toUpperCase()}: ${seats.limit}. Освободите место или смените тариф.`, code: 'team_seats_exhausted' });
@@ -117,6 +118,9 @@ export async function registerTeamRoutes(app) {
     const owner = req.user;
     const member = db.prepare('SELECT * FROM team_members WHERE id=? AND owner_id=? AND revoked_at IS NULL').get(Number(req.params.id), owner.id);
     if (!member) return reply.code(404).send({ error: 'Сотрудник не найден' });
+    if (member.user_id && member.status === 'active') {
+      return reply.code(409).send({ error: 'Сотрудник уже активировал личный вход. Для смены пароля используйте «Забыли пароль» на странице входа.' });
+    }
     const token = randomBytes(24).toString('hex');
     const nextStatus = member.status === 'active' ? 'active' : 'invited';
     db.prepare("UPDATE team_members SET token_hash=?, status=?, expires_at=datetime('now','+7 days') WHERE id=?").run(tokenHash(token), nextStatus, member.id);
@@ -132,6 +136,7 @@ export async function registerTeamRoutes(app) {
     const member = db.prepare('SELECT * FROM team_members WHERE id=? AND owner_id=? AND revoked_at IS NULL').get(Number(req.params.id), owner.id);
     if (!member) return reply.code(404).send({ error: 'Сотрудник не найден' });
     db.transaction(() => {
+      if (member.user_id) db.prepare("UPDATE users SET status='blocked', owner_id=NULL, member_role='' WHERE id=?").run(member.user_id);
       db.prepare("UPDATE team_members SET status='revoked', revoked_at=datetime('now') WHERE id=?").run(member.id);
       db.prepare('DELETE FROM sessions WHERE team_member_id=?').run(member.id);
     })();
@@ -168,15 +173,28 @@ export async function registerTeamRoutes(app) {
     }
     const owner = db.prepare("SELECT * FROM users WHERE id=? AND status='active'").get(member.owner_id);
     if (!owner) return reply.code(403).send({ error: 'Аккаунт владельца недоступен' });
-    db.prepare("UPDATE team_members SET status='active', last_login_at=datetime('now') WHERE id=?").run(member.id);
+    if (req.body?.acceptTerms !== true) return reply.code(400).send({ error: 'Подтвердите принятие условий' });
+    const password = String(req.body?.password || '');
+    if (password.length < 8) return reply.code(400).send({ error: 'Пароль минимум 8 символов' });
+    if (password.length > 200) return reply.code(400).send({ error: 'Слишком длинный пароль' });
+    const name = String(req.body?.name || member.name || '').trim().slice(0, 100);
+    const existing = db.prepare('SELECT id FROM users WHERE email=?').get(member.email);
+    if (existing) return reply.code(409).send({ error: 'Email уже зарегистрирован. Войдите в существующий аккаунт или используйте другой email.', code: 'email_exists' });
+    const passwordHash = hashPassword(password);
+    let userId;
+    db.transaction(() => {
+      userId = db.prepare("INSERT INTO users (email, password_hash, name, role, plan, status, owner_id, member_role) VALUES (?,?,?,'user','free','active',?,?)")
+        .run(member.email, passwordHash, name, owner.id, member.role).lastInsertRowid;
+      db.prepare("UPDATE team_members SET user_id=?, status='active', last_login_at=datetime('now'), expires_at=NULL, token_hash=? WHERE id=?")
+        .run(userId, randomBytes(24).toString('hex'), member.id);
+    })();
+    db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(userId);
     const { token, expires } = createSession(owner.id, {
       teamMemberId: member.id, ip: req.ip, ua: req.headers['user-agent'], days: 30
     });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
-    logLogin({ userId: owner.id, email: member.email, ok: true, reason: 'team_invite', ip: req.ip, ua: req.headers['user-agent'] });
+    logLogin({ userId, email: member.email, ok: true, reason: 'team_accept', ip: req.ip, ua: req.headers['user-agent'] });
     audit({ user: { ...owner, teamMemberId: member.id, teamMemberEmail: member.email, teamMemberRole: member.role }, ip: req.ip, headers: req.headers }, 'team.accept', 'team_member', String(member.id), { email: member.email });
-    return {
-      user: publicUser({ ...owner, teamMemberId: member.id, teamMemberEmail: member.email, teamMemberName: member.name, teamMemberRole: member.role })
-    };
+    return { user: publicWorkspace({ ...owner, id: owner.id }, { ...member, user_id: userId }) };
   });
 }

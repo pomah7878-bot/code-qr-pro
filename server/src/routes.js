@@ -1,7 +1,7 @@
 import { randomInt, createHash, timingSafeEqual } from 'node:crypto';
 import { db, usageToday } from './db.js';
 import { recordConversion } from './lib/analytics.js';
-import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser, sessionDaysFor } from './auth.js';
+import { hashPassword, verifyPassword, createSession, sessionUser, destroySession, publicUser, publicWorkspace, workspaceFor, sessionDaysFor } from './auth.js';
 import { PLANS, planOf, publicPlans, listPlans } from './plans.js';
 import { entitlements } from './lib/subscription.js';
 import { notifyRegistration } from './notify.js';
@@ -195,14 +195,20 @@ export async function registerRoutes(app) {
       return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
     }
     clearLoginFails(normalizedEmail);
+    const workspace = user.owner_id ? workspaceFor(user) : null;
+    if (user.owner_id && !workspace) {
+      logLogin({ userId: user.id, email: normalizedEmail, ok: false, reason: 'team_revoked', ip: req.ip, ua: req.headers['user-agent'] });
+      return reply.code(403).send({ error: 'Доступ к аккаунту команды отозван. Обратитесь к владельцу.' });
+    }
     if (user.totp_enabled) {
       return { twoFactor: true, ticket: issueTicket(user.id), email: user.email };
     }
     db.prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=?").run(user.id);
-    const { token, expires } = createSession(user.id, { ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(user.role) });
+    const loginOwnerId = workspace ? workspace.owner.id : user.id;
+    const { token, expires } = createSession(loginOwnerId, { ip: req.ip, ua: req.headers['user-agent'], days: sessionDaysFor(workspace ? workspace.owner.role : user.role), teamMemberId: workspace?.member.id });
     reply.setCookie(COOKIE, token, cookieOpts(new Date(expires)));
-    logLogin({ userId: user.id, email: normalizedEmail, ok: true, reason: 'password', ip: req.ip, ua: req.headers['user-agent'] });
-    return { user: publicUser(user) };
+    logLogin({ userId: user.id, email: normalizedEmail, ok: true, reason: workspace ? 'team_password' : 'password', ip: req.ip, ua: req.headers['user-agent'] });
+    return { user: workspace ? publicWorkspace(workspace.owner, workspace.member) : publicUser(user) };
   });
 
   // Одноразовая ссылка входа, которую выдаёт админ для быстрой помощи клиенту.

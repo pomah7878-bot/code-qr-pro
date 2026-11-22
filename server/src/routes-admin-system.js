@@ -152,7 +152,8 @@ export async function registerAdminSystemRoutes(app) {
       external: externalStats(),
       errors: recentErrors(),
       backups: { ...b, log: latestBackupLog() },
-      maintenance: getSetting('maintenance_mode', '0') === '1'
+      maintenance: getSetting('maintenance_mode', '0') === '1',
+      maintenanceUntil: getSetting('maintenance_until', '') || ''
     };
     status.alerts = alerts(status);
     return status;
@@ -160,8 +161,10 @@ export async function registerAdminSystemRoutes(app) {
 
   app.put('/api/admin/system/maintenance', { preHandler: requireAdmin }, async (req, reply) => {
     const enabled = Boolean(req.body?.enabled);
+    const until = enabled ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : '';
     setSetting('maintenance_mode', enabled ? '1' : '0');
-    audit(req, 'system.maintenance', 'settings', 'maintenance', { enabled });
-    return { ok: true, enabled };
+    setSetting('maintenance_until', until);
+    audit(req, 'system.maintenance', 'settings', 'maintenance', { enabled, until });
+    return { ok: true, enabled, until };
   });
 }

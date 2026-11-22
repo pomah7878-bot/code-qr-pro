@@ -165,12 +165,12 @@ onMounted(load);
 
       <div class="glass rounded-2xl p-5">
         <div class="font-semibold mb-3">Режим обслуживания</div>
-        <p class="text-xs text-slate-500 mb-3">Клиенты получат страницу обслуживания; здоровье API и вебхуки останутся доступны. Включайте только на время работ.</p>
+        <p class="text-xs text-slate-500 mb-3">Клиенты получат страницу обслуживания; здоровье API и вебхуки останутся доступны. Режим автоматически выключится через 60 минут.</p>
         <div class="flex items-center gap-3">
           <button class="btn-primary !py-2 text-sm" :disabled="busy" :data-tooltip="data.maintenance ? 'Выключить режим обслуживания' : 'Включить режим обслуживания'" @click="toggleMaintenance">
             {{ data.maintenance ? 'Выключить обслуживание' : 'Включить обслуживание' }}
           </button>
-          <span class="text-xs" :class="data.maintenance ? 'text-amber-500' : 'text-slate-500'">{{ data.maintenance ? 'включён' : 'выключен' }}</span>
+          <span class="text-xs" :class="data.maintenance ? 'text-amber-500' : 'text-slate-500'">{{ data.maintenance ? 'включён до ' + fmtDateTime(data.maintenanceUntil) : 'выключен' }}</span>
         </div>
       </div>
     </div>

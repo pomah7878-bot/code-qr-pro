@@ -379,6 +379,7 @@ async function showSystem(chatId) {
     ['НПД', Boolean(npd.enabled && npd.configured)]
   ];
   const maintenance = getSetting('maintenance_mode', '0') === '1';
+  const maintenanceUntil = String(getSetting('maintenance_until', '') || '');
   const text = '🖥 <b>Система CODE QR PRO</b>\n\n' +
     '⏱ Аптайм: <b>' + fmtUptime(process.uptime()) + '</b> · Node ' + esc(process.version) + '\n' +
     '🧠 RSS: ' + fmtBytes(mem.rss) + ' · диск свободно: ' + (disk ? fmtBytes(disk.free) : '—') + '\n' +
@@ -386,7 +387,7 @@ async function showSystem(chatId) {
     '📦 Очередь: ' + counts.queue + ' · ошибок: ' + counts.errors + ' · ждут оплаты: ' + counts.pending + ' · обращений: ' + counts.tickets + '\n' +
     '🔌 ' + integrations.map(([n, ok]) => n + ': ' + (ok ? '✅' : '❌')).join(' · ') + '\n' +
     '💾 Бэкап: ' + (backup ? esc(backup.name) + ' · ' + backup.ageHours + ' ч назад' : '❌ не найден') + '\n' +
-    '🚧 Обслуживание: <b>' + (maintenance ? 'включено' : 'выключено') + '</b>';
+    '🚧 Обслуживание: <b>' + (maintenance ? 'включено до ' + dt(maintenanceUntil) : 'выключено') + '</b>';
   return send(chatId, text, { reply_markup: { inline_keyboard: [
     [{ text: '🔄 Обновить', callback_data: 'menu:system' }, { text: maintenance ? '▶️ Выключить обслуживание' : '⏸ Включить обслуживание', callback_data: 'system:maintask' }],
     [{ text: '🌐 Система в админке', url: ADMIN_PANEL + '/system' }, { text: '⬅️ Меню', callback_data: 'menu:main' }]
@@ -436,6 +437,7 @@ async function toggleMaintenance(chatId) {
 
 async function applyMaintenance(chatId, enabled) {
   setSetting('maintenance_mode', enabled ? '1' : '0');
+  setSetting('maintenance_until', enabled ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : '');
   logEvent({ level: 'warn', source: 'telegram', event: 'system.maintenance', message: 'maintenance=' + (enabled ? '1' : '0') });
   return send(chatId, enabled ? '⏸ Режим обслуживания включён.' : '▶️ Режим обслуживания выключен.', { reply_markup: menuBack() });
 }
@@ -558,12 +560,18 @@ export async function handleTelegramUpdate(update) {
       const cb = update.callback_query;
       const chatId = String(cb.message.chat.id);
       if (!tgIsAdmin(chatId)) { await tgAnswerCallback(cb.id, 'Нет доступа'); return; }
-      await tgAnswerCallback(cb.id, '');
+      try { await tgAnswerCallback(cb.id, ''); }
+      catch (e) {
+        if (/query is too old|response timeout expired|query ID is invalid/i.test(String(e?.message || e))) return;
+        throw e;
+      }
       await handleCallback(chatId, cb, String(cb.data || ''));
     }
   } catch (e) {
-    console.error('telegram bot update failed:', String(e?.message || e));
-    logEvent({ level: 'warn', source: 'telegram', event: 'bot_update_failed', message: String(e?.message || e).slice(0, 300) });
+    const message = String(e?.message || e);
+    if (/query is too old|response timeout expired|query ID is invalid/i.test(message)) return;
+    console.error('telegram bot update failed:', message);
+    logEvent({ level: 'warn', source: 'telegram', event: 'bot_update_failed', message: message.slice(0, 300) });
   }
 }
 

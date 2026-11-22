@@ -34,7 +34,7 @@ function redact(s) {
   return out.slice(0, 500);
 }
 
-async function curl(args, timeoutMs = 25_000) {
+async function curl(args, timeoutMs = 25_000, attempt = 1) {
   try {
     const { stdout } = await run('/usr/bin/curl', ['-sS', '-m', String(Math.ceil(timeoutMs / 1000)), ...args], {
       timeout: timeoutMs + 5_000,
@@ -42,7 +42,12 @@ async function curl(args, timeoutMs = 25_000) {
     });
     return JSON.parse(stdout || '{}');
   } catch (e) {
-    throw new Error(redact(e?.stderr || e?.message || e));
+    const message = redact(e?.stderr || e?.message || e);
+    if (attempt < 2 && /timed out|timeout|\(28\)|Connection timed out|ECONN/i.test(message)) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      return curl(args, timeoutMs, attempt + 1);
+    }
+    throw new Error(message);
   }
 }
 

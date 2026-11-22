@@ -43,7 +43,7 @@ import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, prune
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { startSubscriptionSweeper } from './lib/subscription.js';
 import { startMailQueue } from './lib/mail-queue.js';
-import { getSetting } from './settings.js';
+import { getSetting, setSetting } from './settings.js';
 import { sessionUser } from './auth.js';
 import { notifyConfigured } from './notify.js';
 import { rateLimitHook, securityHeaders, sameOriginGuard } from './security.js';
@@ -61,9 +61,17 @@ const MAINTENANCE_HTML = `<!doctype html><html lang="ru"><head><meta charset="ut
 async function maintenanceMode(req, reply) {
   try {
     if (getSetting('maintenance_mode', '0') !== '1') return;
+    const until = String(getSetting('maintenance_until', '') || '');
+    if (until && Date.parse(until) && Date.parse(until) < Date.now()) {
+      setSetting('maintenance_mode', '0');
+      setSetting('maintenance_until', '');
+      return;
+    }
     const url = String(req.raw.url || req.url || '/');
     const path = url.split('?')[0];
     if (path === '/api/health' || path.startsWith('/assets/') || path === '/favicon.svg' || path === '/site.webmanifest' || path === '/og-image.png') return;
+    // Статические файлы/письма/иконки не должны ломаться в режиме обслуживания.
+    if (/\.(png|jpe?g|webp|gif|svg|ico|css|js|map|woff2?|txt|xml|json)$/i.test(path) && !path.startsWith('/api/')) return;
     if (path === '/api/billing/webhook/yookassa' || path === '/maintenance') return;
     if (path === '/login' || path === '/register' || path === '/api/auth/login' || path === '/api/auth/register' || path.startsWith('/api/2fa/')) return;
     let user = null;

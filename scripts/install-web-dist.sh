@@ -27,6 +27,9 @@ if [ -d "$SRC/assets" ]; then
     count=$((count + 1))
   done
   echo "assets: $count"
+  # Старые хэши оставляем на 30 дней: у клиентов в кэше может быть старый
+  # index.html, который ссылается на уже пересобранные assets.
+  find "$DST/assets" -maxdepth 1 -type f -mtime +30 -delete 2>/dev/null || true
 fi
 
 # Прочие файлы из корня сборки (public/: print-tools.js, qr-icon.svg, manifest, robots.txt и т.п.)

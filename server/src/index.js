@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import dns from 'node:dns';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 // У VPS нет рабочего IPv6, а DNS отдаёт AAAA первым: Node ходил по IPv6 и падал
 // (например, уведомления в Telegram). Принудительно используем IPv4.
@@ -122,11 +122,22 @@ const indexHtmlPath = join(dist, 'index.html');
 if (existsSync(dist)) {
   // index.html читаем один раз; для публичных URL кэшируем уже собранный head,
   // чтобы не делать readFile + набор regex на каждый запрос робота/страницы.
-  const indexHtml = readFileSync(indexHtmlPath, 'utf8');
+  let indexHtml = readFileSync(indexHtmlPath, 'utf8');
+  let indexMtime = statSync(indexHtmlPath).mtimeMs;
   const seoHtmlCache = new Map();
   const SEO_HTML_TTL_MS = 60 * 1000;
   const SEO_HTML_MAX_PATHS = 400;
   const publicIndexHtml = (path) => {
+    // Web можно задеплоить без рестарта Node: если index.html пересобран,
+    // подхватываем новый хэш assets и сбрасываем SEO-кэш.
+    try {
+      const mtime = statSync(indexHtmlPath).mtimeMs;
+      if (mtime !== indexMtime) {
+        indexHtml = readFileSync(indexHtmlPath, 'utf8');
+        indexMtime = mtime;
+        seoHtmlCache.clear();
+      }
+    } catch { /* оставляем предыдущий index.html */ }
     const now = Date.now();
     const hit = seoHtmlCache.get(path);
     if (hit && now - hit.at < SEO_HTML_TTL_MS) return hit.html;

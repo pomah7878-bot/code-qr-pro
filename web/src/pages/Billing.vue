@@ -373,7 +373,7 @@ onUnmounted(() => { plansSyncOff?.(); });
           </button>
         </div>
         <p v-if="buyerType === 'legal'" class="text-xs text-slate-500 mt-3">Счёт формируется автоматически и скачивается в PDF. Оплата банковским переводом; доступ активируется после подтверждения поступления денег.</p>
-        <p v-else class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Чек на email. Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Автопродление по умолчанию выключено.</p>
+        <p v-else class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Чек самозанятого (НПД) предоставляется по запросу — напишите на code-qr-pro@mail.ru, указав email и номер заказа. Автопродление по умолчанию выключено.</p>
         <p class="text-[11px] text-slate-500 mt-2">
           Исполнитель: {{ LEGAL.operator.label }}, {{ LEGAL.operator.status.toLowerCase() }}, ИНН {{ LEGAL.operator.inn }}.
           <router-link to="/offer" class="text-brand-400 hover:underline">Публичная оферта</router-link> ·

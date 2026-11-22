@@ -14,6 +14,10 @@ const gtin = ref('');
 const gtinBusy = ref(false);
 const gtinError = ref('');
 const gtinResult = ref(null);
+const gtinList = ref('');
+const gtinListBusy = ref(false);
+const gtinListError = ref('');
+const gtinListResult = ref(null);
 
 const statusClass = (status) => /В обороте/i.test(status) ? 'text-emerald-500' : /Не найден|Выбыл|Списан/i.test(status) ? 'text-red-500' : 'text-amber-500';
 const cryptoClass = (crypto) => /^Проверено/i.test(crypto || '') ? 'text-emerald-500' : 'text-amber-500';
@@ -26,6 +30,25 @@ async function checkGtin() {
   try { gtinResult.value = await api.publicGtin(value); }
   catch (e) { gtinError.value = e.message; }
   finally { gtinBusy.value = false; }
+}
+
+async function checkGtinList() {
+  gtinListError.value = ''; gtinListResult.value = null;
+  const list = [...new Set(gtinList.value.split(/[\s,;]+/).map((v) => v.replace(/\D/g, '')).filter(Boolean))];
+  if (!list.length) { gtinListError.value = 'Вставьте хотя бы один GTIN'; return; }
+  if (list.length > 50) { gtinListError.value = 'За один раз можно проверить до 50 GTIN'; return; }
+  gtinListBusy.value = true;
+  try { gtinListResult.value = await api.publicGtinBatch(list); }
+  catch (e) { gtinListError.value = e.message; }
+  finally { gtinListBusy.value = false; }
+}
+
+function downloadGtinCsv() {
+  const rows = gtinListResult.value?.results || [];
+  const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const csv = '\uFEFF' + ['GTIN;Статус;Название;Категория;Производитель;Ссылка', ...rows.map((r) => [r.gtin, r.found ? 'найдена' : 'не найдена', r.name || r.error || '', r.category || '', r.producer || '', r.goodUrl || ''].map(esc).join(';'))].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gtin-check.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
 
 async function check() {
@@ -78,6 +101,41 @@ onMounted(() => applySeo('/check'));
       </div>
       <p v-if="gtinError" class="text-sm text-red-500 mt-3">{{ gtinError }}</p>
       <p class="text-[11px] text-slate-500 mt-3">Проверяется наличие карточки в Национальном каталоге маркированных товаров. Если карточка уже есть — новую создавать не нужно; если нет — оформляйте по официальной процедуре.</p>
+      <div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10">
+        <label for="public-check-gtin-list" class="label !text-xs">Список GTIN — по одному на строку, до 50</label>
+        <textarea id="public-check-gtin-list" v-model="gtinList" rows="4" class="input font-mono text-sm mt-1" placeholder="04638230913287&#10;04638230913294"></textarea>
+        <div class="flex flex-wrap items-center gap-3 mt-3">
+          <button class="btn-primary" :disabled="gtinListBusy" @click="checkGtinList">{{ gtinListBusy ? 'Проверяем список…' : 'Проверить список' }}</button>
+          <span class="text-[11px] text-slate-500">Для 700 моделей — партиями по 50, результат выгружается в CSV.</span>
+        </div>
+        <p v-if="gtinListError" class="text-sm text-red-500 mt-3">{{ gtinListError }}</p>
+      </div>
+    </div>
+
+    <div v-if="mode === 'gtin' && gtinListResult" class="max-w-3xl mx-auto mt-6 space-y-3" aria-live="polite">
+      <div class="glass rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="text-sm">Проверено: <b>{{ gtinListResult.total }}</b> · найдено: <b class="text-emerald-500">{{ gtinListResult.found }}</b> · не найдено: <b class="text-amber-500">{{ gtinListResult.notFound }}</b></div>
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="downloadGtinCsv">Скачать CSV</button>
+      </div>
+      <div class="glass rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto max-h-[480px]">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-white/90 dark:bg-ink-900/90 backdrop-blur">
+              <tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">
+                <th class="py-2 px-3 font-medium">GTIN</th><th class="py-2 px-3 font-medium">Карточка</th><th class="py-2 px-3 font-medium">Название</th><th class="py-2 px-3 font-medium hidden md:table-cell">Категория</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in gtinListResult.results" :key="r.gtin" class="border-b border-slate-100 dark:border-white/5 last:border-0">
+                <td class="py-2 px-3 font-mono text-xs">{{ r.gtin }}</td>
+                <td class="py-2 px-3"><span :class="r.found ? 'text-emerald-500' : 'text-amber-500'">{{ r.found ? 'найдена' : 'не найдена' }}</span></td>
+                <td class="py-2 px-3 text-xs">{{ r.name || r.error || '—' }}</td>
+                <td class="py-2 px-3 text-xs hidden md:table-cell">{{ r.category || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div v-if="mode === 'code' && result" class="max-w-3xl mx-auto mt-6 space-y-3" aria-live="polite">

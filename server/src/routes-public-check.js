@@ -59,6 +59,35 @@ export async function registerPublicCheckRoutes(app) {
     }
   });
 
+  app.post('/api/public/gtin/batch', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    if (!allowIp(req.ip)) return reply.code(429).send({ error: 'Слишком много проверок. Попробуйте позже.' });
+    const raw = Array.isArray(req.body?.gtins) ? req.body.gtins : [];
+    const unique = [...new Set(raw.map((v) => String(v || '').replace(/\D/g, '')).filter(Boolean))].slice(0, 50);
+    if (!unique.length) return reply.code(400).send({ error: 'Передайте хотя бы один GTIN' });
+    const results = new Array(unique.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < unique.length) {
+        const i = next++;
+        const gtin = unique[i];
+        if (!/^\d{8,14}$/.test(gtin)) { results[i] = { gtin, found: false, error: 'GTIN должен содержать 8–14 цифр' }; continue; }
+        const hit = gtinCache.get(gtin);
+        if (hit && Date.now() - hit.at < GTIN_TTL_MS) { results[i] = { ...hit.data, cached: true }; continue; }
+        try {
+          results[i] = await checkGtinCard(gtin);
+          gtinCache.set(gtin, { at: Date.now(), data: results[i] });
+          if (gtinCache.size > 1000) { const oldest = gtinCache.keys().next(); if (!oldest.done) gtinCache.delete(oldest.value); }
+        } catch (e) {
+          results[i] = { gtin, found: false, error: String(e?.message || e).slice(0, 200) };
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, unique.length) }, () => worker()));
+    const found = results.filter((r) => r.found).length;
+    return { ok: true, total: results.length, found, notFound: results.length - found, results };
+  });
+
   app.post('/api/public/check', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     if (!allowIp(req.ip)) return reply.code(429).send({ error: 'Слишком много проверок. Попробуйте позже или зарегистрируйтесь.' });

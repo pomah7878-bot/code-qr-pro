@@ -39,6 +39,7 @@ export const api = {
   plans: () => req('GET', '/api/plans'),
   publicCheck: (codes) => req('POST', '/api/public/check', { codes }),
   publicGtin: (gtin) => req('GET', '/api/public/gtin/' + encodeURIComponent(gtin)),
+  publicGtinBatch: (gtins) => req('POST', '/api/public/gtin/batch', { gtins }),
   validate: (b) => req('POST', '/api/jobs/validate', b),
   createJob: (b) => req('POST', '/api/jobs', b),
   jobs: () => req('GET', '/api/jobs'),

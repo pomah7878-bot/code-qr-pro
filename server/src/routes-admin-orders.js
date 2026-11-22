@@ -7,6 +7,7 @@ import { notifyStatusChange } from './notify.js';
 import { requireAdmin, paging, sendCsv, like, dateOnly } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import { redeemPromo } from './lib/promo.js';
+import { issueNpdReceiptForOrder } from './lib/npd-receipt.js';
 
 const STATUSES = ['pending', 'paid', 'canceled', 'refunded'];
 
@@ -118,6 +119,7 @@ export async function registerAdminOrderRoutes(app) {
     recordConversion('payment', paid.user_id, Number(paid.amount) || 0);
     notifyPayment(paid, user);
     notifyStatusChange(user, `Заказ №${order.id} подтверждён вручную (${order.amount} ₽)`);
+    issueNpdReceiptForOrder(paid.id, { force: true }).catch(() => {});
     audit(req, 'order.confirm', 'order', order.id, { amount: order.amount, days: order.days });
     return { ok: true, order: getOrder(order.id) };
   });

@@ -117,7 +117,9 @@ async function checkout() {
       });
       if (d.order?.invoiceUrl) {
         lastInvoice.value = d.order;
-        notice.value = `Счёт № ${d.order.invoiceNumber} сформирован. Оплатите его банковским переводом — доступ активируется после подтверждения оплаты.`;
+        notice.value = d.order.onlinePayUrl
+          ? `Счёт № ${d.order.invoiceNumber} сформирован. Можно скачать PDF и оплатить банковским переводом или онлайн по ссылке ЮKassa.`
+          : `Счёт № ${d.order.invoiceNumber} сформирован. Оплатите его банковским переводом — доступ активируется после подтверждения оплаты.${d.order.onlinePayError ? ' Онлайн-ссылка не создана: ' + d.order.onlinePayError : ''}`;
         window.open(d.order.invoiceUrl, '_blank', 'noopener');
         await load();
       } else error.value = 'Не удалось сформировать счёт';
@@ -164,6 +166,15 @@ async function check(orderId) {
     await load();
   } catch (e) { error.value = e.message; }
 }
+async function getPayLink(orderId) {
+  error.value = ''; notice.value = '';
+  try {
+    const d = await api.invoicePayLink(orderId);
+    if (d.url) { window.open(d.url, '_blank', 'noopener'); notice.value = 'Ссылка на онлайн-оплату создана.'; await load(); }
+    else error.value = 'ЮKassa не вернула ссылку на оплату';
+  } catch (e) { error.value = e.message; }
+}
+
 async function checkoutArchive() {
   error.value = ''; archiveBusy.value = true;
   try {
@@ -323,10 +334,14 @@ onUnmounted(() => { plansSyncOff?.(); });
             </div>
           </div>
           <p class="text-xs text-slate-500 mt-3">Счёт формируется автоматически в PDF. Оплата — банковским переводом; доступ активируется после подтверждения поступления денег.</p>
-          <div v-if="lastInvoice" class="mt-2">
+          <div v-if="lastInvoice" class="mt-2 flex flex-wrap gap-3 items-center">
             <a :href="lastInvoice.invoiceUrl" target="_blank" rel="noopener" class="text-sm text-brand-400 font-medium hover:underline">
               Скачать счёт № {{ lastInvoice.invoiceNumber }} (PDF) →
             </a>
+            <a v-if="lastInvoice.onlinePayUrl" :href="lastInvoice.onlinePayUrl" target="_blank" rel="noopener" class="btn-primary !py-1.5 !px-3 text-xs">
+              Оплатить онлайн →
+            </a>
+            <span v-if="lastInvoice.onlinePayError" class="text-[11px] text-amber-500">{{ lastInvoice.onlinePayError }}</span>
           </div>
         </div>
       </div>
@@ -372,7 +387,7 @@ onUnmounted(() => { plansSyncOff?.(); });
             {{ busy ? 'Создаём заказ…' : (buyerType === 'legal' ? 'Выставить счёт (PDF)' : 'Перейти к оплате') }}
           </button>
         </div>
-        <p v-if="buyerType === 'legal'" class="text-xs text-slate-500 mt-3">Счёт формируется автоматически и скачивается в PDF. Оплата банковским переводом; доступ активируется после подтверждения поступления денег.</p>
+        <p v-if="buyerType === 'legal'" class="text-xs text-slate-500 mt-3">Счёт формируется автоматически в PDF. Можно оплатить банковским переводом или онлайн по ссылке ЮKassa; доступ активируется после подтверждения оплаты.</p>
         <p v-else class="text-xs text-slate-500 mt-3">Оплата через ЮKassa (карта, СБП). Подписка активируется только после серверного подтверждения платежа; возврат на страницу сам по себе тариф не включает. Чек самозанятого (НПД) предоставляется по запросу — напишите на code-qr-pro@mail.ru, указав email и номер заказа. Автопродление по умолчанию выключено.</p>
         <p class="text-[11px] text-slate-500 mt-2">
           Исполнитель: {{ LEGAL.operator.label }}, {{ LEGAL.operator.status.toLowerCase() }}, ИНН {{ LEGAL.operator.inn }}.
@@ -417,6 +432,8 @@ onUnmounted(() => { plansSyncOff?.(); });
               <td class="py-2 pr-3" :class="o.status === 'paid' ? 'text-emerald-500' : o.status === 'canceled' ? 'text-red-500' : 'text-amber-500'">{{ statusRu[o.status] || o.status }}</td>
               <td class="py-2">
                 <a v-if="o.buyer_type === 'legal'" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex">Счёт PDF</a>
+                <a v-if="o.buyer_type === 'legal' && o.yk_invoice_url && o.status === 'pending'" :href="o.yk_invoice_url" target="_blank" rel="noopener" class="btn-primary !py-1 !px-3 text-xs inline-flex ml-1">Оплатить онлайн</a>
+                <button v-else-if="o.buyer_type === 'legal' && o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs ml-1" @click="getPayLink(o.id)">Ссылка на оплату</button>
                 <a v-if="o.npd_receipt_url" :href="o.npd_receipt_url" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex ml-1">Чек НПД</a>
                 <button v-else-if="o.status === 'pending' && o.buyer_type !== 'legal'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button>
               </td>

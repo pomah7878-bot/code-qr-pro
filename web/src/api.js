@@ -63,6 +63,7 @@ export const api = {
   billingPlans: () => req('GET', '/api/billing/plans'),
   startTrial: () => req('POST', '/api/billing/trial'),
   checkoutPlan: (b) => req('POST', '/api/billing/checkout', b),
+  invoicePayLink: (orderId) => req('POST', `/api/billing/orders/${orderId}/pay-link`, {}),
   changePlan: (b) => req('POST', '/api/billing/change', b),
   setAutoRenew: (enabled) => req('POST', '/api/billing/auto-renew', { enabled }),
   cancelSubscription: (b) => req('POST', '/api/billing/cancel', b),

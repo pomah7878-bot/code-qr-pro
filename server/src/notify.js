@@ -81,9 +81,11 @@ export async function notifyInvoiceCreated(order) {
     (order.company_name ? '🏢 ' + esc(order.company_name) + '\nИНН ' + esc(order.company_inn || '—') + (order.company_kpp ? ' / КПП ' + esc(order.company_kpp) : '') + '\n' : '') +
     '📦 ' + esc(PLAN_TITLE(order)) + ' на ' + (order.days || 30) + ' дн.\n' +
     '💵 <b>' + money(order.amount) + ' ₽</b> · без НДС (НПД)\n' +
-    '📌 Статус: <b>ожидает оплаты</b> банковским переводом' +
+    '📌 Статус: <b>ожидает оплаты</b> банковским переводом или онлайн' +
+    (order.online_pay_url ? '\n💳 <a href="' + esc(order.online_pay_url) + '">Оплатить онлайн</a>' : '') +
     (user ? '\n📧 ' + esc(user) : '');
   const markup = { inline_keyboard: [
+    ...(order.online_pay_url ? [[{ text: '💳 Оплатить онлайн', url: order.online_pay_url }]] : []),
     [{ text: '✅ Подтвердить оплату', callback_data: 'ord:confirm:' + order.id }, { text: '📄 PDF счёта', callback_data: 'ord:doc:' + order.id }],
     [{ text: '📦 Заказ в боте', callback_data: 'ord:view:' + order.id }, { text: '🌐 Админка', url: adminUrl('/orders') }]
   ] };

@@ -644,7 +644,14 @@ const MIGRATIONS = [
   `ALTER TABLE users ADD COLUMN acq_source TEXT NOT NULL DEFAULT '';
    ALTER TABLE users ADD COLUMN acq_medium TEXT NOT NULL DEFAULT '';
    ALTER TABLE users ADD COLUMN acq_campaign TEXT NOT NULL DEFAULT '';
-   ALTER TABLE users ADD COLUMN acq_landing TEXT NOT NULL DEFAULT '';`
+   ALTER TABLE users ADD COLUMN acq_landing TEXT NOT NULL DEFAULT '';`,
+  // v42 — онлайн-оплата B2B-счёта через выставленный счёт ЮKassa
+  `ALTER TABLE orders ADD COLUMN yk_invoice_id TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN yk_invoice_url TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN yk_invoice_status TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN yk_invoice_error TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN yk_invoice_expires_at TEXT;
+   ALTER TABLE orders ADD COLUMN yk_invoice_created_at TEXT;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

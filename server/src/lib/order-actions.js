@@ -5,6 +5,7 @@ import { redeemPromo } from './promo.js';
 import { notifyPayment, notifyOrderCanceled } from '../notify.js';
 import { recordConversion } from './analytics.js';
 import { logEvent } from './app-log.js';
+import { issueNpdReceiptForOrder } from './npd-receipt.js';
 
 /** Ручное подтверждение оплаты (банковский счёт или администратор). */
 export function confirmOrderManually(orderId, source = 'admin') {
@@ -32,6 +33,7 @@ export function confirmOrderManually(orderId, source = 'admin') {
   redeemPromo(paid);
   recordConversion('payment', paid.user_id, Number(paid.amount) || 0);
   notifyPayment(paid, user);
+  issueNpdReceiptForOrder(paid.id, { force: true }).catch(() => {});
   logEvent({ level: 'info', source, event: 'order.confirm', message: `Заказ №${paid.id} подтверждён`, meta: { orderId: paid.id, amount: paid.amount, plan: paid.plan } });
   return { order: paid, already: false };
 }

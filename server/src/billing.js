@@ -3,7 +3,7 @@ import { db } from './db.js';
 import { recordConversion } from './lib/analytics.js';
 import { getPlan, normalizePlanId, getPremiumOffers, offerFinalPrice, archiveAddon, getTestPrice } from './plans.js';
 import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, activeSubscription, currentPeriod } from './lib/subscription.js';
-import { notifyPayment, notifyOrderCanceled, notifyStatusChange, notifyInvoiceCreated } from './notify.js';
+import { notifyPayment, notifyOrderCanceled } from './notify.js';
 import { issueNpdReceiptForOrder } from './lib/npd-receipt.js';
 import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
@@ -16,12 +16,12 @@ const SECRET = process.env.YOOKASSA_SECRET_KEY || '';
 
 export const providerConfigured = () => Boolean(SHOP_ID && SECRET);
 
-async function yk(method, path, body) {
+async function yk(method, path, body, idempotenceKey) {
   const res = await fetch(YK_API + path, {
     method,
     headers: {
       Authorization: 'Basic ' + Buffer.from(SHOP_ID + ':' + SECRET).toString('base64'),
-      'Idempotence-Key': randomUUID(),
+      'Idempotence-Key': idempotenceKey || randomUUID(),
       'Content-Type': 'application/json'
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -192,9 +192,71 @@ export function createInvoiceOrder(user, planId = 'pro', period = 'month', promo
   const number = `СЧ-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
   db.prepare('UPDATE orders SET invoice_number=? WHERE id=?').run(number, orderId);
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
-  notifyStatusChange(user, `Сформирован счёт № ${number} на ${amount} ₽. Доступ активируется после поступления оплаты.`);
-  notifyInvoiceCreated({ ...order, buyer_email: user.email }).catch(() => {});
   return order;
+}
+
+/**
+ * Онлайн-оплата B2B-счёта через выставленный счёт ЮKassa.
+ * Не заменяет PDF-счёт и банковский перевод: добавляет ссылку на оплату картой/СБП.
+ * Перед созданием проверяем ИНН магазина ЮKassa — иначе платёж и чек НПД
+ * могут оказаться от разных налогоплательщиков.
+ */
+export async function createYooKassaInvoice(orderId) {
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(Number(orderId));
+  if (!order) throw new Error('Заказ не найден');
+  if (order.buyer_type !== 'legal') throw new Error('Онлайн-оплата по счёту доступна только для юрлиц и ИП');
+  if (order.status !== 'pending') throw new Error('Счёт можно выставить только для неоплаченного заказа');
+  if (!providerConfigured()) throw new Error('Платёжный провайдер не настроен');
+  const fresh = order.yk_invoice_url && order.yk_invoice_status === 'pending'
+    && (!order.yk_invoice_expires_at || new Date(order.yk_invoice_expires_at).getTime() > Date.now());
+  if (fresh) return { id: order.yk_invoice_id, url: order.yk_invoice_url, expiresAt: order.yk_invoice_expires_at };
+
+  const seller = invoiceSeller();
+  if (!seller.ready) throw new Error('Сначала заполните реквизиты Исполнителя для счетов');
+  const me = await yk('GET', '/me');
+  const shopInn = String(me?.itn || '').replace(/\D/g, '');
+  const sellerInn = String(seller.inn || '').replace(/\D/g, '');
+  if (!shopInn) throw new Error('ЮKassa не вернула ИНН магазина — онлайн-счёт не выставлен');
+  if (sellerInn && shopInn !== sellerInn) {
+    throw new Error(`ИНН магазина ЮKassa (${shopInn}) не совпадает с ИНН Исполнителя (${sellerInn}). Онлайн-счёт не выставлен: исправьте ИНН в кабинете ЮKassa.`);
+  }
+
+  const number = String(order.invoice_number || ('СЧ-' + order.id));
+  const title = String(order.plan_title || order.plan || 'Подписка').slice(0, 80);
+  const description = `${title} на ${order.days || 30} дней · счёт ${number}`.slice(0, 128);
+  const amount = Number(order.amount || 0);
+  if (!(amount > 0)) throw new Error('Некорректная сумма счёта');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  let data;
+  try {
+    data = await yk('POST', '/invoices', {
+      payment_data: {
+        amount: { value: amount.toFixed(2), currency: 'RUB' },
+        capture: true,
+        description,
+        metadata: { order_id: String(order.id), invoice_number: number, product: 'code-qr-pro', buyer_type: 'legal' }
+      },
+      cart: [
+        { description, price: { value: amount.toFixed(2), currency: 'RUB' }, quantity: 1 }
+      ],
+      expires_at: expiresAt,
+      locale: 'ru_RU',
+      description: `Счёт на оплату ${number}`,
+      metadata: { order_id: String(order.id), invoice_number: number, product: 'code-qr-pro' }
+    }, `invoice-${order.id}${order.yk_invoice_id ? '-' + Date.now() : ''}`);
+  } catch (e) {
+    db.prepare("UPDATE orders SET yk_invoice_status='error', yk_invoice_error=? WHERE id=?").run(String(e?.message || e).slice(0, 500), order.id);
+    throw e;
+  }
+  const url = String(data?.delivery_method?.url || '');
+  if (!url) {
+    db.prepare("UPDATE orders SET yk_invoice_status='error', yk_invoice_error=? WHERE id=?").run('ЮKassa не вернула ссылку на счёт', order.id);
+    throw new Error('ЮKassa не вернула ссылку на счёт');
+  }
+  db.prepare(`UPDATE orders SET yk_invoice_id=?, yk_invoice_url=?, yk_invoice_status=?, yk_invoice_error='',
+      yk_invoice_expires_at=?, yk_invoice_created_at=datetime('now') WHERE id=?`)
+    .run(String(data.id || ''), url, String(data.status || 'pending'), data.expires_at || expiresAt, order.id);
+  return { id: String(data.id || ''), url, expiresAt: data.expires_at || expiresAt };
 }
 
 /** Подтверждение заказа по серверному платежу (только после GET /payments/:id). */
@@ -218,6 +280,7 @@ function fulfillOrder(order, payment) {
   }
   db.prepare("INSERT OR IGNORE INTO payment_events (external_id, provider, order_id, status, payload_hash) VALUES (?,?,?,?,?)")
     .run(payment.id, 'yookassa', order.id, payment.status || 'succeeded', createHash('sha256').update(JSON.stringify(payment.metadata || {})).digest('hex').slice(0, 32));
+  if (order.yk_invoice_id) db.prepare("UPDATE orders SET yk_invoice_status='succeeded' WHERE id=?").run(order.id);
   const paid = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
   recordConversion('payment', paid.user_id, Number(paid.amount) || 0);
   redeemPromo(paid);

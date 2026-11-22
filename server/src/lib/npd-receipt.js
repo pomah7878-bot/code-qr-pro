@@ -66,11 +66,12 @@ function receiptEmailBody(order, printUrl) {
 async function emailReceipt(order, printUrl) {
   if (!smtpConfigured()) return false;
   const user = db.prepare('SELECT email, name FROM users WHERE id=?').get(order.user_id);
-  if (!user?.email) return false;
+  const to = order.buyer_type === 'legal' && order.company_email ? order.company_email : user?.email;
+  if (!to) return false;
   const { html, text, subject } = receiptEmailBody(order, printUrl);
-  await sendMail({ to: user.email, subject, text, html });
+  await sendMail({ to, subject, text, html });
   db.prepare("UPDATE orders SET npd_receipt_status='sent', npd_receipt_email=?, npd_receipt_at=datetime('now') WHERE id=?")
-    .run(user.email, order.id);
+    .run(to, order.id);
   return true;
 }
 
@@ -80,11 +81,6 @@ export async function issueNpdReceiptForOrder(orderId, { force = false } = {}) {
   if (!order) throw new Error('Заказ не найден');
   if (order.status !== 'paid') throw new Error('Чек можно сформировать только для оплаченного заказа');
   if (order.npd_receipt_id && ['issued', 'sent'].includes(order.npd_receipt_status)) return { skipped: true, order };
-  if (order.buyer_type === 'legal') {
-    db.prepare("UPDATE orders SET npd_receipt_status='manual_legal', npd_receipt_error='Для юрлица чек НПД нужно оформить вручную с ИНН покупателя' WHERE id=?").run(order.id);
-    return { skipped: true, legal: true, order: db.prepare('SELECT * FROM orders WHERE id=?').get(order.id) };
-  }
-
   const s = npdSettings();
   if (!s.enabled || !s.configured) throw new Error('Выпуск чеков НПД не подключён в настройках');
   if (!s.auto && !force) return { skipped: true, autoDisabled: true, order };
@@ -92,24 +88,45 @@ export async function issueNpdReceiptForOrder(orderId, { force = false } = {}) {
 
   const api = client(s);
   const name = `${s.serviceName} · заказ №${order.id}`.slice(0, 128);
+  const user = db.prepare('SELECT name FROM users WHERE id=?').get(order.user_id);
+  const isLegal = order.buyer_type === 'legal';
+  if (isLegal && !String(order.company_inn || '').trim()) {
+    db.prepare("UPDATE orders SET npd_receipt_status='error', npd_receipt_error='Для чека НПД от юрлица нужен ИНН покупателя' WHERE id=?").run(order.id);
+    throw new Error('Для чека НПД от юрлица нужен ИНН покупателя');
+  }
+  const amount = Number(order.amount);
   let result;
   try {
-    result = await api.addIncome({ name, amount: Number(order.amount), quantity: 1 });
+    // Для безналичных оплат (карта, СБП, счёт) в чеке НПД указывается безналичный расчёт.
+    result = await api.call('income', {
+      paymentType: 'WIRE',
+      ignoreMaxTotalIncomeRestriction: false,
+      client: {
+        contactPhone: null,
+        displayName: isLegal ? String(order.company_name || '').slice(0, 120) : String(user?.name || '').slice(0, 120) || null,
+        incomeType: isLegal ? 'FROM_LEGAL_ENTITY' : 'FROM_INDIVIDUAL',
+        inn: isLegal ? String(order.company_inn || '') : null
+      },
+      requestTime: api.dateToLocalISO(),
+      operationTime: api.dateToLocalISO(new Date()),
+      services: [{ name, amount, quantity: 1 }],
+      totalAmount: amount.toFixed(2)
+    });
   } catch (e) {
     const message = String(e?.message || e).slice(0, 500);
     db.prepare("UPDATE orders SET npd_receipt_status='error', npd_receipt_error=? WHERE id=?").run(message, order.id);
     logEvent({ level: 'warn', source: 'npd', event: 'receipt_error', message: `Заказ №${order.id}: ${message.slice(0, 200)}`, meta: { orderId: order.id } });
     throw e;
   }
-  if (result?.error) {
-    const message = String(result.error?.message || result.error || 'Не удалось создать чек').slice(0, 500);
+  if (!result?.approvedReceiptUuid) {
+    const message = String(result?.message || result?.description || JSON.stringify(result || {}).slice(0, 300)).slice(0, 500);
     db.prepare("UPDATE orders SET npd_receipt_status='error', npd_receipt_error=? WHERE id=?").run(message, order.id);
     logEvent({ level: 'warn', source: 'npd', event: 'receipt_error', message: `Заказ №${order.id}: ${message.slice(0, 200)}`, meta: { orderId: order.id } });
     throw new Error(message);
   }
 
-  const receiptId = String(result.id || result.approvedReceiptUuid || '').slice(0, 200);
-  const printUrl = String(result.printUrl || '').slice(0, 1000);
+  const receiptId = String(result.approvedReceiptUuid).slice(0, 200);
+  const printUrl = String(`${api.apiUrl}/receipt/${api.INN}/${receiptId}/print`).slice(0, 1000);
   db.prepare(`UPDATE orders SET npd_receipt_id=?, npd_receipt_url=?, npd_receipt_status='issued',
       npd_receipt_error='', npd_receipt_at=datetime('now') WHERE id=?`).run(receiptId, printUrl, order.id);
   const updated = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);

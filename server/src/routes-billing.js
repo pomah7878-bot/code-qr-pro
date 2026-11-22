@@ -1,13 +1,14 @@
 import { db } from './db.js';
 import { requireAuth } from './routes.js';
 import {
-  createCheckout, createInvoiceOrder, checkOrder, providerConfigured, handleYooKassaNotification, planOffer
+  createCheckout, createInvoiceOrder, createYooKassaInvoice, checkOrder, providerConfigured, handleYooKassaNotification, planOffer
 } from './billing.js';
 import { generateInvoicePdf, invoiceSeller, invoiceNumberFor } from './lib/invoice.js';
 import { archiveAddon, getPremiumOffers, normalizePlanId, listPlans } from './plans.js';
 import { entitlements, startTrial, setAutoRenew, cancelSubscription, trialInfo, SubscriptionError } from './lib/subscription.js';
 import { validatePromo } from './lib/promo.js';
 import { audit } from './lib/audit.js';
+import { notifyInvoiceCreated } from './notify.js';
 
 const fail = (reply, e) => reply.code(e.statusCode || 400).send({ error: String(e?.message || e), code: e.code || null });
 
@@ -61,11 +62,22 @@ export async function registerBillingRoutes(app) {
     try {
       if (body.buyerType === 'legal' || body.invoice === true) {
         const order = createInvoiceOrder(req.user, planId, period, body.promoCode || '', body.buyer || body);
+        let online = null;
+        let onlineError = '';
+        try {
+          online = await createYooKassaInvoice(order.id);
+        } catch (e) {
+          onlineError = String(e?.message || e).slice(0, 300);
+          req.log?.warn?.({ err: onlineError, orderId: order.id }, 'yookassa invoice create failed');
+        }
+        const fresh = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+        notifyInvoiceCreated({ ...fresh, buyer_email: req.user.email, online_pay_url: online?.url || '' }).catch(() => {});
         return {
           order: {
-            id: order.id, amount: order.amount, status: order.status, plan: order.plan, period: order.period,
-            buyerType: 'legal', paymentMethod: 'bank_transfer', invoiceNumber: order.invoice_number,
-            invoiceUrl: '/api/billing/orders/' + order.id + '/invoice'
+            id: fresh.id, amount: fresh.amount, status: fresh.status, plan: fresh.plan, period: fresh.period,
+            buyerType: 'legal', paymentMethod: 'bank_transfer', invoiceNumber: fresh.invoice_number,
+            invoiceUrl: '/api/billing/orders/' + fresh.id + '/invoice',
+            onlinePayUrl: online?.url || '', onlinePayExpiresAt: online?.expiresAt || '', onlinePayError: onlineError
           }
         };
       }
@@ -139,6 +151,7 @@ export async function registerBillingRoutes(app) {
     orders: db.prepare(
       `SELECT id,plan,plan_title,kind,period,amount,currency,status,provider,created_at,paid_at,days,
         buyer_type,company_name,company_inn,company_kpp,payment_method,invoice_number,invoice_issued_at,
+        yk_invoice_url,yk_invoice_status,yk_invoice_expires_at,
         npd_receipt_url,npd_receipt_status,npd_receipt_error
        FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50`
     ).all(req.user.id)
@@ -151,6 +164,19 @@ export async function registerBillingRoutes(app) {
   });
 
   // Счёт на оплату: владелец заказа или администратор.
+  // Онлайн-ссылка на оплату B2B-счёта (создаётся заново, если истекла).
+  app.post('/api/billing/orders/:id/pay-link', { preHandler: requireAuth }, async (req, reply) => {
+    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
+    if (!order || order.user_id !== req.user.id) return reply.code(404).send({ error: 'Заказ не найден' });
+    try {
+      const online = await createYooKassaInvoice(order.id);
+      const fresh = db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+      return { ok: true, url: online.url, expiresAt: online.expiresAt, order: fresh };
+    } catch (e) {
+      return reply.code(502).send({ error: String(e?.message || e).slice(0, 300) });
+    }
+  });
+
   app.get('/api/billing/orders/:id/invoice', { preHandler: requireAuth }, async (req, reply) => {
     const order = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
     if (!order || order.buyer_type !== 'legal') return reply.code(404).send({ error: 'Счёт не найден' });

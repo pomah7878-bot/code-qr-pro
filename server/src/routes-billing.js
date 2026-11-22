@@ -138,7 +138,8 @@ export async function registerBillingRoutes(app) {
   app.get('/api/billing/orders', { preHandler: requireAuth }, async (req) => ({
     orders: db.prepare(
       `SELECT id,plan,plan_title,kind,period,amount,currency,status,provider,created_at,paid_at,days,
-        buyer_type,company_name,company_inn,company_kpp,payment_method,invoice_number,invoice_issued_at
+        buyer_type,company_name,company_inn,company_kpp,payment_method,invoice_number,invoice_issued_at,
+        npd_receipt_url,npd_receipt_status,npd_receipt_error
        FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 50`
     ).all(req.user.id)
   }));

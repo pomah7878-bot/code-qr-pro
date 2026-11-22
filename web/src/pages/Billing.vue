@@ -417,7 +417,8 @@ onUnmounted(() => { plansSyncOff?.(); });
               <td class="py-2 pr-3" :class="o.status === 'paid' ? 'text-emerald-500' : o.status === 'canceled' ? 'text-red-500' : 'text-amber-500'">{{ statusRu[o.status] || o.status }}</td>
               <td class="py-2">
                 <a v-if="o.buyer_type === 'legal'" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex">Счёт PDF</a>
-                <button v-else-if="o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button>
+                <a v-if="o.npd_receipt_url" :href="o.npd_receipt_url" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex ml-1">Чек НПД</a>
+                <button v-else-if="o.status === 'pending' && o.buyer_type !== 'legal'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button>
               </td>
             </tr>
           </tbody>

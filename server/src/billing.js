@@ -4,6 +4,7 @@ import { recordConversion } from './lib/analytics.js';
 import { getPlan, normalizePlanId, getPremiumOffers, offerFinalPrice, archiveAddon, getTestPrice } from './plans.js';
 import { activateSubscription, expireSubscriptionsAndTrials, remindTrialEnding, activeSubscription, currentPeriod } from './lib/subscription.js';
 import { notifyPayment, notifyOrderCanceled, notifyStatusChange, notifyInvoiceCreated } from './notify.js';
+import { issueNpdReceiptForOrder } from './lib/npd-receipt.js';
 import { notifyClient } from './lib/client-mail.js';
 import { validatePromo, redeemPromo } from './lib/promo.js';
 import { invoiceSeller, validateBuyer } from './lib/invoice.js';
@@ -224,6 +225,8 @@ function fulfillOrder(order, payment) {
   notifyPayment(paid, user);
   const sub = activeSubscription(order.user_id);
   notifyClient(user, 'premium_renewed', { until: sub?.expires_at ? String(sub.expires_at).slice(0, 10) : '' }).catch(() => {});
+  // Чек НПД выпускается после подтверждённой оплаты, не блокируя ответ вебхука.
+  issueNpdReceiptForOrder(paid.id).catch(() => {});
   return paid;
 }
 

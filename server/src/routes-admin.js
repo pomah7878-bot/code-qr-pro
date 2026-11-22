@@ -5,6 +5,7 @@ import { requireAdmin } from './lib/admin.js';
 import { audit } from './lib/audit.js';
 import { invoiceSeller } from './lib/invoice.js';
 import { tgConfigured, tgAdminIds, tgSendMessage } from './lib/telegram-api.js';
+import { npdSettings, testNpdConnection, issueNpdReceiptForOrder, resendNpdReceipt } from './lib/npd-receipt.js';
 
 export async function registerAdminRoutes(app) {
   app.get('/api/admin/stats', { preHandler: requireAdmin }, async () => ({
@@ -52,6 +53,47 @@ export async function registerAdminRoutes(app) {
     }
     audit(req, 'settings.telegram_test', 'settings', 'telegram', { sent });
     return { ok: true, sent };
+  });
+
+  // --- Чеки НПД («Мой налог») ---
+  app.get('/api/admin/npd/settings', { preHandler: requireAdmin }, async () => {
+    const s = npdSettings();
+    return { enabled: s.enabled, auto: s.auto, login: s.login, serviceName: s.serviceName, configured: s.configured };
+  });
+
+  app.put('/api/admin/npd/settings', { preHandler: requireAdmin }, async (req, reply) => {
+    const b = req.body || {};
+    if (b.login !== undefined) {
+      const login = String(b.login || '').trim();
+      if (login && !/^\+?\d{10,12}$/.test(login)) return reply.code(400).send({ error: 'Логин «Мой налог» — ИНН (10–12 цифр) или телефон' });
+      setSetting('npd_login', login);
+    }
+    if (b.password !== undefined && String(b.password || '').trim()) {
+      if (String(b.password).length > 200) return reply.code(400).send({ error: 'Слишком длинный пароль' });
+      setSetting('npd_password', String(b.password));
+    }
+    if (b.clearPassword === true) setSetting('npd_password', '');
+    if (b.enabled !== undefined) setSetting('npd_enabled', b.enabled ? '1' : '0');
+    if (b.auto !== undefined) setSetting('npd_auto', b.auto ? '1' : '0');
+    if (b.serviceName !== undefined) setSetting('npd_service_name', String(b.serviceName || '').trim().slice(0, 120));
+    audit(req, 'settings.npd', 'settings', 'npd', { enabled: Boolean(b.enabled), auto: b.auto !== false });
+    const out = npdSettings();
+    return { ok: true, enabled: out.enabled, auto: out.auto, login: out.login, serviceName: out.serviceName, configured: out.configured };
+  });
+
+  app.post('/api/admin/npd/test', { preHandler: requireAdmin }, async (req, reply) => {
+    try { return { ok: true, ...(await testNpdConnection()) }; }
+    catch (e) { return reply.code(502).send({ error: String(e?.message || e).slice(0, 300) }); }
+  });
+
+  app.post('/api/admin/npd/orders/:id/receipt', { preHandler: requireAdmin }, async (req, reply) => {
+    try { return await issueNpdReceiptForOrder(Number(req.params.id), { force: true }); }
+    catch (e) { return reply.code(502).send({ error: String(e?.message || e).slice(0, 300) }); }
+  });
+
+  app.post('/api/admin/npd/orders/:id/resend', { preHandler: requireAdmin }, async (req, reply) => {
+    try { return await resendNpdReceipt(Number(req.params.id)); }
+    catch (e) { return reply.code(502).send({ error: String(e?.message || e).slice(0, 300) }); }
   });
 
   app.put('/api/admin/settings', { preHandler: requireAdmin }, async (req, reply) => {

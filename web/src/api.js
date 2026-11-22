@@ -180,6 +180,11 @@ export const api = {
   adminSettings: () => req('GET', '/api/admin/settings'),
   adminSaveSettings: (b) => req('PUT', '/api/admin/settings', b),
   adminTelegramTest: () => req('POST', '/api/admin/telegram/test', {}),
+  adminNpdSettings: () => req('GET', '/api/admin/npd/settings'),
+  adminSaveNpdSettings: (b) => req('PUT', '/api/admin/npd/settings', b),
+  adminTestNpd: () => req('POST', '/api/admin/npd/test', {}),
+  adminIssueNpdReceipt: (orderId) => req('POST', `/api/admin/npd/orders/${orderId}/receipt`, {}),
+  adminResendNpdReceipt: (orderId) => req('POST', `/api/admin/npd/orders/${orderId}/resend`, {}),
 
   reviews: () => req('GET', '/api/reviews'),
   myReview: () => req('GET', '/api/reviews/mine'),

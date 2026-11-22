@@ -632,7 +632,14 @@ const MIGRATIONS = [
    ALTER TABLE orders ADD COLUMN company_email TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN invoice_number TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN invoice_issued_at TEXT;
-   ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'card';`
+   ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'card';`,
+  // v40 — чеки НПД («Мой налог»): id, ссылка, статус и отправка на email
+  `ALTER TABLE orders ADD COLUMN npd_receipt_id TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN npd_receipt_url TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN npd_receipt_status TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN npd_receipt_error TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN npd_receipt_email TEXT NOT NULL DEFAULT '';
+   ALTER TABLE orders ADD COLUMN npd_receipt_at TEXT;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

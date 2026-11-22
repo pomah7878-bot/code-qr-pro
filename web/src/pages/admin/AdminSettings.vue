@@ -19,6 +19,10 @@ const signature = ref('');
 const tg = ref({ configured: false, admins: [] });
 const tgBusy = ref(false);
 const savingSig = ref(false);
+const npd = ref({ enabled: false, auto: true, login: '', serviceName: 'Услуги сервиса CODE QR PRO', configured: false });
+const npdPassword = ref('');
+const npdBusy = ref(false);
+const npdTesting = ref(false);
 
 async function load() {
   error.value = '';
@@ -31,6 +35,29 @@ async function load() {
   } catch (e) {
     error.value = e.message;
   }
+  try { npd.value = { ...npd.value, ...(await api.adminNpdSettings()) }; } catch { /* карточка покажет статус */ }
+}
+
+async function saveNpd() {
+  error.value = ''; notice.value = ''; npdBusy.value = true;
+  try {
+    const body = { enabled: npd.value.enabled, auto: npd.value.auto, login: npd.value.login, serviceName: npd.value.serviceName };
+    if (npdPassword.value) body.password = npdPassword.value;
+    const out = await api.adminSaveNpdSettings(body);
+    npd.value = { ...npd.value, ...out };
+    npdPassword.value = '';
+    notice.value = out.configured ? 'Настройки чеков НПД сохранены' : 'Сохранено. Укажите логин и пароль «Мой налог»';
+  } catch (e) { error.value = e.message; }
+  finally { npdBusy.value = false; }
+}
+
+async function testNpd() {
+  error.value = ''; notice.value = ''; npdTesting.value = true;
+  try {
+    const r = await api.adminTestNpd();
+    notice.value = '«Мой налог» доступен' + (r.inn ? ' · ИНН ' + r.inn : '') + (r.name ? ' · ' + r.name : '');
+  } catch (e) { error.value = 'Проверка не прошла: ' + e.message; }
+  finally { npdTesting.value = false; }
 }
 
 async function saveCz() {
@@ -116,6 +143,28 @@ onMounted(load);
     <SmtpCard />
 
     <StorageCard />
+
+    <div class="glass rounded-2xl p-6">
+      <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="billing" :size="19" />Чеки НПД · «Мой налог»</h2>
+      <p class="text-xs text-slate-500 mb-3">
+        Автоматический выпуск чеков самозанятого после оплаты картой/СБП. Логин и пароль хранятся в зашифрованном виде и не отображаются после сохранения.
+      </p>
+      <p class="text-xs mb-3" :class="npd.configured ? 'text-emerald-500' : 'text-amber-500'">{{ npd.configured ? 'Интеграция настроена' : 'Логин/пароль ещё не сохранены' }}</p>
+      <div class="grid gap-3 md:grid-cols-2">
+        <div><label class="label !text-xs">ИНН или телефон «Мой налог»</label><input v-model="npd.login" class="input !py-2 text-sm" placeholder="504790957768" autocomplete="username"></div>
+        <div><label class="label !text-xs">Пароль «Мой налог»</label><input v-model="npdPassword" type="password" class="input !py-2 text-sm" placeholder="оставьте пустым, чтобы не менять" autocomplete="new-password"></div>
+        <div class="md:col-span-2"><label class="label !text-xs">Назначение услуги в чеке</label><input v-model="npd.serviceName" class="input !py-2 text-sm" maxlength="120"></div>
+      </div>
+      <div class="flex flex-wrap items-center gap-4 mt-3 text-sm">
+        <label class="inline-flex items-center gap-2"><input v-model="npd.enabled" type="checkbox"> Включить выпуск чеков</label>
+        <label class="inline-flex items-center gap-2"><input v-model="npd.auto" type="checkbox"> Автоматически после оплаты</label>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-4">
+        <button class="btn-primary !py-2 text-sm" :disabled="npdBusy" @click="saveNpd">{{ npdBusy ? 'Сохраняем…' : 'Сохранить' }}</button>
+        <button class="btn-ghost !py-2 text-sm" :disabled="npdTesting || !npd.configured" @click="testNpd">{{ npdTesting ? 'Проверяем…' : 'Проверить доступ к «Мой налог»' }}</button>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-3">Если у аккаунта включено подтверждение по SMS, авторизация по паролю может не пройти — напишите в поддержку, настроим токен вручную.</p>
+    </div>
 
     <div class="glass rounded-2xl p-6">
       <h2 class="flex items-center gap-2 font-display font-semibold mb-1"><BrandIcon name="ai" :size="19" />Telegram-админ-бот</h2>

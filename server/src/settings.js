@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import { encryptSecret, decryptSecret, isEncrypted } from './lib/secrets.js';
 
-const SENSITIVE = new Set(['smtp_pass', 'cz_token', 'mail_unsub_secret', 's3_access_key', 's3_secret_key', 'ai_api_key', 'webmaster_token', 'invoice_signature_data']);
+const SENSITIVE = new Set(['smtp_pass', 'cz_token', 'mail_unsub_secret', 's3_access_key', 's3_secret_key', 'ai_api_key', 'webmaster_token', 'invoice_signature_data', 'npd_password']);
 
 export const getSetting = (k, d = '') => {
   const value = db.prepare('SELECT value FROM app_settings WHERE key=?').get(k)?.value;

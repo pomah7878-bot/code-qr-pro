@@ -1,7 +1,37 @@
 import { db } from './db.js';
 import { requireAdmin, paging, like, dateOnly } from './lib/admin.js';
+import { audit } from './lib/audit.js';
+
+const QA_WHERE = "actor_email LIKE 'qa-%'";
 
 export async function registerAdminAuditRoutes(app) {
+  app.get('/api/admin/audit/clear-preview', { preHandler: requireAdmin }, async () => {
+    const total = db.prepare('SELECT COUNT(*) c FROM audit_log').get().c;
+    const qa = db.prepare('SELECT COUNT(*) c FROM audit_log WHERE ' + QA_WHERE).get().c;
+    const range = db.prepare("SELECT MIN(created_at) a, MAX(created_at) b FROM audit_log WHERE " + QA_WHERE).get() || {};
+    return {
+      total,
+      qa,
+      real: Math.max(0, total - qa),
+      qaFrom: range.a || '',
+      qaTo: range.b || '',
+      warning: 'Журнал аудита фиксирует действия администраторов. Его удаление снижает возможность разбора инцидентов; безопаснее очищать только тестовые записи QA.'
+    };
+  });
+
+  app.post('/api/admin/audit/clear', { preHandler: requireAdmin }, async (req, reply) => {
+    const phrase = String(req.body?.confirm || '').trim().toUpperCase();
+    if (phrase !== 'ОЧИСТИТЬ ЖУРНАЛ') return reply.code(400).send({ error: 'Введите контрольную фразу: ОЧИСТИТЬ ЖУРНАЛ' });
+    const scope = req.body?.scope === 'all' ? 'all' : 'qa';
+    if (scope === 'all' && req.body?.acknowledge !== true) return reply.code(400).send({ error: 'Подтвердите очистку всего журнала' });
+    const count = db.prepare(scope === 'all' ? 'SELECT COUNT(*) c FROM audit_log' : 'SELECT COUNT(*) c FROM audit_log WHERE ' + QA_WHERE).get().c;
+    if (!count) return { ok: true, deleted: 0 };
+    if (scope === 'all') db.prepare('DELETE FROM audit_log').run();
+    else db.prepare('DELETE FROM audit_log WHERE ' + QA_WHERE).run();
+    audit(req, 'audit.clear', 'audit_log', scope, { scope, deleted: count });
+    return { ok: true, deleted: count, scope };
+  });
+
   app.get('/api/admin/audit', { preHandler: requireAdmin }, async (req) => {
     const { page, per, offset } = paging(req.query, 50);
     const where = [];

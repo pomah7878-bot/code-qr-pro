@@ -651,7 +651,25 @@ const MIGRATIONS = [
    ALTER TABLE orders ADD COLUMN yk_invoice_status TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN yk_invoice_error TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN yk_invoice_expires_at TEXT;
-   ALTER TABLE orders ADD COLUMN yk_invoice_created_at TEXT;`
+   ALTER TABLE orders ADD COLUMN yk_invoice_created_at TEXT;`,
+  // v43 — сверка банковской выписки с B2B-счетами
+  `CREATE TABLE IF NOT EXISTS bank_transactions (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     tx_hash TEXT NOT NULL UNIQUE,
+     tx_date TEXT NOT NULL DEFAULT '',
+     amount REAL NOT NULL DEFAULT 0,
+     payer TEXT NOT NULL DEFAULT '',
+     payer_inn TEXT NOT NULL DEFAULT '',
+     purpose TEXT NOT NULL DEFAULT '',
+     raw_json TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'unmatched',
+     order_id INTEGER,
+     error TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     matched_at TEXT
+   );
+   CREATE INDEX IF NOT EXISTS idx_bank_tx_status ON bank_transactions(status, created_at);
+   CREATE INDEX IF NOT EXISTS idx_bank_tx_amount ON bank_transactions(amount);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

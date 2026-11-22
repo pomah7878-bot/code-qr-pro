@@ -17,6 +17,7 @@ const groups = computed(() => {
       links: [
         { to: '/app/admin/users', label: 'Клиенты' },
         { to: '/app/admin/orders', label: 'Платежи', adminOnly: true },
+        { to: '/app/admin/bank', label: 'Сверка выписки', adminOnly: true },
         { to: '/app/admin/billing', label: 'Тарифы и подписки', adminOnly: true }
       ]
     },

@@ -77,7 +77,7 @@ onMounted(load);
 
       <template v-if="data">
         <div class="grid sm:grid-cols-3 gap-3">
-          <div class="glass rounded-2xl p-4"><div class="text-xs text-slate-500">Мест на тарифе</div><div class="text-2xl font-bold mt-1">{{ data.seats.used }} / {{ data.seats.limit }}</div></div>
+          <div class="glass rounded-2xl p-4"><div class="text-xs text-slate-500">Мест для сотрудников</div><div class="text-2xl font-bold mt-1">{{ data.seats.used }} / {{ data.seats.limit }}</div></div>
           <div class="glass rounded-2xl p-4"><div class="text-xs text-slate-500">Свободно</div><div class="text-2xl font-bold mt-1">{{ data.seats.available }}</div></div>
           <div class="glass rounded-2xl p-4"><div class="text-xs text-slate-500">Тариф</div><div class="text-2xl font-bold mt-1 uppercase">{{ store.user?.plan || 'free' }}</div></div>
         </div>
@@ -120,7 +120,8 @@ onMounted(load);
           </div>
         </div>
 
-        <p class="text-xs text-slate-500">Сотрудник входит по ссылке из письма. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
+        <p v-if="data.seats.used > data.seats.limit" class="text-xs text-amber-500">На тарифе сейчас меньше мест, чем сотрудников ({{ data.seats.used }} из {{ data.seats.limit }}). Новые приглашения заблокированы; отзовите лишние доступы или смените тариф.</p>
+        <p class="text-xs text-slate-500">Владелец аккаунта не занимает место в команде. Сотрудник входит по ссылке из письма. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
       </template>
       <div v-else-if="!error" class="text-sm text-slate-500">Загрузка…</div>
     </section>

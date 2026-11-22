@@ -294,7 +294,23 @@ function fulfillOrder(order, payment) {
 }
 
 export async function checkOrder(order) {
-  if (order.status !== 'pending' || !order.external_id) return order;
+  if (order.status !== 'pending') return order;
+  // B2B: счёт ЮKassa — проверяем статус счёта, затем связанный платёж.
+  if (!order.external_id && order.yk_invoice_id) {
+    const invoice = await yk('GET', '/invoices/' + encodeURIComponent(order.yk_invoice_id));
+    const paymentId = invoice?.payment_details?.id;
+    if (invoice?.status === 'succeeded' && paymentId) {
+      const payment = await yk('GET', '/payments/' + encodeURIComponent(paymentId));
+      if (payment.status === 'succeeded') return fulfillOrder(order, payment);
+    }
+    if (invoice?.status === 'canceled') {
+      db.prepare("UPDATE orders SET status='canceled', yk_invoice_status='canceled' WHERE id=?").run(order.id);
+      const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+      notifyOrderCanceled(order, user);
+    }
+    return db.prepare('SELECT * FROM orders WHERE id=?').get(order.id);
+  }
+  if (!order.external_id) return order;
   const data = await yk('GET', '/payments/' + order.external_id);
   if (data.status === 'succeeded') {
     return fulfillOrder(order, data);
@@ -365,7 +381,7 @@ async function sweep() {
       try { remindTrialEnding(); } catch { /* письма не должны ломать свипер */ }
     }
     if (!providerConfigured()) return;
-    const pending = db.prepare("SELECT * FROM orders WHERE status='pending' AND external_id IS NOT NULL AND created_at > datetime('now', '-1 day') ORDER BY id LIMIT 20").all();
+    const pending = db.prepare("SELECT * FROM orders WHERE status='pending' AND (external_id IS NOT NULL OR yk_invoice_id <> '') AND created_at > datetime('now', '-3 days') ORDER BY id LIMIT 20").all();
     for (const order of pending) {
       try { await checkOrder(order); } catch { /* транзиентная ошибка ЮKassa — повторим */ }
     }

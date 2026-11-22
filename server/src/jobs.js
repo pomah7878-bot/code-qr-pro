@@ -220,6 +220,14 @@ export async function cleanupExpiredJobs() {
       try { await removeJobFiles(job.id); } catch { /* ignore */ }
       db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     }
+    // Корзина: окончательно удаляем задания, пролежавшие в ней больше 30 дней.
+    const trashed = db.prepare("SELECT id FROM generation_jobs WHERE deleted_at IS NOT NULL AND deleted_at <= datetime('now','-30 days')").all();
+    for (const job of trashed) {
+      try { await removeJobFiles(job.id); } catch { /* ignore */ }
+      db.prepare('DELETE FROM job_comments WHERE job_id=?').run(job.id);
+      db.prepare('DELETE FROM job_items WHERE job_id=?').run(job.id);
+      db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
+    }
     db.prepare("DELETE FROM activity_log WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')").run();
   } catch (e) {
     console.error('history cleanup failed:', e?.message || e);

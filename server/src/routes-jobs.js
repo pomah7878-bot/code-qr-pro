@@ -11,6 +11,25 @@ import PDFDocument from 'pdfkit';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isRowIndex } from './security.js';
+import { sendMail } from './lib/mailer.js';
+import { renderBrandEmail } from './lib/email-template.js';
+import { publicUrl } from './lib/public-url.js';
+
+function notifyJobMembers(job, text, excludeMemberId) {
+  const ids = [job.created_by_member_id, job.assigned_to_member_id]
+    .map(Number).filter((id) => id && id !== Number(excludeMemberId));
+  const unique = [...new Set(ids)];
+  if (!unique.length) return;
+  const brand = renderBrandEmail({
+    title: 'Обновление задания', badge: 'Команда CODE QR PRO', preheader: String(text).slice(0, 140),
+    intro: text, ctaLabel: 'Открыть историю', ctaUrl: publicUrl() + '/app/history'
+  });
+  for (const id of unique) {
+    const member = db.prepare("SELECT email FROM team_members WHERE id=? AND status='active' AND revoked_at IS NULL").get(id);
+    if (!member?.email) continue;
+    sendMail({ to: member.email, subject: 'Обновление задания CODE QR PRO', text: brand.text, html: brand.html }).catch(() => {});
+  }
+}
 
 const MODES = ['cz', 'gs1', 'text'];
 
@@ -316,7 +335,10 @@ export async function registerJobRoutes(app) {
     if (!updates.length) return reply.code(400).send({ error: 'Нечего менять' });
     params.push(job.id);
     db.prepare('UPDATE generation_jobs SET ' + updates.join(', ') + ' WHERE id=?').run(...params);
-    return { job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id) };
+    const updated = db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id);
+    if (req.body?.assignedToMemberId !== undefined) notifyJobMembers(updated, `Вас назначили ответственным за задание «${updated.name}»`, req.user.teamMemberId);
+    if (req.body?.workStatus !== undefined) notifyJobMembers(updated, `Статус задания «${updated.name}»: ${updated.work_status}`, req.user.teamMemberId);
+    return { job: updated };
   });
 
   app.get('/api/jobs/:id/comments', { preHandler: requireAuth }, async (req, reply) => {
@@ -333,7 +355,9 @@ export async function registerJobRoutes(app) {
     if (!text) return reply.code(400).send({ error: 'Комментарий пустой' });
     const info = db.prepare('INSERT INTO job_comments (job_id, user_id, member_id, author_name, author_email, text) VALUES (?,?,?,?,?,?)')
       .run(job.id, req.user.id, req.user.teamMemberId || null, req.user.teamMemberName || req.user.name || '', req.user.teamMemberEmail || req.user.email || '', text);
-    return { comment: db.prepare('SELECT id, author_name, author_email, text, created_at FROM job_comments WHERE id=?').get(info.lastInsertRowid) };
+    const comment = db.prepare('SELECT id, author_name, author_email, text, created_at FROM job_comments WHERE id=?').get(info.lastInsertRowid);
+    notifyJobMembers(job, `Новый комментарий от ${req.user.teamMemberName || req.user.name || 'сотрудника'}: ${text.slice(0, 500)}`, req.user.teamMemberId);
+    return { comment };
   });
 
   app.delete('/api/jobs/:id', { preHandler: requireAuth }, async (req, reply) => {

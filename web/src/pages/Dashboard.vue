@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { store } from '../store.js';
 import { api } from '../api.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import AdSlot from '../components/AdSlot.vue';
@@ -21,7 +22,8 @@ const premiumFrom = computed(() => {
   if (!o) return 349;
   return Math.round(o.perMonth ?? o.finalPrice ?? o.price);
 });
-onMounted(async () => {
+let plansSyncOff = null;
+async function loadOffers() {
   try {
     const plans = (await api.plans()).plans;
     const premium = plans.find((p) => p.id === 'pro' || p.id === 'premium');
@@ -30,7 +32,12 @@ onMounted(async () => {
       bestOffer.value = offers.reduce((a, b) => ((b.perMonth ?? b.finalPrice) < (a.perMonth ?? a.finalPrice) ? b : a));
     }
   } catch { /* цена останется базовой */ }
+}
+onMounted(async () => {
+  await loadOffers();
+  plansSyncOff = onPlansChanged(loadOffers);
 });
+onUnmounted(() => { plansSyncOff?.(); });
 const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateString('ru') : '';
 </script>
 

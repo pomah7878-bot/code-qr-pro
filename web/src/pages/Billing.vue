@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
 import BrandIcon from '../components/BrandIcon.vue';
@@ -178,10 +179,13 @@ async function checkoutArchive() {
     else error.value = 'Не получена ссылка на оплату';
   } catch (e) { error.value = e.message; } finally { archiveBusy.value = false; }
 }
+let plansSyncOff = null;
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; }
+  plansSyncOff = onPlansChanged(async () => { try { await load(); } catch { /* ignore */ } });
   if (route.query.order) await check(Number(route.query.order));
 });
+onUnmounted(() => { plansSyncOff?.(); });
 </script>
 
 <template>

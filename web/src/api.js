@@ -2,6 +2,7 @@ async function req(method, url, body) {
   const res = await fetch(url, {
     method,
     credentials: 'include',
+    cache: 'no-store',
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined
   });

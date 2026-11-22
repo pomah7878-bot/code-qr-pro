@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 import { planFeatureRows } from '../lib/planFeatures.js';
 import AdSlot from '../components/AdSlot.vue';
 import BrandIcon from '../components/BrandIcon.vue';
@@ -71,14 +72,22 @@ function animateCounters() {
   requestAnimationFrame(tick);
 }
 
+let plansSyncOff = null;
+async function loadPlans() {
+  try {
+    const d = await api.plans();
+    plans.value = d.list || d.plans || [];
+  } catch { /* оставляем предыдущие тарифы */ }
+}
 onMounted(async () => {
-  try { const d = await api.plans(); plans.value = d.list || d.plans; } catch {}
+  await loadPlans();
+  plansSyncOff = onPlansChanged(loadPlans);
   try { const d = await api.reviews(); reviews.value = d.reviews.slice(0, 6); reviewCount.value = d.count; reviewAvg.value = d.avgRating; } catch {}
   await nextTick();
   setupReveal();
   animateCounters();
 });
-onUnmounted(() => { if (io) io.disconnect(); });
+onUnmounted(() => { if (io) io.disconnect(); plansSyncOff?.(); });
 
 const features = [
   { icon: 'matrix', title: 'GS1 DataMatrix', text: 'Корректные AI, FNC1 и ECC200. Криптохвост «Честного ЗНАКа» — без повреждений.' },

@@ -1,19 +1,26 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 const router = useRouter();
 const name = ref(''), email = ref(''), password = ref(''), consent = ref(false), error = ref(''), busy = ref(false);
 const CONSENT_VERSION = '2026-11-21';
 const freeLimit = ref(50);
-onMounted(async () => {
+let plansSyncOff = null;
+async function loadFreeLimit() {
   try {
     const plans = (await api.plans()).plans;
     const free = plans.find((p) => p.id === 'free');
     freeLimit.value = free?.dailyOps || Math.round((free?.opsPerPeriod || 600) / 30);
   } catch { /* остаётся значение по умолчанию */ }
+}
+onMounted(async () => {
+  await loadFreeLimit();
+  plansSyncOff = onPlansChanged(loadFreeLimit);
 });
+onUnmounted(() => { plansSyncOff?.(); });
 async function submit() {
   error.value = '';
   if (!consent.value) {

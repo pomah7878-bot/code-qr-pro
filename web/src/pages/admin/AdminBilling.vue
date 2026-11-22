@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { api } from '../../api.js';
+import { notifyPlansChanged } from '../../lib/plans-sync.js';
 
 const tab = ref('plans');
 const plans = ref([]);
@@ -89,6 +90,7 @@ async function savePlan(id) {
       active: p.active
     });
     notice.value = `Тариф ${res.plan.title} сохранён`;
+    notifyPlansChanged();
     await loadPlans();
   } catch (e) { error.value = e.message; }
 }
@@ -113,12 +115,14 @@ async function createPlan() {
     });
     newPlan.value = { id: '', title: '' };
     notice.value = 'Тариф создан';
+    notifyPlansChanged();
     await loadPlans();
   } catch (e) { error.value = e.message; }
 }
 async function toggleActive(p) {
   try {
     await api.adminSaveBillingPlan({ ...p, active: !p.active, features: p.features, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, opsPerPeriod: p.opsPerPeriod, dailyOps: p.dailyOps, checksPerPeriod: p.checksPerPeriod, batchMax: p.batchMax, historyDays: p.historyDays, archiveMb: p.archiveMb, formats: p.formats });
+    notifyPlansChanged();
     await loadPlans();
   } catch (e) { error.value = e.message; }
 }

@@ -1,7 +1,8 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { api } from '../api.js';
 import { store } from '../store.js';
+import { onPlansChanged } from '../lib/plans-sync.js';
 import BrandIcon from '../components/BrandIcon.vue';
 
 const plans = ref([]);
@@ -27,12 +28,20 @@ const cta = (plan) => {
   if (!store.user) return { to: '/register', label: plan.id === 'free' ? 'Начать бесплатно' : `Выбрать ${plan.title}` };
   return { to: '/app/billing', label: plan.id === 'free' ? 'Перейти в кабинет' : `Оформить ${plan.title}` };
 };
-onMounted(async () => {
+let plansSyncOff = null;
+async function loadPlans() {
   try {
     const d = await api.billingPlans();
     plans.value = (d.plans || []).filter((p) => p.id !== 'archive');
-  } finally { loading.value = false; }
+  } finally {
+    loading.value = false;
+  }
+}
+onMounted(async () => {
+  await loadPlans();
+  plansSyncOff = onPlansChanged(loadPlans);
 });
+onUnmounted(() => { plansSyncOff?.(); });
 </script>
 
 <template>

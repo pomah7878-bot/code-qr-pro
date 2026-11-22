@@ -93,6 +93,56 @@ export async function registerAdminOrderRoutes(app) {
     );
   });
 
+  // Предпросмотр и очистка тестовых платежей. Только для администратора.
+  app.get('/api/admin/orders/clear-preview', { preHandler: requireAdmin }, async () => {
+    const orders = db.prepare('SELECT id,amount,status,created_at,user_id FROM orders ORDER BY id').all();
+    const ids = orders.map((o) => o.id);
+    const users = [...new Set(orders.map((o) => o.user_id))];
+    const statuses = {};
+    for (const o of orders) statuses[o.status] = (statuses[o.status] || 0) + 1;
+    const events = ids.length ? db.prepare('SELECT COUNT(*) c FROM payment_events WHERE order_id IN (SELECT id FROM orders)').get().c : 0;
+    const bank = ids.length ? db.prepare('SELECT COUNT(*) c FROM bank_transactions WHERE order_id IN (SELECT id FROM orders)').get().c : 0;
+    const activeSubs = users.length ? db.prepare("SELECT COUNT(*) c FROM subscriptions WHERE status='active' AND user_id IN (SELECT DISTINCT user_id FROM orders)").get().c : 0;
+    return {
+      orders: orders.length,
+      amount: orders.reduce((s, o) => s + Number(o.amount || 0), 0),
+      statuses,
+      users: users.length,
+      paymentEvents: events,
+      bankTransactions: bank,
+      activeSubscriptions: activeSubs,
+      from: orders[0]?.created_at || '',
+      to: orders[orders.length - 1]?.created_at || '',
+      warning: 'Очистка удаляет только локальную историю. Деньги в ЮKassa не возвращаются, счета и чеки НПД в внешних сервисах не отменяются.'
+    };
+  });
+
+  app.post('/api/admin/orders/clear', { preHandler: requireAdmin }, async (req, reply) => {
+    const phrase = String(req.body?.confirm || '').trim().toUpperCase();
+    if (phrase !== 'ОЧИСТИТЬ ВСЕ') return reply.code(400).send({ error: 'Введите контрольную фразу: ОЧИСТИТЬ ВСЕ' });
+    if (req.body?.acknowledge !== true) return reply.code(400).send({ error: 'Подтвердите, что реальных платежей нет' });
+    const orders = db.prepare('SELECT id,amount,status,user_id FROM orders').all();
+    if (!orders.length) return { ok: true, deleted: 0, message: 'Платежей для очистки нет' };
+    const users = [...new Set(orders.map((o) => o.user_id))];
+    const amount = orders.reduce((s, o) => s + Number(o.amount || 0), 0);
+    let bankDeleted = 0;
+    db.transaction(() => {
+      bankDeleted = db.prepare('SELECT COUNT(*) c FROM bank_transactions WHERE order_id IN (SELECT id FROM orders)').get().c;
+      db.prepare('DELETE FROM payment_events WHERE order_id IN (SELECT id FROM orders)').run();
+      if (req.body?.deleteBank !== false) db.prepare('DELETE FROM bank_transactions WHERE order_id IN (SELECT id FROM orders)').run();
+      else db.prepare("UPDATE bank_transactions SET order_id=NULL, status='unmatched', matched_at=NULL WHERE order_id IN (SELECT id FROM orders)").run();
+      if (req.body?.resetPlans === true) {
+        db.prepare("UPDATE subscriptions SET status='canceled', canceled_at=datetime('now') WHERE status='active' AND user_id IN (SELECT DISTINCT user_id FROM orders)").run();
+        db.prepare("UPDATE users SET plan='free', archive_until=NULL, archive_mb=0 WHERE id IN (SELECT DISTINCT user_id FROM orders)").run();
+      }
+      db.prepare('DELETE FROM orders').run();
+    })();
+    audit(req, 'orders.clear', 'orders', 'all', {
+      count: orders.length, amount, users: users.length, resetPlans: Boolean(req.body?.resetPlans), deleteBank: req.body?.deleteBank !== false
+    });
+    return { ok: true, deleted: orders.length, amount, users: users.length, bankDeleted, resetPlans: Boolean(req.body?.resetPlans) };
+  });
+
   // Ручное подтверждение оплаты: активирует PREMIUM на срок заказа
   app.post('/api/admin/orders/:id/confirm', { preHandler: requireAdmin }, async (req, reply) => {
     const order = getOrder(req.params.id);

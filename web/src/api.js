@@ -134,6 +134,8 @@ export const api = {
   adminSystemStatus: () => req('GET', '/api/admin/system/status'),
   adminSetMaintenance: (enabled) => req('PUT', '/api/admin/system/maintenance', { enabled }),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),
+  adminOrdersClearPreview: () => req('GET', '/api/admin/orders/clear-preview'),
+  adminOrdersClear: (b) => req('POST', '/api/admin/orders/clear', b),
   adminOverview: (days = 30) => req('GET', '/api/admin/overview?days=' + days),
   adminSeries: (days = 30) => req('GET', '/api/admin/series?days=' + days),
   adminHealth: () => req('GET', '/api/admin/health'),

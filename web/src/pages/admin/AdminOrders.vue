@@ -17,6 +17,13 @@ const refundTarget = ref(null);
 const refundOpen = ref(false);
 const refundRevoke = ref(true);
 const refundBusy = ref(false);
+const clearOpen = ref(false);
+const clearPreview = ref(null);
+const clearBusy = ref(false);
+const clearPhrase = ref('');
+const clearAck = ref(false);
+const clearResetPlans = ref(false);
+const clearDeleteBank = ref(true);
 
 const STATUS_LABEL = { pending: 'Ожидает', paid: 'Оплачен', canceled: 'Отменён', refunded: 'Возврат' };
 
@@ -102,6 +109,25 @@ function resendReceipt(o) {
   run(o, () => api.adminResendNpdReceipt(o.id), `Чек НПД по заказу №${o.id} отправлен на email`);
 }
 
+async function openClear() {
+  error.value = ''; notice.value = ''; clearOpen.value = true; clearPreview.value = null;
+  clearPhrase.value = ''; clearAck.value = false; clearResetPlans.value = false; clearDeleteBank.value = true;
+  try { clearPreview.value = await api.adminOrdersClearPreview(); } catch (e) { error.value = e.message; clearOpen.value = false; }
+}
+
+async function doClear() {
+  if (clearPhrase.value.trim().toUpperCase() !== 'ОЧИСТИТЬ ВСЕ') return;
+  clearBusy.value = true; error.value = ''; notice.value = '';
+  try {
+    const r = await api.adminOrdersClear({ confirm: clearPhrase.value.trim(), acknowledge: true, resetPlans: clearResetPlans.value, deleteBank: clearDeleteBank.value });
+    clearOpen.value = false;
+    notice.value = `Очищено заказов: ${r.deleted} на ${money(r.amount)}. Банковских строк: ${r.bankDeleted || 0}.`;
+    if (clearResetPlans.value) notice.value += ' Тарифы пользователей сброшены на FREE.';
+    await load();
+  } catch (e) { error.value = e.message; }
+  finally { clearBusy.value = false; }
+}
+
 function openRefund(o) {
   refundTarget.value = o;
   refundRevoke.value = true;
@@ -140,7 +166,10 @@ onMounted(load);
         <h2 class="font-display font-semibold text-lg">Платежи</h2>
         <p class="text-xs text-slate-500 mt-0.5">Ручное подтверждение, отмена и возврат. Деньги возвращает ЮKassa.</p>
       </div>
-      <button class="btn-ghost !py-2 !px-3 text-sm" @click="exportCsv">↓ Экспорт CSV</button>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn-ghost !py-2 !px-3 text-sm" @click="exportCsv">↓ Экспорт CSV</button>
+        <button class="btn-ghost !py-2 !px-3 text-sm text-red-500 border-red-500/30" data-tooltip="Удалить тестовые платежи и связанные записи" @click="openClear">Очистить платежи</button>
+      </div>
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -262,6 +291,29 @@ onMounted(load);
         <button class="btn-ghost !py-1.5 !px-3 text-sm" :disabled="filters.page >= data.pages" @click="go(filters.page + 1)">Вперёд →</button>
       </div>
     </div>
+
+    <Modal :open="clearOpen" title="Очистка тестовых платежей" @close="clearOpen = false">
+      <div v-if="!clearPreview" class="text-sm text-slate-500">Загружаем предпросмотр…</div>
+      <div v-else class="space-y-3 text-sm">
+        <div class="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+          <div class="font-semibold text-red-500">Это необратимая операция</div>
+          <p class="text-xs mt-1">Будут удалены <b>{{ clearPreview.orders }}</b> заказов на <b>{{ money(clearPreview.amount) }}</b>, платежные события: {{ clearPreview.paymentEvents }}, банковские строки: {{ clearPreview.bankTransactions }}.</p>
+          <p class="text-xs mt-1">Затронуто клиентов: {{ clearPreview.users }} · активных подписок: {{ clearPreview.activeSubscriptions }}.</p>
+        </div>
+        <p class="text-xs text-amber-500">{{ clearPreview.warning }}</p>
+        <label class="flex items-start gap-2 text-xs"><input v-model="clearResetPlans" type="checkbox" class="mt-0.5">Сбросить тарифы этих клиентов на FREE и отменить активные подписки</label>
+        <label class="flex items-start gap-2 text-xs"><input v-model="clearDeleteBank" type="checkbox" class="mt-0.5">Удалить связанные строки банковской выверки</label>
+        <label class="flex items-start gap-2 text-xs"><input v-model="clearAck" type="checkbox" class="mt-0.5">Подтверждаю: реальных платежей нет, деньги через ЮKassa не возвращаются</label>
+        <div>
+          <label class="label !text-xs" for="clear-phrase">Введите <b>ОЧИСТИТЬ ВСЕ</b></label>
+          <input id="clear-phrase" v-model="clearPhrase" class="input !py-2 text-sm" placeholder="ОЧИСТИТЬ ВСЕ" autocomplete="off">
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button class="btn-ghost !py-2 !px-3 text-sm" @click="clearOpen = false">Отмена</button>
+          <button class="btn-primary !py-2 !px-4 text-sm !from-red-600 !to-red-500" :disabled="clearBusy || !clearAck || clearPhrase.trim().toUpperCase() !== 'ОЧИСТИТЬ ВСЕ'" @click="doClear">{{ clearBusy ? 'Очищаем…' : 'Удалить платежи' }}</button>
+        </div>
+      </div>
+    </Modal>
 
     <Modal :open="refundOpen" title="Возврат средств" @close="refundOpen = false">
       <template v-if="refundTarget">

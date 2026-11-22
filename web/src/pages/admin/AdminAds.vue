@@ -214,7 +214,7 @@ onMounted(load);
         <div class="mx-auto mt-8 w-full max-w-2xl rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 p-5 shadow-2xl">
           <div class="flex items-start justify-between gap-2 mb-4">
             <h3 class="font-display font-bold text-xl">{{ editing ? 'Изменить кампанию' : 'Новая кампания' }}</h3>
-            <button class="text-slate-400 text-xl" @click="open = false"><BrandIcon name="close" :size="18" /></button>
+            <button class="text-slate-400 text-xl" aria-label="Закрыть форму" @click="open = false"><BrandIcon name="close" :size="18" /></button>
           </div>
           <div class="grid md:grid-cols-2 gap-3">
             <div><label class="label !text-xs">Рекламодатель</label><input v-model="form.advertiser" class="input !py-2 text-sm" placeholder="ООО «Ромашка»"></div>
@@ -273,7 +273,7 @@ onMounted(load);
                 <option :value="30">30 дней</option>
                 <option :value="90">90 дней</option>
               </select>
-              <button class="text-slate-400 text-xl" @click="statsOpen = false"><BrandIcon name="close" :size="18" /></button>
+              <button class="text-slate-400 text-xl" aria-label="Закрыть статистику" @click="statsOpen = false"><BrandIcon name="close" :size="18" /></button>
             </div>
           </div>
           <p v-if="error" class="text-sm text-red-500 mb-3">{{ error }}</p>

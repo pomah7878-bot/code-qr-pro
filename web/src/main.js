@@ -2,9 +2,11 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router.js';
 import { initTheme } from './store.js';
+import { installTooltips } from './lib/tooltip.js';
 import './style.css';
 
 initTheme();
+installTooltips();
 
 const app = createApp(App);
 app.use(router);

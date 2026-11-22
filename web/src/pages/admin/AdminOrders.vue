@@ -229,12 +229,12 @@ onMounted(load);
               <td class="py-3 px-4">
                 <div class="flex flex-wrap gap-1.5">
                   <template v-if="o.status === 'pending'">
-                    <button class="btn-ghost !py-1 !px-2.5 text-xs text-emerald-500" :disabled="actionBusy === o.id" @click="confirmOrder(o)">Подтвердить</button>
-                    <button v-if="o.payment_method !== 'bank_transfer'" class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="actionBusy === o.id" @click="recheck(o)">Проверить</button>
-                    <a v-if="o.invoice_number" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-2.5 text-xs">Счёт PDF</a>
-                    <button class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" @click="cancelOrder(o)">Отменить</button>
+                    <button class="btn-ghost !py-1 !px-2.5 text-xs text-emerald-500" :disabled="actionBusy === o.id" data-tooltip="Подтвердить оплату вручную и активировать тариф" @click="confirmOrder(o)">Подтвердить</button>
+                    <button v-if="o.payment_method !== 'bank_transfer'" class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="actionBusy === o.id" data-tooltip="Запросить актуальный статус платежа в ЮKassa" @click="recheck(o)">Проверить</button>
+                    <a v-if="o.invoice_number" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-2.5 text-xs" data-tooltip="Открыть PDF-счёт для оплаты банковским переводом">Счёт PDF</a>
+                    <button class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" data-tooltip="Отменить неоплаченный заказ" @click="cancelOrder(o)">Отменить</button>
                   </template>
-                  <button v-else-if="o.status === 'paid'" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" @click="openRefund(o)">Возврат</button>
+                  <button v-else-if="o.status === 'paid'" class="btn-ghost !py-1 !px-2.5 text-xs text-red-500" :disabled="actionBusy === o.id" data-tooltip="Оформить возврат платежа через ЮKassa" @click="openRefund(o)">Возврат</button>
                   <span v-else class="text-slate-400 text-xs">—</span>
                 </div>
               </td>

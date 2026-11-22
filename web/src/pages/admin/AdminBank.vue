@@ -96,7 +96,7 @@ onMounted(load);
         <h2 class="font-display font-bold text-xl sm:text-2xl">Сверка банковской выписки</h2>
         <p class="text-sm text-slate-500 mt-1">Загрузите выписку — сервер найдёт входящие платежи, сопоставит их с B2B-счетами и активирует доступ. Нужен только банковский перевод.</p>
       </div>
-      <button class="btn-ghost !py-2 text-sm" :disabled="loading" @click="load">{{ loading ? 'Обновляем…' : 'Обновить' }}</button>
+      <button class="btn-ghost !py-2 text-sm" :disabled="loading" data-tooltip="Обновить список счетов и несопоставленных поступлений" @click="load">{{ loading ? 'Обновляем…' : 'Обновить' }}</button>
     </div>
 
     <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
@@ -105,7 +105,7 @@ onMounted(load);
     <div class="glass rounded-2xl p-5">
       <div class="flex flex-wrap items-center gap-3">
         <input ref="fileInput" type="file" accept=".csv,.txt,.1c,text/csv,text/plain" class="input !py-2 text-sm max-w-full" @change="onFile">
-        <button class="btn-primary" :disabled="busy || !filename" @click="importFile">{{ busy ? 'Обрабатываем…' : 'Загрузить выписку' }}</button>
+        <button class="btn-primary" :disabled="busy || !filename" data-tooltip="Загрузить CSV или файл 1С и автоматически сопоставить платежи" @click="importFile">{{ busy ? 'Обрабатываем…' : 'Загрузить выписку' }}</button>
         <span v-if="filename" class="text-xs text-slate-500">{{ filename }}</span>
       </div>
       <p class="text-[11px] text-slate-500 mt-2">
@@ -147,8 +147,8 @@ onMounted(load);
                   <option :value="0">Выберите счёт</option>
                   <option v-for="o in data.pending" :key="o.id" :value="o.id">{{ o.invoice_number }} · {{ o.company_name }} · {{ money(o.amount) }}</option>
                 </select>
-                <button class="btn-primary !py-1.5 !px-3 text-xs" :disabled="!choices[t.id]" @click="match(t)">Сопоставить</button>
-                <button class="btn-ghost !py-1.5 !px-3 text-xs" @click="ignore(t)">Игнорировать</button>
+                <button class="btn-primary !py-1.5 !px-3 text-xs" :disabled="!choices[t.id]" data-tooltip="Связать это поступление с выбранным счётом и активировать доступ" @click="match(t)">Сопоставить</button>
+                <button class="btn-ghost !py-1.5 !px-3 text-xs" data-tooltip="Пометить строку как не относящуюся к счетам" @click="ignore(t)">Игнорировать</button>
               </div>
             </td>
           </tr>

@@ -600,15 +600,15 @@ onMounted(load);
           <button v-if="diag?.mustChangePassword" class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'pwdflag'" @click="clearPasswordFlag">
             Снять «сменить пароль»
           </button>
-          <button class="btn-primary !py-2 !px-3 text-sm" :disabled="helpBusy === 'link' || user.status === 'blocked'" @click="makeLoginLink">
+          <button class="btn-primary !py-2 !px-3 text-sm" :disabled="helpBusy === 'link' || user.status === 'blocked'" data-tooltip="Создать одноразовую ссылку для входа клиента" @click="makeLoginLink">
             {{ helpBusy === 'link' ? 'Готовим…' : 'Ссылка для входа' }}
           </button>
           <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="mail.busy" @click="openMail">Написать клиенту</button>
-          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'view' || user.status === 'blocked'" @click="viewAsClient">
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="helpBusy === 'view' || user.status === 'blocked'" data-tooltip="Открыть кабинет глазами клиента в режиме только чтения" @click="viewAsClient">
             {{ helpBusy === 'view' ? 'Открываем…' : 'Смотреть как клиент' }}
           </button>
-          <button class="btn-ghost !py-2 !px-3 text-sm" @click="openCompensate">Компенсация</button>
-          <button class="btn-ghost !py-2 !px-3 text-sm text-red-500" :disabled="helpBusy === 'keys'" @click="revokeApiKeys">Отозвать API-ключи</button>
+          <button class="btn-ghost !py-2 !px-3 text-sm" data-tooltip="Продлить подписку клиенту в качестве компенсации" @click="openCompensate">Компенсация</button>
+          <button class="btn-ghost !py-2 !px-3 text-sm text-red-500" :disabled="helpBusy === 'keys'" data-tooltip="Отозвать все API-ключи клиента" @click="revokeApiKeys">Отозвать API-ключи</button>
           <button v-if="diag?.rateLimits?.length" class="btn-ghost !py-2 !px-3 text-sm text-amber-500" :disabled="helpBusy === 'ratelimit'" @click="clearRateLimits">
             Снять лимит запросов ({{ diag.rateLimits.length }})
           </button>

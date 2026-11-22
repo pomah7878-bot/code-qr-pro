@@ -59,7 +59,7 @@ onMounted(load);
       <div v-if="store.user" class="glass rounded-2xl p-6">
         <h2 class="font-display font-semibold mb-3">{{ mine ? 'Ваш отзыв' : 'Оставить отзыв' }}</h2>
         <div class="flex items-center gap-1 mb-3 text-2xl">
-          <button v-for="n in 5" :key="n" @click="rating = n" class="transition" :class="n <= rating ? 'text-amber-500' : 'text-slate-300 dark:text-white/20'"><BrandIcon :name="n <= rating ? 'star-filled' : 'star'" :size="22" /></button>
+          <button v-for="n in 5" :key="n" :aria-label="`Оценка ${n} из 5`" @click="rating = n" class="transition" :class="n <= rating ? 'text-amber-500' : 'text-slate-300 dark:text-white/20'"><BrandIcon :name="n <= rating ? 'star-filled' : 'star'" :size="22" /></button>
           <span class="text-sm text-slate-500 ml-2">{{ rating }} из 5</span>
         </div>
         <input v-model="authorName" class="input mb-3" placeholder="Ваше имя (как подписать отзыв)" maxlength="60">

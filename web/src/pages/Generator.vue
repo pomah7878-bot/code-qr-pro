@@ -375,7 +375,7 @@ const itemStatus = { ok: 'ожидает', generated: 'готов', invalid: 'о
             <button class="font-medium hover:text-brand-400 truncate" @click="openJob(h.id)">{{ h.name }}</button>
             <span class="text-slate-500 text-xs">{{ h.mode.toUpperCase() }} · {{ h.done }}/{{ h.valid }}</span>
             <span class="ml-auto text-xs" :class="h.status === 'done' ? 'text-emerald-500' : h.status === 'error' ? 'text-red-500' : 'text-slate-500'">{{ statusLabel[h.status] || h.status }}</span>
-            <button class="text-slate-400 hover:text-red-500" @click="removeJob(h.id)"><BrandIcon name="close" :size="17" /></button>
+            <button class="text-slate-400 hover:text-red-500" aria-label="Удалить задание" @click="removeJob(h.id)"><BrandIcon name="close" :size="17" /></button>
           </div>
         </div>
       </div>

@@ -190,7 +190,7 @@ onMounted(loadTab);
       <div class="glass rounded-2xl p-4 flex flex-wrap items-end gap-3">
         <div><label class="text-xs text-slate-500">ID нового тарифа</label><input v-model="newPlan.id" class="input !py-2 text-sm" placeholder="vip"></div>
         <div><label class="text-xs text-slate-500">Название</label><input v-model="newPlan.title" class="input !py-2 text-sm" placeholder="VIP"></div>
-        <button class="btn-primary" @click="createPlan">Создать тариф</button>
+        <button class="btn-primary" data-tooltip="Создать новый тариф с нулевыми ценами и лимитами" @click="createPlan">Создать тариф</button>
         <div class="text-xs text-slate-500 ml-auto">Архив на 3 года: {{ archive?.price }} ₽ · {{ archive?.days }} дней · {{ archive?.mb }} МБ</div>
       </div>
       <div class="grid xl:grid-cols-2 gap-4">
@@ -199,7 +199,7 @@ onMounted(loadTab);
             <div class="font-display font-bold">{{ edit[plan.id]?.title }} <span class="text-xs text-slate-500 font-normal">({{ plan.id }})</span></div>
             <div class="flex items-center gap-2 text-xs">
               <label class="flex items-center gap-1"><input v-model="edit[plan.id].recommended" type="checkbox"> рекомендуемый</label>
-              <button class="btn-ghost !py-1 !px-2 text-xs" @click="toggleActive(edit[plan.id])">{{ edit[plan.id]?.active ? 'Отключить' : 'Включить' }}</button>
+              <button class="btn-ghost !py-1 !px-2 text-xs" :data-tooltip="edit[plan.id]?.active ? 'Скрыть тариф из публичной витрины' : 'Вернуть тариф в публичную витрину'" @click="toggleActive(edit[plan.id])">{{ edit[plan.id]?.active ? 'Отключить' : 'Включить' }}</button>
             </div>
           </div>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-xs">
@@ -230,7 +230,7 @@ onMounted(loadTab);
           </div>
           <div class="flex items-center justify-between mt-3">
             <div class="text-xs text-slate-500">{{ edit[plan.id]?.description }}</div>
-            <button class="btn-primary !py-1.5 text-sm" @click="savePlan(plan.id)">Сохранить</button>
+            <button class="btn-primary !py-1.5 text-sm" data-tooltip="Сохранить цены, лимиты и функции тарифа" @click="savePlan(plan.id)">Сохранить</button>
           </div>
         </div>
       </div>
@@ -265,13 +265,13 @@ onMounted(loadTab);
                     <option v-for="id in planIds" :key="id" :value="id">{{ id }}</option>
                   </select>
                   <input v-model.number="assign.days" type="number" class="input !py-1 !w-20 text-xs" title="Дней">
-                  <button class="btn-ghost !py-1 !px-2 text-xs" @click="assign.userId = u.id; assignPlan(u)">Назначить</button>
-                  <button class="btn-ghost !py-1 !px-2 text-xs" @click="grantTrial(u)">Триал</button>
+                  <button class="btn-ghost !py-1 !px-2 text-xs" data-tooltip="Назначить выбранный тариф этому пользователю" @click="assign.userId = u.id; assignPlan(u)">Назначить</button>
+                  <button class="btn-ghost !py-1 !px-2 text-xs" data-tooltip="Выдать пробный период PRO на 7 дней" @click="grantTrial(u)">Триал</button>
                 </div>
                 <div class="flex flex-wrap gap-2 items-center mt-2">
                   <input v-model.number="extendDays[u.id]" type="number" placeholder="+дней" class="input !py-1 !w-20 text-xs">
-                  <button class="btn-ghost !py-1 !px-2 text-xs" @click="extend(u)">Продлить</button>
-                  <button v-if="u.sub_id" class="btn-ghost !py-1 !px-2 text-xs" @click="cancelSub(u)">Отключить автопродление</button>
+                  <button class="btn-ghost !py-1 !px-2 text-xs" data-tooltip="Продлить подписку на указанное количество дней" @click="extend(u)">Продлить</button>
+                  <button v-if="u.sub_id" class="btn-ghost !py-1 !px-2 text-xs" data-tooltip="Отключить автоматическое продление подписки" @click="cancelSub(u)">Отключить автопродление</button>
                 </div>
               </td>
             </tr>

@@ -229,7 +229,7 @@ onUnmounted(() => { plansSyncOff?.(); });
             <div class="font-display font-bold text-xl mt-1">Осталось {{ trial.daysLeft }} дн. до {{ fmt(trial.endsAt) }}</div>
             <div class="text-sm text-slate-500 mt-1">Доступны все возможности PRO. Расширенных проверок на триал: {{ usage?.checks?.limit }}. Автосписания не будет.</div>
           </div>
-          <button class="btn-primary" :disabled="busy" @click="checkout">Оформить PRO</button>
+          <button class="btn-primary" :disabled="busy" data-tooltip="Оформить выбранный тариф" @click="checkout">Оформить PRO</button>
         </div>
       </div>
 
@@ -407,8 +407,8 @@ onUnmounted(() => { plansSyncOff?.(); });
             <div class="text-slate-500">{{ priceNow.toLocaleString('ru') }} ₽<template v-if="promo?.discount"> · промокод −{{ promo.discount.toLocaleString('ru') }} ₽</template></div>
           </div>
           <input v-model="promoCode" class="input !py-2 !w-52 text-sm" placeholder="Промокод" aria-label="Промокод" autocomplete="off">
-          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="promoBusy" @click="applyPromo">{{ promoBusy ? 'Проверяем…' : 'Применить' }}</button>
-          <button class="btn-primary ml-auto" :disabled="busy || (buyerType === 'individual' ? !providerOk : !invoiceInfo.available) || !selectedPlan" @click="checkout">
+          <button class="btn-ghost !py-2 !px-3 text-sm" :disabled="promoBusy" data-tooltip="Проверить промокод и применить скидку" @click="applyPromo">{{ promoBusy ? 'Проверяем…' : 'Применить' }}</button>
+          <button class="btn-primary ml-auto" :disabled="busy || (buyerType === 'individual' ? !providerOk : !invoiceInfo.available) || !selectedPlan" data-tooltip="Оформить выбранный тариф" @click="checkout">
             {{ busy ? 'Создаём заказ…' : (buyerType === 'legal' ? 'Выставить счёт (PDF)' : 'Перейти к оплате') }}
           </button>
         </div>
@@ -432,7 +432,7 @@ onUnmounted(() => { plansSyncOff?.(); });
           </div>
           <div class="text-right">
             <div class="text-2xl font-extrabold">{{ archiveInfo.addon.price.toLocaleString('ru') }} ₽</div>
-            <button class="btn-ghost mt-2" :disabled="archiveBusy || !archiveInfo.providerConfigured" @click="checkoutArchive">
+            <button class="btn-ghost mt-2" :disabled="archiveBusy || !archiveInfo.providerConfigured" data-tooltip="Подключить или продлить архив на 3 года" @click="checkoutArchive">
               {{ archiveBusy ? 'Создаём заказ…' : (archiveInfo.activeUntil ? 'Продлить архив' : 'Подключить архив') }}
             </button>
           </div>
@@ -456,11 +456,11 @@ onUnmounted(() => { plansSyncOff?.(); });
               <td class="py-2 pr-3">{{ Number(o.amount).toLocaleString('ru') }} ₽</td>
               <td class="py-2 pr-3" :class="o.status === 'paid' ? 'text-emerald-500' : o.status === 'canceled' ? 'text-red-500' : 'text-amber-500'">{{ statusRu[o.status] || o.status }}</td>
               <td class="py-2">
-                <a v-if="o.buyer_type === 'legal'" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex">Счёт PDF</a>
-                <a v-if="o.buyer_type === 'legal' && o.yk_invoice_url && o.status === 'pending'" :href="o.yk_invoice_url" target="_blank" rel="noopener" class="btn-primary !py-1 !px-3 text-xs inline-flex ml-1">Оплатить онлайн</a>
-                <button v-else-if="o.buyer_type === 'legal' && o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs ml-1" @click="getPayLink(o.id)">Ссылка на оплату</button>
-                <a v-if="o.npd_receipt_url" :href="o.npd_receipt_url" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex ml-1">Чек НПД</a>
-                <button v-else-if="o.status === 'pending' && o.buyer_type !== 'legal'" class="btn-ghost !py-1 !px-3 text-xs" @click="check(o.id)">Проверить оплату</button>
+                <a v-if="o.buyer_type === 'legal'" :href="'/api/billing/orders/' + o.id + '/invoice'" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex" data-tooltip="Скачать счёт для банковского перевода">Счёт PDF</a>
+                <a v-if="o.buyer_type === 'legal' && o.yk_invoice_url && o.status === 'pending'" :href="o.yk_invoice_url" target="_blank" rel="noopener" class="btn-primary !py-1 !px-3 text-xs inline-flex ml-1" data-tooltip="Оплатить счёт картой или через СБП">Оплатить онлайн</a>
+                <button v-else-if="o.buyer_type === 'legal' && o.status === 'pending'" class="btn-ghost !py-1 !px-3 text-xs ml-1" data-tooltip="Создать ссылку ЮKassa для оплаты этого счёта" @click="getPayLink(o.id)">Ссылка на оплату</button>
+                <a v-if="o.npd_receipt_url" :href="o.npd_receipt_url" target="_blank" rel="noopener" class="btn-ghost !py-1 !px-3 text-xs inline-flex ml-1" data-tooltip="Открыть электронный чек НПД">Чек НПД</a>
+                <button v-else-if="o.status === 'pending' && o.buyer_type !== 'legal'" class="btn-ghost !py-1 !px-3 text-xs" data-tooltip="Запросить актуальный статус оплаты" @click="check(o.id)">Проверить оплату</button>
               </td>
             </tr>
           </tbody>

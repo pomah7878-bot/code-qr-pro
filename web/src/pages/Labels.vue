@@ -873,7 +873,7 @@ onMounted(() => { loadTemplates(); loadJobs(); nextTick(draw); });
             <div v-if="templates.length" class="space-y-1 max-h-32 overflow-auto">
               <div v-for="t in templates" :key="t.id" class="flex items-center gap-2 text-xs">
                 <button class="truncate hover:text-brand-400" :class="currentTemplateId === t.id ? 'font-bold text-brand-400' : ''" @click="openTemplate(t)">{{ t.name }} ({{ t.widthMm }}×{{ t.heightMm }})</button>
-                <button class="ml-auto text-slate-400 hover:text-red-500" @click="removeTemplate(t.id)"><BrandIcon name="close" :size="17" /></button>
+                <button class="ml-auto text-slate-400 hover:text-red-500" aria-label="Удалить шаблон" @click="removeTemplate(t.id)"><BrandIcon name="close" :size="17" /></button>
               </div>
             </div>
           </div>

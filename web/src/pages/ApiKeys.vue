@@ -61,7 +61,7 @@ onMounted(load);
             <code class="font-mono text-xs">{{ k.prefix }}…</code>
             <span class="font-medium">{{ k.name }}</span>
             <span class="text-xs text-slate-500 ml-auto">{{ k.last_used_at ? 'использован ' + k.last_used_at.slice(0, 10) : 'не использован' }}</span>
-            <button class="text-slate-400 hover:text-red-500" @click="revoke(k.id)"><BrandIcon name="close" :size="16" /></button>
+            <button class="text-slate-400 hover:text-red-500" aria-label="Отозвать API-ключ" @click="revoke(k.id)"><BrandIcon name="close" :size="16" /></button>
           </div>
         </div>
         <div class="glass rounded-2xl p-6">

@@ -117,3 +117,7 @@ export async function tgAnswerCallback(callbackId, text = '') {
 export async function tgGetMe() {
   return call('getMe');
 }
+
+export async function tgSetMyCommands(commands = []) {
+  return call('setMyCommands', { commands });
+}

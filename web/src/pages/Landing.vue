@@ -26,6 +26,7 @@ const priceOf = (plan) => landingPeriod.value === 'year'
   ? (Number(plan.priceYearly) || Math.round(Number(plan.priceMonthly || 0) * 12))
   : (Number(plan.priceMonthly) || 0);
 const perMonthOf = (plan) => Math.round(priceOf(plan) / (landingPeriod.value === 'year' ? 12 : 1));
+const yearlySavings = (plan) => Math.max(0, Math.round((Number(plan.priceMonthly) || 0) * 12 - priceOf(plan)));
 const landingFeatures = (plan) => planFeatureRows(plan, { onlyEnabled: true });
 const landingCta = (plan) => plan.id === 'free'
   ? { to: '/register', label: 'Начать бесплатно' }
@@ -278,7 +279,7 @@ const openFaq = ref(null);
       <div class="reveal flex justify-center mb-8">
         <div class="inline-flex rounded-2xl border border-slate-200 dark:border-white/15 p-1">
           <button class="px-5 py-2 rounded-xl text-sm font-medium" :class="landingPeriod === 'month' ? 'bg-violet-600 text-white' : 'text-slate-500'" @click="landingPeriod = 'month'">Месяц</button>
-          <button class="px-5 py-2 rounded-xl text-sm font-medium" :class="landingPeriod === 'year' ? 'bg-violet-600 text-white' : 'text-slate-500'" @click="landingPeriod = 'year'">Год <span class="text-xs opacity-80">−2 месяца</span></button>
+          <button class="px-5 py-2 rounded-xl text-sm font-medium" :class="landingPeriod === 'year' ? 'bg-violet-600 text-white' : 'text-slate-500'" @click="landingPeriod = 'year'">Год <span class="text-xs opacity-80">· 2 месяца в подарок</span></button>
         </div>
       </div>
       <div class="relative grid sm:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch">
@@ -295,7 +296,7 @@ const openFaq = ref(null);
             <span v-if="plan.id !== 'free'" class="text-sm text-slate-500 mb-1">/{{ landingPeriod === 'year' ? 'год' : 'мес' }}</span>
           </div>
           <div v-if="plan.id === 'free'" class="text-xs text-slate-500 mb-5">бесплатно, без карты</div>
-          <div v-else class="text-xs text-slate-500 mb-5">{{ landingPeriod === 'year' ? perMonthOf(plan).toLocaleString('ru') + ' ₽/мес · выгода' : 'без автопродления' }}</div>
+          <div v-else class="text-xs text-slate-500 mb-5">{{ landingPeriod === 'year' ? perMonthOf(plan).toLocaleString('ru') + ' ₽/мес · экономия ' + yearlySavings(plan).toLocaleString('ru') + ' ₽' : 'без автопродления' }}</div>
           <ul class="space-y-2 text-sm mb-6 flex-1">
             <li v-for="f in landingFeatures(plan)" :key="f.text" class="flex items-start gap-2">
               <span class="text-emerald-500 font-bold mt-0.5"><BrandIcon name="check" :size="14" /></span> {{ f.text }}

@@ -42,7 +42,7 @@ onMounted(async () => {
       <p class="text-slate-500 mt-3">Маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток и проверка кодов. Пробный период PRO — 7 дней бесплатно, без автосписания.</p>
       <div class="inline-flex rounded-xl border border-slate-200 dark:border-white/15 p-1 mt-6">
         <button class="px-5 py-2 rounded-lg text-sm" :class="period === 'month' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'month'">Месяц</button>
-        <button class="px-5 py-2 rounded-lg text-sm" :class="period === 'year' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'year'">Год <span class="text-xs opacity-80">выгоднее</span></button>
+        <button class="px-5 py-2 rounded-lg text-sm" :class="period === 'year' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'year'">Год <span class="text-xs opacity-80">· 2 месяца в подарок</span></button>
       </div>
     </div>
 

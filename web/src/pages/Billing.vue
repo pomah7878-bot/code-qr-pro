@@ -331,7 +331,7 @@ onMounted(async () => {
         <h2 class="font-display font-bold text-xl">Тарифы</h2>
         <div class="inline-flex rounded-xl border border-slate-200 dark:border-white/15 p-1">
           <button class="px-4 py-1.5 rounded-lg text-sm" :class="period === 'month' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'month'">Месяц</button>
-          <button class="px-4 py-1.5 rounded-lg text-sm" :class="period === 'year' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'year'">Год <span class="text-xs opacity-80">−2 месяца</span></button>
+          <button class="px-4 py-1.5 rounded-lg text-sm" :class="period === 'year' ? 'bg-brand-500 text-white' : 'text-slate-500'" @click="period = 'year'">Год <span class="text-xs opacity-80">· 2 месяца в подарок</span></button>
         </div>
       </div>
 

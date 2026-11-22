@@ -23,7 +23,7 @@ const features = (plan) => [
   plan.features?.templates ? 'Сохранение шаблонов' : 'Без сохранения шаблонов',
   plan.features?.apiAccess ? 'API для 1С и складов' : 'API недоступен',
   plan.features?.aiAssistant ? (plan.id === 'free' ? 'AI-помощник (базовый)' : 'AI-помощник без ограничений') : 'Без AI-помощника',
-  `${plan.features?.employees || 1} сотрудник(ов)`,
+  `Сотрудников: до ${plan.features?.employees || 1}`, 
   `История ${plan.historyDays} дней`
 ];
 const cta = (plan) => {

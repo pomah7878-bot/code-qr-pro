@@ -12,6 +12,7 @@ const sessions = ref([]);
 const error = ref('');
 const notice = ref('');
 const busy = ref(false);
+const pwd = reactive({ current: '', next: '', repeat: '', busy: false });
 
 const fmt = (v) => {
   if (!v) return '—';
@@ -22,6 +23,20 @@ const fmt = (v) => {
 async function loadSessions() {
   try { sessions.value = (await api.sessions()).sessions || []; }
   catch (e) { error.value = e.message; }
+}
+
+async function changePassword() {
+  error.value = ''; notice.value = '';
+  if (pwd.next.length < 8) { error.value = 'Новый пароль минимум 8 символов'; return; }
+  if (pwd.next !== pwd.repeat) { error.value = 'Пароли не совпадают'; return; }
+  pwd.busy = true;
+  try {
+    await api.changePassword({ currentPassword: pwd.current, newPassword: pwd.next });
+    pwd.current = ''; pwd.next = ''; pwd.repeat = '';
+    notice.value = 'Пароль изменён';
+    await loadSessions();
+  } catch (e) { error.value = e.message; }
+  finally { pwd.busy = false; }
 }
 
 async function logoutAll() {
@@ -59,6 +74,17 @@ onMounted(loadSessions);
 
       <div v-if="error" class="text-sm text-red-500">{{ error }}</div>
       <div v-if="notice" class="text-sm text-emerald-500">{{ notice }}</div>
+
+      <div class="glass rounded-2xl p-5">
+        <h2 class="font-display font-semibold">Смена пароля</h2>
+        <p class="text-xs text-slate-500 mt-1">После смены остальные ваши сессии будут завершены.</p>
+        <div class="grid sm:grid-cols-3 gap-3 mt-4">
+          <div><label class="label !text-xs" for="sec-current">Текущий пароль</label><input id="sec-current" v-model="pwd.current" type="password" class="input !py-2 text-sm" autocomplete="current-password"></div>
+          <div><label class="label !text-xs" for="sec-next">Новый пароль</label><input id="sec-next" v-model="pwd.next" type="password" class="input !py-2 text-sm" autocomplete="new-password"></div>
+          <div><label class="label !text-xs" for="sec-repeat">Повторите</label><input id="sec-repeat" v-model="pwd.repeat" type="password" class="input !py-2 text-sm" autocomplete="new-password"></div>
+        </div>
+        <button class="btn-primary !py-2 text-sm mt-3" :disabled="pwd.busy" @click="changePassword">{{ pwd.busy ? 'Сохраняем…' : 'Сменить пароль' }}</button>
+      </div>
 
       <TwoFactorCard />
 

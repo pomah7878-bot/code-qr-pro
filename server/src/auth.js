@@ -55,6 +55,12 @@ export function sessionUser(token) {
     row.teamMemberName = member.name;
     row.teamMemberRole = member.role;
     row.teamMemberUserId = member.user_id || null;
+    if (member.user_id) {
+      const account = db.prepare('SELECT id, status, totp_enabled, must_change_password FROM users WHERE id=?').get(member.user_id);
+      if (!account || account.status === 'blocked') return null;
+      row.teamMemberTwoFactorEnabled = account.totp_enabled;
+      row.teamMemberMustChangePassword = account.must_change_password;
+    }
   }
   return row;
 }
@@ -77,7 +83,13 @@ export function workspaceFor(user) {
 }
 
 export function publicWorkspace(owner, member) {
-  return publicUser({ ...owner, teamMemberId: member.id, teamMemberEmail: member.email, teamMemberName: member.name, teamMemberRole: member.role, teamMemberUserId: member.user_id || null });
+  const account = member.user_id ? db.prepare('SELECT totp_enabled, must_change_password FROM users WHERE id=?').get(member.user_id) : null;
+  return publicUser({
+    ...owner, teamMemberId: member.id, teamMemberEmail: member.email, teamMemberName: member.name,
+    teamMemberRole: member.role, teamMemberUserId: member.user_id || null,
+    teamMemberTwoFactorEnabled: account?.totp_enabled ? 1 : 0,
+    teamMemberMustChangePassword: account?.must_change_password ? 1 : 0
+  });
 }
 
 export function publicUser(u) {
@@ -85,7 +97,7 @@ export function publicUser(u) {
     id: u.id, email: u.email, name: u.name, role: u.role, plan: u.plan,
     status: u.status || 'active',
     mustChangePassword: Boolean(u.must_change_password),
-    twoFactorEnabled: Boolean(u.totp_enabled),
+    twoFactorEnabled: u.teamMemberId ? Boolean(u.teamMemberTwoFactorEnabled) : Boolean(u.totp_enabled),
     createdAt: u.created_at,
     teamMember: u.teamMemberId ? {
       id: u.teamMemberId, userId: u.teamMemberUserId || null, email: u.teamMemberEmail || '', name: u.teamMemberName || '', role: u.teamMemberRole || 'operator'

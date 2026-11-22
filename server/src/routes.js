@@ -120,11 +120,17 @@ export const requireAuth = async (req, reply) => {
     return reply.code(403).send({ error: 'Аккаунт заблокирован. Напишите в поддержку.' });
   }
   const path = String(req.url || '').split('?')[0];
+  if (user.teamMemberId && !user.teamMemberUserId) {
+    const personal = ['/api/auth/password', '/api/auth/2fa'];
+    if (personal.some((prefix) => path === prefix || path.startsWith(prefix + '/'))) {
+      return reply.code(403).send({ error: 'Сначала активируйте личный вход по новому приглашению', code: 'team_account_required' });
+    }
+  }
   if (user.teamMemberId && user.teamMemberRole === 'viewer' && !['GET', 'HEAD'].includes(req.method)) {
     return reply.code(403).send({ error: 'Роль «Просмотр»: только чтение', code: 'team_viewer_readonly' });
   }
   if (user.teamMemberId) {
-    const blocked = ['/api/billing', '/api/team', '/api/admin', '/api/keys', '/api/auth/password', '/api/auth/2fa', '/api/settings'];
+    const blocked = ['/api/billing', '/api/team', '/api/admin', '/api/keys', '/api/settings'];
     if (blocked.some((prefix) => path === prefix || path.startsWith(prefix + '/'))) {
       return reply.code(403).send({ error: 'Доступно только владельцу аккаунта', code: 'team_member_forbidden' });
     }
@@ -327,6 +333,7 @@ export async function registerRoutes(app) {
       db.prepare("UPDATE password_resets SET used_at=datetime('now') WHERE id=?").run(row.id);
       db.prepare("UPDATE password_resets SET used_at=datetime('now') WHERE user_id=? AND used_at IS NULL").run(user.id);
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+      db.prepare('DELETE FROM sessions WHERE team_member_id IN (SELECT id FROM team_members WHERE user_id=?)').run(user.id);
       db.prepare('DELETE FROM login_attempts WHERE email=?').run(email);
     })();
     return { ok: true };
@@ -334,7 +341,8 @@ export async function registerRoutes(app) {
 
   app.post('/api/auth/password', { preHandler: requireAuth }, async (req, reply) => {
     const { currentPassword, newPassword } = req.body || {};
-    const row = db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
+    const accountId = req.user.teamMemberUserId || req.user.id;
+    const row = db.prepare('SELECT password_hash FROM users WHERE id=?').get(accountId);
     if (!currentPassword || !row || !verifyPassword(String(currentPassword), row.password_hash)) {
       return reply.code(400).send({ error: 'Текущий пароль указан неверно' });
     }
@@ -343,9 +351,15 @@ export async function registerRoutes(app) {
     }
     if (newPassword.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
     db.prepare('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?')
-      .run(hashPassword(newPassword), req.user.id);
-    db.prepare('DELETE FROM sessions WHERE user_id=? AND token<>?').run(req.user.id, req.cookies[COOKIE] || '');
-    db.prepare('DELETE FROM login_attempts WHERE email=?').run(req.user.email);
+      .run(hashPassword(newPassword), accountId);
+    if (req.user.teamMemberId) {
+      db.prepare('DELETE FROM sessions WHERE user_id=? AND team_member_id=? AND token<>?')
+        .run(req.user.id, req.user.teamMemberId, req.cookies[COOKIE] || '');
+    } else {
+      db.prepare('DELETE FROM sessions WHERE user_id=? AND team_member_id IS NULL AND token<>?')
+        .run(req.user.id, req.cookies[COOKIE] || '');
+    }
+    db.prepare('DELETE FROM login_attempts WHERE email=?').run(req.user.teamMemberEmail || req.user.email);
     return { ok: true };
   });
 
@@ -366,15 +380,21 @@ export async function registerRoutes(app) {
 
   app.get('/api/auth/sessions', { preHandler: requireAuth }, async (req) => {
     const current = req.cookies[COOKIE] || '';
-    const rows = db.prepare(
-      `SELECT ip, user_agent, created_at, last_used_at, expires_at, (token = ?) AS current
-       FROM sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 50`
-    ).all(current, req.user.id);
+    const rows = req.user.teamMemberId
+      ? db.prepare(
+        `SELECT ip, user_agent, created_at, last_used_at, expires_at, (token = ?) AS current
+         FROM sessions WHERE user_id=? AND team_member_id=? ORDER BY created_at DESC LIMIT 50`
+      ).all(current, req.user.id, req.user.teamMemberId)
+      : db.prepare(
+        `SELECT ip, user_agent, created_at, last_used_at, expires_at, (token = ?) AS current
+         FROM sessions WHERE user_id=? AND team_member_id IS NULL ORDER BY created_at DESC LIMIT 50`
+      ).all(current, req.user.id);
     return { sessions: rows.map((r) => ({ ...r, current: Boolean(r.current) })) };
   });
 
   app.post('/api/auth/sessions/logout-all', { preHandler: requireAuth }, async (req, reply) => {
-    db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.user.id);
+    if (req.user.teamMemberId) db.prepare('DELETE FROM sessions WHERE user_id=? AND team_member_id=?').run(req.user.id, req.user.teamMemberId);
+    else db.prepare('DELETE FROM sessions WHERE user_id=? AND team_member_id IS NULL').run(req.user.id);
     reply.clearCookie(COOKIE, { path: '/' });
     return { ok: true };
   });

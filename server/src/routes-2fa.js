@@ -29,7 +29,7 @@ const getUser = (id) => db.prepare('SELECT * FROM users WHERE id=?').get(id);
 export async function registerTwoFactorRoutes(app) {
   // Шаг 1: секрет и QR, 2FA ещё не включена
   app.post('/api/auth/2fa/setup', { preHandler: requireAuth }, async (req, reply) => {
-    const user = getUser(req.user.id);
+    const user = getUser(req.user.teamMemberUserId || req.user.id);
     if (user.totp_enabled) return reply.code(400).send({ error: 'Двухфакторная аутентификация уже включена' });
     const secret = generateSecret();
     db.prepare('UPDATE users SET totp_secret=? WHERE id=?').run(encryptSecret(secret), user.id);
@@ -46,7 +46,7 @@ export async function registerTwoFactorRoutes(app) {
 
   // Шаг 2: подтверждение кода и выдача резервных кодов
   app.post('/api/auth/2fa/enable', { preHandler: requireAuth }, async (req, reply) => {
-    const user = getUser(req.user.id);
+    const user = getUser(req.user.teamMemberUserId || req.user.id);
     if (user.totp_enabled) return reply.code(400).send({ error: 'Двухфакторная аутентификация уже включена' });
     if (!user.totp_secret) return reply.code(400).send({ error: 'Сначала запустите настройку 2FA' });
     if (!verifyTotp(decryptSecret(user.totp_secret), req.body?.code)) {
@@ -60,7 +60,7 @@ export async function registerTwoFactorRoutes(app) {
   });
 
   app.post('/api/auth/2fa/disable', { preHandler: requireAuth }, async (req, reply) => {
-    const user = getUser(req.user.id);
+    const user = getUser(req.user.teamMemberUserId || req.user.id);
     if (!user.totp_enabled) return reply.code(400).send({ error: 'Двухфакторная аутентификация не включена' });
     if (!req.body?.password || !verifyPassword(String(req.body.password), user.password_hash)) {
       return reply.code(400).send({ error: 'Пароль указан неверно' });

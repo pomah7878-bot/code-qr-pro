@@ -20,7 +20,7 @@ const items = [
   { icon: 'star', t: 'Отзывы', to: '/app/reviews' },
   { icon: 'help', t: 'Помощь', to: '/app/help' },
   { icon: 'ai', t: 'AI-помощник', action: 'assistant' },
-  ...(!store.user?.teamMember ? [{ icon: 'lock', t: 'Безопасность', to: '/app/security' }] : []),
+  { icon: 'lock', t: 'Безопасность', to: '/app/security' },
   ...(['admin', 'support'].includes(store.user?.role) ? [{ icon: 'settings', t: 'Админка', to: '/app/admin' }] : [])
 ];
 function onClick(n) {

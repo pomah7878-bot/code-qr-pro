@@ -41,8 +41,8 @@ export function createJobForUser(user, body, opts = {}) {
   let jobId;
   try {
     jobId = db.transaction(() => {
-      const info = db.prepare('INSERT INTO generation_jobs (user_id, name, mode, format, status, total, valid, idem_key) VALUES (?,?,?,?,?,?,?,?)')
-        .run(user.id, String(name || 'Без названия').slice(0, 120), mode, format, 'queued', items.length, valid, idemKey || null);
+      const info = db.prepare('INSERT INTO generation_jobs (user_id, name, mode, format, status, total, valid, idem_key, created_by_member_id, created_by_name, created_by_email) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+        .run(user.id, String(name || 'Без названия').slice(0, 120), mode, format, 'queued', items.length, valid, idemKey || null, user.teamMemberId || null, user.teamMemberName || user.name || '', user.teamMemberEmail || user.email || '');
       const id = info.lastInsertRowid;
       const ins = db.prepare('INSERT INTO job_items (job_id, row_index, raw, normalized, gtin, serial, status, error) VALUES (?,?,?,?,?,?,?,?)');
       for (const it of items) {
@@ -79,9 +79,19 @@ export async function registerJobRoutes(app) {
     return { job: r.job };
   });
 
-  app.get('/api/jobs', { preHandler: requireAuth }, async (req) => ({
-    jobs: db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 50').all(req.user.id)
-  }));
+  app.get('/api/jobs', { preHandler: requireAuth }, async (req) => {
+    const mine = String(req.query?.mine || '') === '1' && req.user.teamMemberId;
+    const jobs = mine
+      ? db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND created_by_member_id=? ORDER BY id DESC LIMIT 50').all(req.user.id, req.user.teamMemberId)
+      : db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 50').all(req.user.id);
+    return { jobs };
+  });
+
+  const canManageJob = (req, job) => {
+    if (!req.user.teamMemberId) return true;
+    if (req.user.teamMemberRole === 'manager') return true;
+    return Number(job.created_by_member_id) === Number(req.user.teamMemberId);
+  };
 
   const ownJob = (req, reply) => {
     const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
@@ -99,6 +109,7 @@ export async function registerJobRoutes(app) {
   app.post('/api/jobs/:id/retry', { preHandler: requireAuth }, async (req, reply) => {
     const job = ownJob(req, reply);
     if (!job) return;
+    if (!canManageJob(req, job)) return reply.code(403).send({ error: 'Перезапускать можно только свои задания. Попросите менеджера.', code: 'job_author_required' });
     if (!['done', 'error'].includes(job.status)) return reply.code(400).send({ error: 'Перезапустить можно только завершённое или упавшее задание' });
     try { await removeJobFiles(job.id); } catch { /* файлов могло не быть */ }
     db.transaction(() => {
@@ -223,14 +234,17 @@ export async function registerJobRoutes(app) {
   });
 
   app.get('/api/history', { preHandler: requireAuth }, async (req) => {
+    const mine = String(req.query?.mine || '') === '1' && req.user.teamMemberId;
+    const memberOnly = mine ? ' AND created_by_member_id=?' : '';
     const jobs = db.prepare(
-      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at
-       FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 100`
-    ).all(req.user.id);
+      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at,created_by_member_id,created_by_name,created_by_email
+       FROM generation_jobs WHERE user_id=?${memberOnly} ORDER BY id DESC LIMIT 100`
+    ).all(...(mine ? [req.user.id, req.user.teamMemberId] : [req.user.id]));
+    const activityMemberOnly = mine ? ' AND member_id=?' : '';
     const activity = db.prepare(
-      `SELECT id,kind,title,status,total,ok_count,fail_count,meta,created_at,expires_at
-       FROM activity_log WHERE user_id=? ORDER BY id DESC LIMIT 100`
-    ).all(req.user.id).map((a) => {
+      `SELECT id,kind,title,status,total,ok_count,fail_count,meta,created_at,expires_at,member_id,member_name,member_email
+       FROM activity_log WHERE user_id=?${activityMemberOnly} ORDER BY id DESC LIMIT 100`
+    ).all(...(mine ? [req.user.id, req.user.teamMemberId] : [req.user.id])).map((a) => {
       let meta = {};
       try { meta = JSON.parse(a.meta || '{}'); } catch { /* ignore */ }
       return { ...a, meta };
@@ -251,6 +265,7 @@ export async function registerJobRoutes(app) {
   app.delete('/api/jobs/:id', { preHandler: requireAuth }, async (req, reply) => {
     const job = ownJob(req, reply);
     if (!job) return;
+    if (!canManageJob(req, job)) return reply.code(403).send({ error: 'Удалять можно только свои задания. Попросите менеджера.', code: 'job_author_required' });
     await removeJobFiles(job.id);
     db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
     return { ok: true };

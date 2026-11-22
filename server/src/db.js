@@ -735,7 +735,14 @@ const MIGRATIONS = [
   // v47 — личные аккаунты сотрудников
   `ALTER TABLE team_members ADD COLUMN user_id INTEGER;
    ALTER TABLE users ADD COLUMN owner_id INTEGER;
-   ALTER TABLE users ADD COLUMN member_role TEXT NOT NULL DEFAULT '';`
+   ALTER TABLE users ADD COLUMN member_role TEXT NOT NULL DEFAULT '';`,
+  // v48 — авторство заданий и активность команды
+  `ALTER TABLE generation_jobs ADD COLUMN created_by_member_id INTEGER;
+   ALTER TABLE generation_jobs ADD COLUMN created_by_name TEXT NOT NULL DEFAULT '';
+   ALTER TABLE generation_jobs ADD COLUMN created_by_email TEXT NOT NULL DEFAULT '';
+   ALTER TABLE activity_log ADD COLUMN member_id INTEGER;
+   ALTER TABLE activity_log ADD COLUMN member_name TEXT NOT NULL DEFAULT '';
+   ALTER TABLE activity_log ADD COLUMN member_email TEXT NOT NULL DEFAULT '';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api.js';
+import { store } from '../store.js';
 import { formatArchiveSize } from '../lib/planFeatures.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
@@ -12,9 +13,11 @@ const error = ref('');
 const notice = ref('');
 const busyId = ref(null);
 const tab = ref('jobs');
+const mine = ref(false);
 
 const plan = computed(() => data.value?.plan || { historyDays: 7, archiveMb: 50, formats: [] });
 const jobs = computed(() => data.value?.jobs || []);
+const teamMember = computed(() => store.user?.teamMember || null);
 const activity = computed(() => data.value?.activity || []);
 const stats = computed(() => data.value?.stats || { jobs: 0, codes: 0, storage: 0 });
 const canZip = computed(() => (plan.value.formats || []).includes('zip'));
@@ -43,7 +46,7 @@ const kindIcon = { cz_verify: 'cz', labels_pdf: 'label' };
 
 async function load() {
   loading.value = true; error.value = '';
-  try { data.value = await api.history(); }
+  try { data.value = await api.history({ mine: mine.value ? 1 : 0 }); }
   catch (e) { error.value = e.message; }
   finally { loading.value = false; }
 }
@@ -61,6 +64,16 @@ async function remove(job) {
   try { await api.deleteJob(job.id); notice.value = 'Задание удалено'; await load(); }
   catch (e) { error.value = e.message; }
   finally { busyId.value = null; }
+}
+
+function toggleMine() {
+  mine.value = !mine.value;
+  load();
+}
+function canManage(job) {
+  if (!teamMember.value) return true;
+  if (teamMember.value.role === 'manager') return true;
+  return Number(job.created_by_member_id) === Number(teamMember.value.id);
 }
 
 onMounted(load);
@@ -111,7 +124,8 @@ onMounted(load);
         </div>
       </div>
 
-      <div class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <button v-if="teamMember" class="btn-ghost !py-2 !px-3 text-sm" :class="mine ? '!bg-brand-500/10 !text-brand-400' : ''" @click="toggleMine">{{ mine ? 'Мои действия' : 'Все действия' }}</button>
         <button class="btn-ghost !py-2 !px-3 text-sm" :class="tab === 'jobs' ? '!bg-brand-500/10 !text-brand-400' : ''" @click="tab = 'jobs'">Пакеты ({{ jobs.length }})</button>
         <button class="btn-ghost !py-2 !px-3 text-sm" :class="tab === 'activity' ? '!bg-brand-500/10 !text-brand-400' : ''" @click="tab = 'activity'">Другие операции ({{ activity.length }})</button>
       </div>
@@ -129,7 +143,7 @@ onMounted(load);
                 <span class="text-xs" :class="statusClass[j.status]">{{ statusLabel[j.status] || j.status }}</span>
               </div>
               <div class="text-xs text-slate-500 mt-1">
-                {{ fmtDate(j.created_at) }} · {{ j.done }}/{{ j.valid }} кодов
+                {{ fmtDate(j.created_at) }} · {{ j.created_by_name || 'Владелец' }} · {{ j.done }}/{{ j.valid }} кодов
                 <span v-if="j.artifact_size"> · архив {{ fmtBytes(j.artifact_size) }}</span>
                 <span v-if="j.artifact_backend === 's3'"> · S3</span>
                 <span v-if="j.expires_at"> · хранится до {{ fmtDate(j.expires_at) }}</span>
@@ -138,8 +152,8 @@ onMounted(load);
             <div class="flex flex-wrap gap-1.5">
               <a v-if="j.status === 'done' && canZip" :href="`/api/jobs/${j.id}/archive`" class="btn-primary !py-1.5 !px-3 text-xs">Скачать ZIP</a>
               <a v-if="j.status === 'done' && canPdf" :href="`/api/jobs/${j.id}/export?format=pdf`" class="btn-ghost !py-1.5 !px-3 text-xs">PDF</a>
-              <button v-if="['done', 'error'].includes(j.status)" class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="busyId === j.id" @click="retry(j)">Повторить</button>
-              <button class="btn-ghost !py-1.5 !px-3 text-xs text-red-500" :disabled="busyId === j.id" @click="remove(j)">Удалить</button>
+              <button v-if="canManage(j) && ['done', 'error'].includes(j.status)" class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="busyId === j.id" @click="retry(j)">Повторить</button>
+              <button v-if="canManage(j)" class="btn-ghost !py-1.5 !px-3 text-xs text-red-500" :disabled="busyId === j.id" @click="remove(j)">Удалить</button>
             </div>
           </div>
         </div>
@@ -152,7 +166,7 @@ onMounted(load);
           <div class="min-w-0 flex-1">
             <div class="font-semibold">{{ a.title || kindLabel[a.kind] || a.kind }}</div>
             <div class="text-xs text-slate-500 mt-1">
-              {{ fmtDate(a.created_at) }}
+              {{ fmtDate(a.created_at) }} · {{ a.member_name || 'Владелец' }}
               <span v-if="a.total"> · обработано {{ a.total }}</span>
               <span v-if="a.fail"> · ошибок {{ a.fail }}</span>
               <span v-if="a.expires_at"> · до {{ fmtDate(a.expires_at) }}</span>

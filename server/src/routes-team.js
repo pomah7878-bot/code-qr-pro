@@ -10,7 +10,7 @@ import { audit } from './lib/audit.js';
 
 const COOKIE = 'cq_session';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ROLE_LABEL = { operator: 'Сотрудник', viewer: 'Просмотр' };
+const ROLE_LABEL = { operator: 'Сотрудник', manager: 'Менеджер', viewer: 'Просмотр' };
 const acceptAttempts = new Map();
 
 const tokenHash = (token) => createHash('sha256').update(String(token || '')).digest('hex');
@@ -84,11 +84,23 @@ export async function registerTeamRoutes(app) {
     };
   });
 
+  app.get('/api/team/activity', { preHandler: ownerOnly }, async (req) => {
+    const owner = req.user;
+    const jobs = db.prepare(`SELECT id, name, status, created_at, created_by_name, created_by_email
+      FROM generation_jobs WHERE user_id=? AND created_by_member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)
+      .map((j) => ({ type: 'job', id: j.id, title: j.name, status: j.status, createdAt: j.created_at, actor: j.created_by_name || j.created_by_email }));
+    const acts = db.prepare(`SELECT id, kind, title, status, created_at, member_name, member_email
+      FROM activity_log WHERE user_id=? AND member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)
+      .map((a) => ({ type: 'activity', id: a.id, title: a.title || a.kind, status: a.status, createdAt: a.created_at, actor: a.member_name || a.member_email }));
+    const items = [...jobs, ...acts].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 30);
+    return { items };
+  });
+
   app.post('/api/team/invite', { preHandler: ownerOnly }, async (req, reply) => {
     const owner = req.user;
     const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 160);
     const name = String(req.body?.name || '').trim().slice(0, 100);
-    const role = req.body?.role === 'viewer' ? 'viewer' : 'operator';
+    const role = req.body?.role === 'viewer' ? 'viewer' : req.body?.role === 'manager' ? 'manager' : 'operator';
     if (!EMAIL_RE.test(email)) return reply.code(400).send({ error: 'Некорректный email' });
     if (email === String(owner.email || '').toLowerCase()) return reply.code(400).send({ error: 'Нельзя пригласить владельца аккаунта' });
     if (db.prepare('SELECT id FROM users WHERE email=?').get(email)) return reply.code(409).send({ error: 'Этот email уже зарегистрирован. Используйте другой.' });

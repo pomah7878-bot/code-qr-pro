@@ -8,13 +8,16 @@ const error = ref('');
 const notice = ref('');
 const busy = ref(false);
 const data = ref(null);
+const activity = ref([]);
 const inviting = ref(false);
 const form = reactive({ email: '', name: '', role: 'operator' });
 
 async function load() {
   error.value = '';
   try {
-    data.value = await api.teamInfo();
+    const [team, act] = await Promise.all([api.teamInfo(), api.teamActivity().catch(() => ({ items: [] }))]);
+    data.value = team;
+    activity.value = act.items || [];
   } catch (e) {
     if (e.status === 403 || e.code === 'team_member_forbidden') error.value = 'Раздел доступен только владельцу аккаунта.';
     else error.value = e.message;
@@ -53,7 +56,7 @@ async function removeMember(m) {
 }
 
 function roleLabel(role) {
-  return role === 'viewer' ? 'Просмотр' : 'Сотрудник';
+  return role === 'manager' ? 'Менеджер' : role === 'viewer' ? 'Просмотр' : 'Сотрудник';
 }
 
 function statusLabel(s) {
@@ -93,6 +96,7 @@ onMounted(load);
               <label class="label !text-xs" for="team-role">Роль</label>
               <select id="team-role" v-model="form.role" class="input !py-2 text-sm">
                 <option value="operator">Сотрудник</option>
+                <option value="manager">Менеджер</option>
                 <option value="viewer">Просмотр</option>
               </select>
             </div>
@@ -122,7 +126,18 @@ onMounted(load);
         </div>
 
         <p v-if="data.seats.used > data.seats.limit" class="text-xs text-amber-500">На тарифе сейчас меньше мест, чем сотрудников ({{ data.seats.used }} из {{ data.seats.limit }}). Новые приглашения заблокированы; отзовите лишние доступы или смените тариф.</p>
-        <p class="text-xs text-slate-500">Владелец аккаунта не занимает место в команде. Сотрудник активирует личный вход по ссылке и дальше входит на /login по email и паролю. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
+        <div class="glass rounded-2xl p-5">
+          <h2 class="font-semibold mb-3">Последние действия команды</h2>
+          <div v-if="!activity.length" class="text-sm text-slate-500">Действий сотрудников пока нет.</div>
+          <div v-for="a in activity" :key="a.type + '-' + a.id" class="flex flex-wrap items-start gap-2 py-2 border-b border-slate-100 dark:border-white/5 last:border-0 text-sm">
+            <span class="text-slate-500 text-xs shrink-0">{{ a.createdAt }}</span>
+            <span class="font-medium">{{ a.actor || 'Сотрудник' }}</span>
+            <span class="text-slate-500">{{ a.type === 'job' ? 'создал задание' : 'выполнил операцию' }}: {{ a.title }}</span>
+            <span class="ml-auto text-xs" :class="a.status === 'error' ? 'text-red-500' : 'text-slate-500'">{{ a.status }}</span>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-500">Владелец аккаунта не занимает место в команде. Сотрудник активирует личный вход по ссылке и дальше входит на /login по email и паролю. Менеджер может управлять всеми операционными заданиями, сотрудник — только своими. Ссылка даёт доступ к вашему аккаунту, поэтому передавайте её лично. Роль «Просмотр» пока работает как ограничение интерфейса; для полного разделения прав используйте отдельный аккаунт.</p>
       </template>
       <div v-else-if="!error" class="text-sm text-slate-500">Загрузка…</div>
     </section>

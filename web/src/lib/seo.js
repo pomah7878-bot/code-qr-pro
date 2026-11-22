@@ -5,6 +5,10 @@ const HOME = {
 };
 
 const PUBLIC_PAGES = {
+  '/check': {
+    title: 'Проверить код «Честного ЗНАКа» онлайн — CODE QR PRO',
+    description: 'Бесплатная онлайн-проверка кода маркировки: структура GS1 DataMatrix, статус в открытых источниках «Честного ЗНАКа», GTIN, серийный номер и криптоподпись.'
+  },
   '/pricing': {
     title: 'Тарифы и цены — CODE QR PRO',
     description: 'Тарифы FREE, START, PRO и BUSINESS: операции, расширенные проверки, история, API и печать. Цены за месяц и год.'

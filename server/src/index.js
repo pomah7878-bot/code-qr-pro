@@ -10,6 +10,7 @@ dns.setDefaultResultOrder('ipv4first');
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';
+import { registerPublicCheckRoutes } from './routes-public-check.js';
 import { registerJobRoutes } from './routes-jobs.js';
 import { registerLabelRoutes } from './routes-labels.js';
 import { registerBillingRoutes } from './routes-billing.js';
@@ -85,6 +86,7 @@ if (RUN_SERVICES) {
 
 await app.register(cookie);
 await registerRoutes(app);
+await registerPublicCheckRoutes(app);
 await registerAnalyticsRoutes(app);
 await registerAdminSeoRoutes(app);
 await registerJobRoutes(app);
@@ -177,7 +179,7 @@ if (existsSync(dist)) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');
     }
-    const publicPaths = new Set(['/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
+    const publicPaths = new Set(['/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
     // Несуществующая статья должна отдавать 404, а не soft-200 с главной.
     if (path.startsWith('/articles/') && !seoForPath(path)) {
       reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');

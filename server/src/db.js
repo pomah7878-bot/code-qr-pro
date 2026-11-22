@@ -639,7 +639,12 @@ const MIGRATIONS = [
    ALTER TABLE orders ADD COLUMN npd_receipt_status TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN npd_receipt_error TEXT NOT NULL DEFAULT '';
    ALTER TABLE orders ADD COLUMN npd_receipt_email TEXT NOT NULL DEFAULT '';
-   ALTER TABLE orders ADD COLUMN npd_receipt_at TEXT;`
+   ALTER TABLE orders ADD COLUMN npd_receipt_at TEXT;`,
+  // v41 — first-touch атрибуция регистраций по UTM/referrer
+  `ALTER TABLE users ADD COLUMN acq_source TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN acq_medium TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN acq_campaign TEXT NOT NULL DEFAULT '';
+   ALTER TABLE users ADD COLUMN acq_landing TEXT NOT NULL DEFAULT '';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

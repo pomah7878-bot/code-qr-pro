@@ -123,6 +123,16 @@ export async function registerAdminSeoRoutes(app) {
 
     const conversions = db.prepare('SELECT day, type, COUNT(*) c, COALESCE(SUM(amount),0) amount FROM site_conversions WHERE day >= ? GROUP BY day, type').all(from);
     let registrations = 0; let payments = 0; let revenue = 0; let trials = 0;
+    const acq = new Map();
+    const acqKey = (v) => String(v || 'direct').toLowerCase().slice(0, 80) || 'direct';
+    for (const r of db.prepare("SELECT CASE WHEN acq_source='' THEN 'direct' ELSE acq_source END source, COUNT(*) c FROM users WHERE date(created_at) >= date(?) GROUP BY source").all(from)) {
+      const key = acqKey(r.source); const row = acq.get(key) || { source: key, registrations: 0, payments: 0, revenue: 0 };
+      row.registrations += Number(r.c || 0); acq.set(key, row);
+    }
+    for (const r of db.prepare("SELECT CASE WHEN u.acq_source='' THEN 'direct' ELSE u.acq_source END source, COUNT(*) c, COALESCE(SUM(o.amount),0) amount FROM orders o JOIN users u ON u.id=o.user_id WHERE o.status='paid' AND date(o.paid_at) >= date(?) GROUP BY source").all(from)) {
+      const key = acqKey(r.source); const row = acq.get(key) || { source: key, registrations: 0, payments: 0, revenue: 0 };
+      row.payments += Number(r.c || 0); row.revenue += Number(r.amount || 0); acq.set(key, row);
+    }
     for (const c of conversions) {
       const day = dayMap.get(c.day);
       if (!day) continue;
@@ -175,6 +185,7 @@ export async function registerAdminSeoRoutes(app) {
       },
       series: [...dayMap.values()],
       sources: top(src, 10).map((x) => ({ source: x.key, label: niceSource(x.key), visits: x.value })),
+      acquisition: [...acq.values()].sort((a, b) => (b.registrations + b.payments) - (a.registrations + a.payments)).slice(0, 12),
       searchEngines: top(engines, 8).map((x) => ({ engine: x.key, label: niceSource(x.key), visits: x.value })),
       pages: top(pages, 15).map((x) => ({ path: x.key, pageviews: x.value })),
       landing: top(landing, 10).map((x) => ({ path: x.key, sessions: x.value })),

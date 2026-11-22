@@ -37,6 +37,7 @@ export const api = {
   twoFactorChallenge: (b) => req('POST', '/api/auth/2fa/challenge', b),
   me: () => req('GET', '/api/me'),
   plans: () => req('GET', '/api/plans'),
+  publicCheck: (codes) => req('POST', '/api/public/check', { codes }),
   validate: (b) => req('POST', '/api/jobs/validate', b),
   createJob: (b) => req('POST', '/api/jobs', b),
   jobs: () => req('GET', '/api/jobs'),

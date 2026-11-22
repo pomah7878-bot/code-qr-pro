@@ -471,7 +471,7 @@ export async function registerAiSupportRoutes(app) {
   // --- sitemap: публичные страницы + статьи ---
   app.get('/sitemap.xml', async (req, reply) => {
     const base = String(process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru').replace(/\/+$/, '');
-    const staticPages = ['', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy'];
+    const staticPages = ['', '/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy'];
     const entries = [
       ...staticPages.map((p) => ({ loc: base + (p || '/'), lastmod: new Date().toISOString().slice(0, 10) })),
       ...listPublicKbArticles().map((a) => ({ loc: base + '/articles/' + encodeURIComponent(a.slug), lastmod: String(a.updated_at || '').slice(0, 10) }))

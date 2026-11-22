@@ -18,6 +18,7 @@ const History = () => import('./pages/History.vue');
 const Sets = () => import('./pages/Sets.vue');
 const Billing = () => import('./pages/Billing.vue');
 const Pricing = () => import('./pages/Pricing.vue');
+const PublicCheck = () => import('./pages/PublicCheck.vue');
 const ApiKeys = () => import('./pages/ApiKeys.vue');
 const Cz = () => import('./pages/Cz.vue');
 const Reviews = () => import('./pages/Reviews.vue');
@@ -49,6 +50,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Landing },
+    { path: '/check', component: PublicCheck },
     { path: '/pricing', component: Pricing },
     { path: '/articles', component: Articles },
     { path: '/articles/:slug', component: Article, props: true },

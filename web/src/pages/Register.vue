@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { onPlansChanged } from '../lib/plans-sync.js';
+import { getAttribution } from '../lib/analytics.js';
 const router = useRouter();
 const name = ref(''), email = ref(''), password = ref(''), consent = ref(false), error = ref(''), busy = ref(false);
 const CONSENT_VERSION = '2026-11-21';
@@ -29,7 +30,7 @@ async function submit() {
   }
   busy.value = true;
   try {
-    const d = await api.register({ name: name.value, email: email.value, password: password.value, consent: true, consentVersion: CONSENT_VERSION });
+    const d = await api.register({ name: name.value, email: email.value, password: password.value, consent: true, consentVersion: CONSENT_VERSION, acquisition: getAttribution() });
     store.setSession(d); router.push('/app');
   } catch (e) { error.value = e.message; }
   busy.value = false;

@@ -21,6 +21,7 @@ const year = new Date().getFullYear();
             <li><router-link to="/" rel="nofollow" class="hover:text-brand-400">Возможности</router-link></li>
             <li><router-link to="/pricing" rel="nofollow" class="hover:text-brand-400">Тарифы</router-link></li>
             <li><router-link to="/articles" rel="nofollow" class="hover:text-brand-400">Статьи</router-link></li>
+            <li><router-link to="/check" rel="nofollow" class="hover:text-brand-400">Проверить код ЧЗ</router-link></li>
             <li><router-link to="/faq" rel="nofollow" class="hover:text-brand-400">Частые вопросы</router-link></li>
           </ul>
         </div>

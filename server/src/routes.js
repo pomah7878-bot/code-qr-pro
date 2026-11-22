@@ -135,7 +135,7 @@ export async function registerRoutes(app) {
 
   app.post('/api/auth/register', async (req, reply) => {
     if (!rateLimit("register:" + req.ip)) return reply.code(429).send({ error: 'Слишком много попыток, подождите минуту' });
-    const { email, password, name, consent, consentVersion } = req.body || {};
+    const { email, password, name, consent, consentVersion, acquisition } = req.body || {};
     if (consent !== true) {
       return reply.code(400).send({ error: 'Подтвердите принятие Пользовательского соглашения, Публичной оферты и согласие на обработку персональных данных' });
     }
@@ -144,8 +144,11 @@ export async function registerRoutes(app) {
     if (password.length > 200) return reply.code(400).send({ error: 'Пароль слишком длинный' });
     const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (exists) return reply.code(409).send({ error: 'Email уже зарегистрирован' });
-    const info = db.prepare('INSERT INTO users (email, password_hash, name, consent_at, consent_version) VALUES (?, ?, ?, datetime(\'now\'), ?)')
-      .run(email.toLowerCase(), hashPassword(password), (name || '').slice(0, 100), String(consentVersion || '2026-11-21').slice(0, 40));
+    const acq = acquisition && typeof acquisition === 'object' ? acquisition : {};
+    const acqText = (v, max) => String(v || '').trim().toLowerCase().slice(0, max);
+    const info = db.prepare('INSERT INTO users (email, password_hash, name, consent_at, consent_version, acq_source, acq_medium, acq_campaign, acq_landing) VALUES (?, ?, ?, datetime(\'now\'), ?, ?, ?, ?, ?)')
+      .run(email.toLowerCase(), hashPassword(password), (name || '').slice(0, 100), String(consentVersion || '2026-11-21').slice(0, 40),
+        acqText(acq.source, 80) || 'direct', acqText(acq.medium, 80) || 'none', acqText(acq.campaign, 120), String(acq.landing || '').slice(0, 200));
     if (db.prepare('SELECT COUNT(*) c FROM users').get().c === 1) {
       db.prepare("UPDATE users SET role='admin' WHERE id=?").run(info.lastInsertRowid);
     }

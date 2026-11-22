@@ -26,6 +26,7 @@ const queries = computed(() => data.value?.queries || []);
 const wmQueries = computed(() => data.value?.webmasterQueries || []);
 const engines = computed(() => data.value?.searchEngines || []);
 const devices = computed(() => data.value?.devices || []);
+const acquisition = computed(() => data.value?.acquisition || []);
 const bots = computed(() => data.value?.bots || { total: 0, engines: [], pages: [] });
 const seo = computed(() => data.value?.seo || { score: 0, checks: [], articles: 0, faq: 0, legal: 0 });
 const webmaster = computed(() => data.value?.webmaster || {});
@@ -283,6 +284,27 @@ watch(days, load);
             </div>
             <div v-if="!devices.length" class="text-xs text-slate-500">Нет данных об устройствах.</div>
           </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-4 overflow-hidden">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold">Каналы: регистрации и оплаты</div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/30">UTM / referrer</span>
+        </div>
+        <div v-if="!acquisition.length" class="text-sm text-slate-500 py-4 text-center">Пока нет регистраций с UTM. Размечайте рекламу: utm_source, utm_medium, utm_campaign.</div>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead><tr class="text-left text-slate-500 border-b border-slate-200/70 dark:border-white/10"><th class="py-1.5 pr-2">Канал</th><th class="py-1.5 pr-2 text-right">Регистрации</th><th class="py-1.5 pr-2 text-right">Оплаты</th><th class="py-1.5 text-right">Выручка</th></tr></thead>
+            <tbody>
+              <tr v-for="a in acquisition" :key="a.source" class="border-b border-slate-100 dark:border-white/5 last:border-0">
+                <td class="py-2 pr-2 font-mono text-[11px]">{{ a.source }}</td>
+                <td class="py-2 pr-2 text-right font-semibold">{{ fmt(a.registrations) }}</td>
+                <td class="py-2 pr-2 text-right font-semibold">{{ fmt(a.payments) }}</td>
+                <td class="py-2 text-right">{{ fmtMoney(a.revenue) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

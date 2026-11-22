@@ -112,6 +112,7 @@ async function changePassword() {
           <template v-if="isPublicPage">
             <router-link to="/pricing" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Тарифы</router-link>
             <router-link to="/articles" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Статьи</router-link>
+            <router-link to="/check" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Проверить код</router-link>
             <router-link to="/faq" class="px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Вопросы</router-link>
           </template>
           <button class="btn-ghost !px-3" @click="toggleTheme" title="Сменить тему">
@@ -155,6 +156,7 @@ async function changePassword() {
           <template v-if="isPublicPage">
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/pricing')">Тарифы</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/articles')">Статьи</button>
+            <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/check')">Проверить код ЧЗ</button>
             <button class="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 font-medium" @click="go('/faq')">Частые вопросы</button>
             <div class="h-px bg-slate-200 dark:bg-white/10 my-1"></div>
           </template>

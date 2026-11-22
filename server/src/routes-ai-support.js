@@ -486,6 +486,12 @@ export async function registerAiSupportRoutes(app) {
   // --- база знаний: просмотр для админа ---
   app.get('/api/admin/kb', { preHandler: requireAdmin }, async () => ({ articles: listKbArticles() }));
 
+  app.get('/api/admin/kb/:id', { preHandler: requireAdmin }, async (req, reply) => {
+    const row = db.prepare('SELECT * FROM kb_articles WHERE id=?').get(Number(req.params.id));
+    if (!row) return reply.code(404).send({ error: 'Статья не найдена' });
+    return { article: row };
+  });
+
   app.put('/api/admin/kb', { preHandler: requireAdmin }, async (req, reply) => {
     try {
       const id = saveKbArticle(req.body || {});

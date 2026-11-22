@@ -95,6 +95,13 @@ function recheck(o) {
   run(o, () => api.adminRecheckOrder(o.id), (r) => 'Статус обновлён: ' + r.order.status);
 }
 
+function issueReceipt(o) {
+  run(o, () => api.adminIssueNpdReceipt(o.id), (r) => r?.order ? `Чек НПД по заказу №${o.id} сформирован` : `Чек НПД по заказу №${o.id} уже сформирован`);
+}
+function resendReceipt(o) {
+  run(o, () => api.adminResendNpdReceipt(o.id), `Чек НПД по заказу №${o.id} отправлен на email`);
+}
+
 function openRefund(o) {
   refundTarget.value = o;
   refundRevoke.value = true;
@@ -227,6 +234,9 @@ onMounted(load);
               <td class="py-3 px-4 hidden md:table-cell text-slate-500">{{ fmtDateTime(o.created_at) }}</td>
               <td class="py-3 px-4 hidden md:table-cell text-slate-500">{{ o.paid_at ? fmtDateTime(o.paid_at) : '—' }}</td>
               <td class="py-3 px-4">
+                <div v-if="o.yk_invoice_url && o.status === 'pending'" class="mb-1"><a :href="o.yk_invoice_url" target="_blank" rel="noopener" class="text-[11px] text-brand-400 hover:underline" data-tooltip="Открыть ссылку онлайн-оплаты ЮKassa">Онлайн-оплата ЮKassa</a></div>
+                <div v-if="o.npd_receipt_url" class="mb-1 flex flex-wrap gap-2 items-center"><a :href="o.npd_receipt_url" target="_blank" rel="noopener" class="text-[11px] text-emerald-500 hover:underline" data-tooltip="Открыть чек НПД">Чек НПД</a><button class="text-[11px] text-brand-400 hover:underline" :disabled="actionBusy === o.id" data-tooltip="Повторно отправить чек на email" @click="resendReceipt(o)">Отправить</button></div>
+                <div v-else-if="o.status === 'paid'" class="mb-1"><button class="text-[11px] text-brand-400 hover:underline" :disabled="actionBusy === o.id" data-tooltip="Выпустить чек НПД через «Мой налог»" @click="issueReceipt(o)">Выпустить чек НПД</button><span v-if="o.npd_receipt_error" class="text-[10px] text-red-500 ml-1" :title="o.npd_receipt_error">ошибка</span></div>
                 <div class="flex flex-wrap gap-1.5">
                   <template v-if="o.status === 'pending'">
                     <button class="btn-ghost !py-1 !px-2.5 text-xs text-emerald-500" :disabled="actionBusy === o.id" data-tooltip="Подтвердить оплату вручную и активировать тариф" @click="confirmOrder(o)">Подтвердить</button>

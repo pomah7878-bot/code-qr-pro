@@ -16,6 +16,7 @@ import { registerLabelRoutes } from './routes-labels.js';
 import { registerBillingRoutes } from './routes-billing.js';
 import { registerAdminRoutes } from './routes-admin.js';
 import { registerAdminBankRoutes } from './routes-admin-bank.js';
+import { registerAdminSystemRoutes } from './routes-admin-system.js';
 import { registerAdminUserRoutes } from './routes-admin-users.js';
 import { registerAdminOrderRoutes } from './routes-admin-orders.js';
 import { registerAdminAnalyticsRoutes } from './routes-admin-analytics.js';
@@ -42,6 +43,8 @@ import { installAppLogHooks, installProcessLogHandlers, registerLogRoutes, prune
 import { startBillingSweeper, providerConfigured } from './billing.js';
 import { startSubscriptionSweeper } from './lib/subscription.js';
 import { startMailQueue } from './lib/mail-queue.js';
+import { getSetting } from './settings.js';
+import { sessionUser } from './auth.js';
 import { notifyConfigured } from './notify.js';
 import { rateLimitHook, securityHeaders, sameOriginGuard } from './security.js';
 import { db } from './db.js';
@@ -53,7 +56,29 @@ const CLUSTER_WORKER = process.env.CLUSTER_WORKER === '1';
 const RUN_SERVICES = !CLUSTER_WORKER || process.env.CLUSTER_SERVICES === '1';
 const app = Fastify({ logger: true, trustProxy: '127.0.0.1', bodyLimit: 8 * 1024 * 1024 });
 
+const MAINTENANCE_HTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>CODE QR PRO — технические работы</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#070b18;color:#e2e8f0;font:16px/1.5 system-ui,sans-serif}.card{max-width:520px;margin:24px;padding:32px;border:1px solid rgba(129,140,248,.3);border-radius:20px;background:rgba(255,255,255,.04)}h1{font-size:24px;margin:0 0 10px;background:linear-gradient(90deg,#a78bfa,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent}p{color:#94a3b8;margin:0 0 12px}a{color:#a78bfa}</style></head><body><div class="card"><h1>CODE QR PRO</h1><p>Сервис временно недоступен — проводим технические работы.</p><p>Попробуйте обновить страницу через несколько минут. Если срочно — напишите на <a href="mailto:code-qr-pro@mail.ru">code-qr-pro@mail.ru</a>.</p></div></body></html>`;
+
+async function maintenanceMode(req, reply) {
+  try {
+    if (getSetting('maintenance_mode', '0') !== '1') return;
+    const url = String(req.raw.url || req.url || '/');
+    const path = url.split('?')[0];
+    if (path === '/api/health' || path.startsWith('/assets/') || path === '/favicon.svg' || path === '/site.webmanifest' || path === '/og-image.png') return;
+    if (path === '/api/billing/webhook/yookassa' || path === '/maintenance') return;
+    if (path === '/login' || path === '/register' || path === '/api/auth/login' || path === '/api/auth/register' || path.startsWith('/api/2fa/')) return;
+    let user = null;
+    try {
+      const raw = String(req.headers.cookie || '');
+      const m = /(?:^|;\s*)cq_session=([^;]+)/.exec(raw);
+      user = m ? sessionUser(decodeURIComponent(m[1])) : null;
+    } catch { user = null; }
+    if (user && ['admin', 'support'].includes(user.role)) return;
+    if (path.startsWith('/api/')) return reply.code(503).send({ error: 'Сервис на техническом обслуживании', code: 'maintenance' });
+    return reply.code(503).header('Retry-After', '120').type('text/html; charset=utf-8').send(MAINTENANCE_HTML);
+  } catch { /* режим обслуживания не должен ронять сервер */ }
+}
 app.addHook('onRequest', securityHeaders);
+app.addHook('onRequest', maintenanceMode);
 app.addHook('onRequest', sameOriginGuard);
 app.addHook('onRequest', rateLimitHook());
 installAppLogHooks(app);
@@ -95,6 +120,7 @@ await registerLabelRoutes(app);
 await registerBillingRoutes(app);
 await registerAdminRoutes(app);
 await registerAdminBankRoutes(app);
+await registerAdminSystemRoutes(app);
 await registerAdminUserRoutes(app);
 await registerAdminOrderRoutes(app);
 await registerAdminAnalyticsRoutes(app);

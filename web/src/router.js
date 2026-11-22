@@ -41,6 +41,9 @@ const Help = () => import('./pages/Help.vue');
 const AdminSupport = () => import('./pages/admin/AdminSupport.vue');
 const AdminBilling = () => import('./pages/admin/AdminBilling.vue');
 const AdminBank = () => import('./pages/admin/AdminBank.vue');
+const AdminSystem = () => import('./pages/admin/AdminSystem.vue');
+const AdminReviews = () => import('./pages/admin/AdminReviews.vue');
+const AdminContent = () => import('./pages/admin/AdminContent.vue');
 const AdminAnalytics = () => import('./pages/admin/AdminAnalytics.vue');
 const Articles = () => import('./pages/Articles.vue');
 const Article = () => import('./pages/Article.vue');
@@ -85,6 +88,9 @@ const router = createRouter({
         { path: 'orders', component: AdminOrders, meta: { adminOnly: true } },
         { path: 'billing', component: AdminBilling, meta: { adminOnly: true } },
         { path: 'bank', component: AdminBank, meta: { adminOnly: true } },
+        { path: 'system', component: AdminSystem, meta: { adminOnly: true } },
+        { path: 'reviews', component: AdminReviews, meta: { adminOnly: true } },
+        { path: 'content', component: AdminContent, meta: { adminOnly: true } },
         { path: 'jobs', component: AdminJobs },
         { path: 'audit', component: AdminAudit, meta: { adminOnly: true } },
         { path: 'logs', component: AdminLogs, meta: { adminOnly: true } },

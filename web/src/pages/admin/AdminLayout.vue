@@ -34,6 +34,7 @@ const groups = computed(() => {
       title: 'Поддержка и AI',
       links: [
         { to: '/app/admin/support', label: 'Обращения', adminOnly: true },
+        { to: '/app/admin/reviews', label: 'Отзывы', adminOnly: true },
         { to: '/app/admin/ai', label: 'AI-помощник', adminOnly: true }
       ]
     },
@@ -42,12 +43,13 @@ const groups = computed(() => {
       links: [
         { to: '/app/admin/analytics', label: 'SEO и аналитика', adminOnly: true },
         { to: '/app/admin/marketing', label: 'Рассылки и акции', adminOnly: true },
+        { to: '/app/admin/content', label: 'Статьи и база знаний', adminOnly: true },
         { to: '/app/admin/ads', label: 'Реклама', adminOnly: true }
       ]
     },
     {
       title: 'Система',
-      links: [{ to: '/app/admin/settings', label: 'Настройки', adminOnly: true }]
+      links: [{ to: '/app/admin/system', label: 'Система', adminOnly: true }, { to: '/app/admin/settings', label: 'Настройки', adminOnly: true }]
     }
   ];
   const role = store.user?.role;

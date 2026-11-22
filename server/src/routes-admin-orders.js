@@ -61,7 +61,8 @@ export async function registerAdminOrderRoutes(app) {
       SELECT o.id, o.plan, o.days, o.amount, o.discount, o.promo_code, o.status, o.provider,
              o.external_id, o.confirmation_url, o.created_at, o.paid_at, u.email, u.id AS user_id,
              o.buyer_type, o.company_name, o.company_inn, o.company_kpp, o.company_address, o.company_email,
-             o.payment_method, o.invoice_number, o.invoice_issued_at
+             o.payment_method, o.invoice_number, o.invoice_issued_at,
+             o.yk_invoice_url, o.yk_invoice_status, o.npd_receipt_url, o.npd_receipt_status, o.npd_receipt_error
       FROM orders o JOIN users u ON u.id=o.user_id
       ${whereSql}
       ORDER BY o.id DESC LIMIT ? OFFSET ?

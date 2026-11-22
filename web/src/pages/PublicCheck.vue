@@ -9,9 +9,24 @@ const codesText = ref('');
 const busy = ref(false);
 const error = ref('');
 const result = ref(null);
+const mode = ref('code');
+const gtin = ref('');
+const gtinBusy = ref(false);
+const gtinError = ref('');
+const gtinResult = ref(null);
 
 const statusClass = (status) => /В обороте/i.test(status) ? 'text-emerald-500' : /Не найден|Выбыл|Списан/i.test(status) ? 'text-red-500' : 'text-amber-500';
 const cryptoClass = (crypto) => /^Проверено/i.test(crypto || '') ? 'text-emerald-500' : 'text-amber-500';
+
+async function checkGtin() {
+  gtinError.value = ''; gtinResult.value = null;
+  const value = gtin.value.replace(/\D/g, '');
+  if (!/^\d{8,14}$/.test(value)) { gtinError.value = 'GTIN должен содержать 8–14 цифр'; return; }
+  gtinBusy.value = true;
+  try { gtinResult.value = await api.publicGtin(value); }
+  catch (e) { gtinError.value = e.message; }
+  finally { gtinBusy.value = false; }
+}
 
 async function check() {
   error.value = '';
@@ -34,11 +49,16 @@ onMounted(() => applySeo('/check'));
       <div class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-brand-400 border border-brand-500/30 bg-brand-500/10 rounded-full px-4 py-1.5 mb-5">
         <BrandIcon name="cz" :size="15" /> Онлайн-проверка ЧЗ
       </div>
-      <h1 class="font-display font-extrabold text-3xl sm:text-5xl leading-tight">Проверить код «Честного ЗНАКа»</h1>
-      <p class="text-slate-500 mt-3 text-sm sm:text-base">Вставьте код маркировки из DataMatrix — покажем структуру GS1, статус кода и криптоподпись. Без регистрации, до 3 кодов за раз.</p>
+      <h1 class="font-display font-extrabold text-3xl sm:text-5xl leading-tight">Проверить код или карточку товара</h1>
+      <p class="text-slate-500 mt-3 text-sm sm:text-base">Проверьте код маркировки или GTIN в Национальном каталоге. Без регистрации.</p>
     </div>
 
-    <div class="glass rounded-3xl p-5 sm:p-7 max-w-3xl mx-auto">
+    <div class="max-w-3xl mx-auto mb-4 grid grid-cols-2 gap-2 p-1 rounded-xl border border-slate-200 dark:border-white/10">
+      <button class="py-2 rounded-lg text-sm font-semibold transition" :class="mode === 'code' ? 'bg-brand-500/15 text-brand-400' : 'text-slate-500'" @click="mode = 'code'">Код маркировки</button>
+      <button class="py-2 rounded-lg text-sm font-semibold transition" :class="mode === 'gtin' ? 'bg-brand-500/15 text-brand-400' : 'text-slate-500'" @click="mode = 'gtin'">Карточка по GTIN</button>
+    </div>
+
+    <div v-if="mode === 'code'" class="glass rounded-3xl p-5 sm:p-7 max-w-3xl mx-auto">
       <label for="public-check-codes" class="label !text-xs">Коды маркировки — по одному на строку</label>
       <textarea id="public-check-codes" v-model="codesText" rows="6" class="input font-mono text-sm mt-1" placeholder="0104638230913287215ZsWrd..."></textarea>
       <div class="flex flex-wrap items-center gap-3 mt-3">
@@ -49,7 +69,18 @@ onMounted(() => applySeo('/check'));
       <p class="text-[11px] text-slate-500 mt-3">Сервис не является официальным сервисом «Честного ЗНАКа» и не заменяет проверку в ГИС МТ. Статус и карточка запрашиваются у открытых источников.</p>
     </div>
 
-    <div v-if="result" class="max-w-3xl mx-auto mt-6 space-y-3" aria-live="polite">
+    <div v-else class="glass rounded-3xl p-5 sm:p-7 max-w-3xl mx-auto">
+      <label for="public-check-gtin" class="label !text-xs">GTIN товара — 8–14 цифр</label>
+      <input id="public-check-gtin" v-model="gtin" class="input font-mono text-sm mt-1" placeholder="04638230913287" inputmode="numeric" @keyup.enter="checkGtin">
+      <div class="flex flex-wrap items-center gap-3 mt-3">
+        <button class="btn-primary" :disabled="gtinBusy" @click="checkGtin">{{ gtinBusy ? 'Проверяем…' : 'Проверить карточку' }}</button>
+        <router-link to="/register" class="btn-ghost">Зарегистрироваться бесплатно →</router-link>
+      </div>
+      <p v-if="gtinError" class="text-sm text-red-500 mt-3">{{ gtinError }}</p>
+      <p class="text-[11px] text-slate-500 mt-3">Проверяется наличие карточки в Национальном каталоге маркированных товаров. Если карточка уже есть — новую создавать не нужно; если нет — оформляйте по официальной процедуре.</p>
+    </div>
+
+    <div v-if="mode === 'code' && result" class="max-w-3xl mx-auto mt-6 space-y-3" aria-live="polite">
       <div class="text-xs text-slate-500">Проверено кодов: {{ result.results.length }} · онлайн-статус получен: {{ result.onlineChecked }}</div>
       <div v-for="(r, i) in result.results" :key="i" class="glass rounded-2xl p-4">
         <div class="flex flex-wrap items-center gap-2">
@@ -68,6 +99,20 @@ onMounted(() => applySeo('/check'));
       </div>
       <div class="glass rounded-2xl p-4 text-sm text-slate-500">
         Нужна печать этикеток, повторная печать партии или проверка до 5000 кодов? <router-link to="/pricing" class="text-brand-400 hover:underline">Посмотрите тарифы</router-link>.
+      </div>
+    </div>
+
+    <div v-if="mode === 'gtin' && gtinResult" class="max-w-3xl mx-auto mt-6 space-y-3" aria-live="polite">
+      <div class="glass rounded-2xl p-5" :class="gtinResult.found ? 'border-emerald-500/30' : 'border-amber-500/30'">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-display font-semibold text-lg">{{ gtinResult.found ? 'Карточка найдена' : 'Карточка не найдена' }}</span>
+          <span class="font-mono text-xs text-slate-500">GTIN {{ gtinResult.gtin }}</span>
+        </div>
+        <p v-if="gtinResult.found" class="text-sm mt-2">{{ gtinResult.name || 'Название не указано' }}</p>
+        <p v-if="gtinResult.found && gtinResult.producer" class="text-xs text-slate-500 mt-1">Производитель: {{ gtinResult.producer }}</p>
+        <p v-if="gtinResult.found" class="text-xs text-slate-500 mt-1">Категория: {{ gtinResult.category || '—' }}<span v-if="gtinResult.productKind"> · {{ gtinResult.productKind }}</span><span v-if="gtinResult.volume"> · {{ gtinResult.volume }}</span><span v-if="gtinResult.country"> · {{ gtinResult.country }}</span></p>
+        <p class="text-xs mt-3" :class="gtinResult.found ? 'text-slate-500' : 'text-amber-500'">{{ gtinResult.found ? 'Перед заказом кодов маркировки проверьте, что это нужная карточка и GTIN совпадает с упаковкой.' : 'В открытом каталоге карточка не найдена. Проверьте GTIN или создайте карточку по официальной процедуре в Национальном каталоге.' }}</p>
+        <a v-if="gtinResult.goodUrl" :href="gtinResult.goodUrl" target="_blank" rel="noopener" class="inline-block text-xs text-brand-400 hover:underline mt-2">Открыть карточку в Национальном каталоге →</a>
       </div>
     </div>
 

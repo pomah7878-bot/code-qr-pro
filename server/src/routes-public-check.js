@@ -1,4 +1,5 @@
 import { verifyCodes } from './cz.js';
+import { checkGtinCard } from './lib/product-card.js';
 
 /**
  * Публичная проверка кодов для рекламного лендинга /check.
@@ -6,9 +7,11 @@ import { verifyCodes } from './cz.js';
  */
 const buckets = new Map();
 const statusCache = new Map();
+const gtinCache = new Map();
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS = 12;
 const STATUS_TTL_MS = 2 * 60 * 1000;
+const GTIN_TTL_MS = 5 * 60 * 1000;
 
 function allowIp(ip) {
   const key = String(ip || 'unknown');
@@ -39,6 +42,23 @@ async function cachedVerify(code) {
 }
 
 export async function registerPublicCheckRoutes(app) {
+  app.get('/api/public/gtin/:gtin', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    if (!allowIp(req.ip)) return reply.code(429).send({ error: 'Слишком много проверок. Попробуйте позже.' });
+    const gtin = String(req.params.gtin || '').replace(/\D/g, '');
+    if (!/^\d{8,14}$/.test(gtin)) return reply.code(400).send({ error: 'GTIN должен содержать 8–14 цифр' });
+    const hit = gtinCache.get(gtin);
+    if (hit && Date.now() - hit.at < GTIN_TTL_MS) return { ok: true, ...hit.data, cached: true };
+    try {
+      const card = await checkGtinCard(gtin);
+      gtinCache.set(gtin, { at: Date.now(), data: card });
+      if (gtinCache.size > 1000) { const oldest = gtinCache.keys().next(); if (!oldest.done) gtinCache.delete(oldest.value); }
+      return { ok: true, ...card, cached: false };
+    } catch (e) {
+      return reply.code(502).send({ error: String(e?.message || e).slice(0, 200) });
+    }
+  });
+
   app.post('/api/public/check', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     if (!allowIp(req.ip)) return reply.code(429).send({ error: 'Слишком много проверок. Попробуйте позже или зарегистрируйтесь.' });

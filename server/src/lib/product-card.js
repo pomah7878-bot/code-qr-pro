@@ -205,6 +205,27 @@ function normalizeCatalog(data) {
   };
 }
 
+/** Проверка карточки товара по GTIN в Национальном каталоге. */
+export async function checkGtinCard(value) {
+  const gtin = String(value || '').replace(/\D/g, '');
+  if (!/^\d{8,14}$/.test(gtin)) throw new Error('GTIN должен содержать 8–14 цифр');
+  const { data } = await mobileRequest('catalog', { gtin });
+  const card = normalizeCatalog(data);
+  return {
+    gtin,
+    found: Boolean(card.found && (card.name || card.category)),
+    name: card.name || '',
+    brand: card.brand || '',
+    producer: card.producer || '',
+    category: card.category || '',
+    productKind: card.productKind || '',
+    volume: card.volume || '',
+    country: card.country || '',
+    goodUrl: card.goodUrl || '',
+    source: card.sourceLabel || 'Национальный каталог маркированных товаров'
+  };
+}
+
 const STATUS_RU = {
   introduced: 'В обороте',
   emitted: 'Нанесён',

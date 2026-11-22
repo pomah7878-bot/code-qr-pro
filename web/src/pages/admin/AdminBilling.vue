@@ -49,6 +49,23 @@ async function loadTab() {
   } catch (e) { error.value = e.message; }
   loading.value = false;
 }
+// Годовая цена = 10 месячных платежей: 2 месяца в подарок.
+// При изменении любой из цен вторая пересчитывается сразу.
+function syncFromMonthly(id, raw) {
+  if (String(raw).trim() === '') return;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || !edit.value[id]) return;
+  edit.value[id].priceMonthly = value;
+  edit.value[id].priceYearly = Math.round(value * 10);
+}
+function syncFromYearly(id, raw) {
+  if (String(raw).trim() === '') return;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || !edit.value[id]) return;
+  edit.value[id].priceYearly = value;
+  edit.value[id].priceMonthly = Math.round(value / 10);
+}
+
 async function savePlan(id) {
   error.value = ''; notice.value = '';
   try {
@@ -179,8 +196,8 @@ onMounted(loadTab);
           </div>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 text-xs">
             <label>Название<input v-model="edit[plan.id].title" class="input !py-1.5 text-sm mt-1"></label>
-            <label>Цена/мес<input v-model.number="edit[plan.id].priceMonthly" type="number" class="input !py-1.5 text-sm mt-1"></label>
-            <label>Цена/год<input v-model.number="edit[plan.id].priceYearly" type="number" class="input !py-1.5 text-sm mt-1"></label>
+            <label>Цена/мес<input :value="edit[plan.id].priceMonthly" @input="syncFromMonthly(plan.id, $event.target.value)" type="number" min="0" step="1" class="input !py-1.5 text-sm mt-1"></label>
+            <label>Цена/год<input :value="edit[plan.id].priceYearly" @input="syncFromYearly(plan.id, $event.target.value)" type="number" min="0" step="1" class="input !py-1.5 text-sm mt-1"></label>
             <label>Операций/период<input v-model.number="edit[plan.id].opsPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Операций/день<input v-model.number="edit[plan.id].dailyOps" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Проверок/период<input v-model.number="edit[plan.id].checksPerPeriod" type="number" class="input !py-1.5 text-sm mt-1"></label>
@@ -190,6 +207,7 @@ onMounted(loadTab);
             <label>Сортировка<input v-model.number="edit[plan.id].sortOrder" type="number" class="input !py-1.5 text-sm mt-1"></label>
             <label>Сотрудники<input v-model.number="edit[plan.id].features.employees" type="number" class="input !py-1.5 text-sm mt-1"></label>
           </div>
+          <div class="text-[11px] text-slate-500 mt-1">Год = 10 месячных платежей · 2 месяца в подарок</div>
           <div class="flex flex-wrap gap-3 mt-3 text-xs">
             <label v-for="f in ['png','svg','pdf','zip']" :key="f" class="flex items-center gap-1">
               <input type="checkbox" :value="f" v-model="edit[plan.id].formats"> {{ f.toUpperCase() }}

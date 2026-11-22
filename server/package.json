@@ -6,8 +6,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "start": "node src/cluster.js",
+    "dev": "node --watch src/index.js",
+    "start:single": "node src/index.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1172.0",

@@ -46,6 +46,9 @@ import { db } from './db.js';
 import { cleanupExpiredJobs } from './jobs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// В cluster-режиме фоновые задачи и Telegram-бот запускает только один worker.
+const CLUSTER_WORKER = process.env.CLUSTER_WORKER === '1';
+const RUN_SERVICES = !CLUSTER_WORKER || process.env.CLUSTER_SERVICES === '1';
 const app = Fastify({ logger: true, trustProxy: '127.0.0.1', bodyLimit: 8 * 1024 * 1024 });
 
 app.addHook('onRequest', securityHeaders);
@@ -66,17 +69,19 @@ app.addHook('onResponse', async (req, reply) => {
     recordBotHit({ path, engine, ua, status: reply.statusCode });
   } catch { /* аналитика не должна влиять на ответ */ }
 });
-setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
-setInterval(() => db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now','-365 days')").run(), 86400000).unref();
-setInterval(() => db.prepare("DELETE FROM login_attempts WHERE last_at < datetime('now','-30 days')").run(), 86400000).unref();
-setInterval(() => db.prepare("DELETE FROM password_resets WHERE created_at < datetime('now','-7 days')").run(), 86400000).unref();
-setInterval(() => db.prepare("DELETE FROM login_events WHERE created_at < datetime('now','-90 days')").run(), 86400000).unref();
-setInterval(() => db.prepare("DELETE FROM view_sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
-setInterval(cleanupExpiredJobs, 3600000).unref();
-setInterval(() => pruneAppLogs(), 3600000).unref();
-pruneAppLogs();
-cleanupExpiredJobs();
-pruneAnalytics();
+if (RUN_SERVICES) {
+  setInterval(() => db.prepare("DELETE FROM sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
+  setInterval(() => db.prepare("DELETE FROM audit_log WHERE created_at < datetime('now','-365 days')").run(), 86400000).unref();
+  setInterval(() => db.prepare("DELETE FROM login_attempts WHERE last_at < datetime('now','-30 days')").run(), 86400000).unref();
+  setInterval(() => db.prepare("DELETE FROM password_resets WHERE created_at < datetime('now','-7 days')").run(), 86400000).unref();
+  setInterval(() => db.prepare("DELETE FROM login_events WHERE created_at < datetime('now','-90 days')").run(), 86400000).unref();
+  setInterval(() => db.prepare("DELETE FROM view_sessions WHERE expires_at <= datetime('now')").run(), 3600000).unref();
+  setInterval(cleanupExpiredJobs, 3600000).unref();
+  setInterval(() => pruneAppLogs(), 3600000).unref();
+  pruneAppLogs();
+  cleanupExpiredJobs();
+  pruneAnalytics();
+}
 
 await app.register(cookie);
 await registerRoutes(app);
@@ -103,11 +108,13 @@ await registerAdminAiRoutes(app);
 await registerAdminBillingRoutes(app);
 await registerAiSupportRoutes(app);
 await registerLogRoutes(app);
-seedKnowledgeBase();
-startBillingSweeper();
-startSubscriptionSweeper();
-startTelegramBot();
-startMailQueue();
+if (RUN_SERVICES) {
+  seedKnowledgeBase();
+  startBillingSweeper();
+  startSubscriptionSweeper();
+  startTelegramBot();
+  startMailQueue();
+}
 app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyConfigured() }, 'billing ready');
 
 const dist = join(__dirname, '..', '..', 'web', 'dist');

@@ -78,7 +78,7 @@ function pdfCacheSet(key, buffer) {
 // такие запросы рвутся по таймауту). Готовый файл отдаётся по короткой ссылке.
 const PDF_TASK_TTL_MS = 15 * 60 * 1000;
 const PDF_TASK_MAX_PER_USER = 3;
-const PDF_TASK_CONCURRENCY = 2;
+const PDF_TASK_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.PDF_TASK_CONCURRENCY) || 2));
 const pdfTasks = new Map(); // id -> task
 const pdfTaskQueue = [];
 let pdfTasksActive = 0;

@@ -761,7 +761,9 @@ const MIGRATIONS = [
   // v50 — ответственный и рабочий статус задания
   `ALTER TABLE generation_jobs ADD COLUMN assigned_to_member_id INTEGER;
    ALTER TABLE generation_jobs ADD COLUMN assigned_to_name TEXT NOT NULL DEFAULT '';
-   ALTER TABLE generation_jobs ADD COLUMN work_status TEXT NOT NULL DEFAULT 'new';`
+   ALTER TABLE generation_jobs ADD COLUMN work_status TEXT NOT NULL DEFAULT 'new';`,
+  // v51 — лимит операций на сотрудника
+  `ALTER TABLE team_members ADD COLUMN ops_limit INTEGER NOT NULL DEFAULT 0;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

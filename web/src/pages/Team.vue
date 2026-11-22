@@ -49,6 +49,11 @@ async function reinvite(m) {
   } catch (e) { error.value = e.message; }
 }
 
+async function saveLimit(m) {
+  try { await api.teamSetLimit(m.id, Number(m.opsLimit) || 0); notice.value = 'Лимит сотрудника сохранён'; await load(); }
+  catch (e) { error.value = e.message; }
+}
+
 async function removeMember(m) {
   if (!window.confirm(`Отозвать доступ у ${m.email}?\nВсе сессии сотрудника будут завершены.`)) return;
   busy.value = true; error.value = '';
@@ -120,6 +125,11 @@ onMounted(load);
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium truncate">{{ m.name || m.email }}</div>
               <div class="text-xs text-slate-500 truncate">{{ m.email }} · {{ m.roleLabel || roleLabel(m.role) }} · {{ statusLabel(m.status) }}</div>
+              <div class="text-xs text-slate-500 mt-1">Операций в этом месяце: {{ m.opsUsed }} <span v-if="m.opsLimit">/ {{ m.opsLimit }}</span></div>
+            </div>
+            <div class="flex items-center gap-1">
+              <input v-model.number="m.opsLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-24" placeholder="лимит">
+              <button class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="saveLimit(m)">Лимит</button>
             </div>
             <button v-if="!m.hasAccount" class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="reinvite(m)">Отправить снова</button>
             <span v-else class="text-[11px] text-slate-500">Личный вход</span>

@@ -52,6 +52,14 @@ export function createJobForUser(user, body, opts = {}) {
   if (error) return { status: 400, error };
   const valid = items.filter(x => x.ok).length;
   if (valid === 0) return { status: 400, error: 'Нет валидных кодов — исправьте данные' };
+  if (user.teamMemberId) {
+    const member = db.prepare('SELECT ops_limit FROM team_members WHERE id=?').get(user.teamMemberId);
+    const limit = Number(member?.ops_limit || 0);
+    if (limit > 0) {
+      const used = Number(db.prepare("SELECT COALESCE(SUM(valid),0) c FROM generation_jobs WHERE user_id=? AND created_by_member_id=? AND deleted_at IS NULL AND created_at >= datetime('now','start of month')").get(user.id, user.teamMemberId).c || 0);
+      if (used + valid > limit) return { status: 402, error: `Лимит сотрудника: ${limit} операций в месяц. Использовано ${used}.` };
+    }
+  }
   const idemKey = String(opts.idemKey || body?.idemKey || '').slice(0, 100);
   if (idemKey) {
     const existing = db.prepare('SELECT * FROM generation_jobs WHERE user_id=? AND idem_key=?').get(user.id, idemKey);

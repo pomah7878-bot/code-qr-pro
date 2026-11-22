@@ -146,6 +146,7 @@ export const api = {
   teamInvite: (b) => req('POST', '/api/team/invite', b),
   teamReinvite: (id) => req('POST', '/api/team/members/' + id + '/reinvite'),
   teamRemove: (id) => req('DELETE', '/api/team/members/' + id),
+  teamSetLimit: (id, opsLimit) => req('PATCH', '/api/team/members/' + id + '/limit', { opsLimit }),
   teamInviteInfo: (token) => req('GET', '/api/team/invite/' + encodeURIComponent(token)),
   teamAccept: (b) => req('POST', '/api/team/accept', b),
   adminOrders: (params) => req('GET', '/api/admin/orders' + qs(params)),

@@ -27,6 +27,16 @@ const cardFor = (row) => {
   const item = cards.value.find((x) => (x.gtin && row.gtin && x.gtin === row.gtin) || (x.code?.input && x.code.input === row.code));
   return item?.card || null;
 };
+function downloadCsv() {
+  const rows = result.value?.results || [];
+  if (!rows.length) return;
+  const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const head = ['Код', 'GTIN', 'Серийник', 'Статус', 'Криптозащита', 'GS1', 'Ошибка', 'Название', 'Категория', 'Производитель'];
+  const lines = [head.join(';'), ...rows.map((r) => { const c = cardFor(r); return [r.code, r.gtin || '', r.serial || '', r.status || c?.status || '', r.crypto || c?.crypto || '', r.ok ? 'валиден' : 'ошибка', r.error || '', c?.name || '', c?.category || '', c?.producer || ''].map(esc).join(';'); })];
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'code-check.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
 const cryptoClass = (v) => (/^проверено/i.test(String(v || '')) ? 'text-emerald-500' : 'text-amber-500');
 
 async function loadCards() {
@@ -197,6 +207,7 @@ async function verify() {
         </div>
         <div v-else-if="cardsMessage" class="glass rounded-2xl p-4 text-sm text-slate-500">{{ cardsMessage }}</div>
 
+        <div class="flex justify-end"><button class="btn-ghost !py-2 !px-3 text-sm" @click="downloadCsv">Скачать CSV</button></div>
         <div class="glass rounded-2xl p-6 overflow-x-auto">
           <table class="w-full text-sm">
             <thead><tr class="text-left text-slate-500 border-b border-slate-200 dark:border-white/10">

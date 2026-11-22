@@ -9,6 +9,7 @@ const notice = ref('');
 const busy = ref(false);
 const data = ref(null);
 const activity = ref([]);
+const teamStats = ref([]);
 const inviting = ref(false);
 const form = reactive({ email: '', name: '', role: 'operator' });
 
@@ -18,6 +19,7 @@ async function load() {
     const [team, act] = await Promise.all([api.teamInfo(), api.teamActivity().catch(() => ({ items: [] }))]);
     data.value = team;
     activity.value = act.items || [];
+    teamStats.value = act.stats || [];
   } catch (e) {
     if (e.status === 403 || e.code === 'team_member_forbidden') error.value = 'Раздел доступен только владельцу аккаунта.';
     else error.value = e.message;
@@ -127,7 +129,16 @@ onMounted(load);
 
         <p v-if="data.seats.used > data.seats.limit" class="text-xs text-amber-500">На тарифе сейчас меньше мест, чем сотрудников ({{ data.seats.used }} из {{ data.seats.limit }}). Новые приглашения заблокированы; отзовите лишние доступы или смените тариф.</p>
         <div class="glass rounded-2xl p-5">
-          <h2 class="font-semibold mb-3">Последние действия команды</h2>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 class="font-semibold">Последние действия команды</h2>
+            <a href="/api/team/activity.csv" class="btn-ghost !py-1.5 !px-3 text-xs">Экспорт CSV</a>
+          </div>
+          <div v-if="teamStats.length" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+            <div v-for="s in teamStats" :key="s.id" class="rounded-xl border border-slate-200/70 dark:border-white/10 p-2 text-xs">
+              <div class="font-medium truncate">{{ s.name }}</div>
+              <div class="text-slate-500 mt-1">заданий: {{ s.jobs }} · операций: {{ s.operations }} · комментариев: {{ s.comments }}</div>
+            </div>
+          </div>
           <div v-if="!activity.length" class="text-sm text-slate-500">Действий сотрудников пока нет.</div>
           <div v-for="a in activity" :key="a.type + '-' + a.id" class="flex flex-wrap items-start gap-2 py-2 border-b border-slate-100 dark:border-white/5 last:border-0 text-sm">
             <span class="text-slate-500 text-xs shrink-0">{{ a.createdAt }}</span>

@@ -82,8 +82,8 @@ export async function registerJobRoutes(app) {
   app.get('/api/jobs', { preHandler: requireAuth }, async (req) => {
     const mine = String(req.query?.mine || '') === '1' && req.user.teamMemberId;
     const jobs = mine
-      ? db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL AND created_by_member_id=? ORDER BY id DESC LIMIT 50').all(req.user.id, req.user.teamMemberId)
-      : db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 50').all(req.user.id);
+      ? db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email,assigned_to_member_id,assigned_to_name,work_status FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL AND created_by_member_id=? ORDER BY id DESC LIMIT 50').all(req.user.id, req.user.teamMemberId)
+      : db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email,assigned_to_member_id,assigned_to_name,work_status FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 50').all(req.user.id);
     return { jobs };
   });
 
@@ -237,7 +237,7 @@ export async function registerJobRoutes(app) {
     const mine = String(req.query?.mine || '') === '1' && req.user.teamMemberId;
     const memberOnly = mine ? ' AND created_by_member_id=?' : '';
     const jobs = db.prepare(
-      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at,created_by_member_id,created_by_name,created_by_email
+      `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at,created_by_member_id,created_by_name,created_by_email,assigned_to_member_id,assigned_to_name,work_status
        FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL${memberOnly} ORDER BY id DESC LIMIT 100`
     ).all(...(mine ? [req.user.id, req.user.teamMemberId] : [req.user.id]));
     const activityMemberOnly = mine ? ' AND member_id=?' : '';
@@ -262,8 +262,17 @@ export async function registerJobRoutes(app) {
     };
   });
 
+  app.get('/api/jobs/assignees', { preHandler: requireAuth }, async (req, reply) => {
+    if (req.user.teamMemberId && req.user.teamMemberRole !== 'manager') {
+      return reply.code(403).send({ error: 'Назначать ответственного может менеджер или владелец' });
+    }
+    const members = db.prepare("SELECT id, name, email, role FROM team_members WHERE owner_id=? AND status='active' AND revoked_at IS NULL ORDER BY name, email").all(req.user.id)
+      .map((m) => ({ id: m.id, name: m.name || m.email, email: m.email, role: m.role }));
+    return { members };
+  });
+
   app.get('/api/jobs/trash', { preHandler: requireAuth }, async (req) => {
-    const rows = db.prepare(`SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,deleted_at,deleted_by_name,created_by_member_id,created_by_name,created_by_email
+    const rows = db.prepare(`SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,deleted_at,deleted_by_name,created_by_member_id,created_by_name,created_by_email,assigned_to_member_id,assigned_to_name,work_status
       FROM generation_jobs WHERE user_id=? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 100`).all(req.user.id);
     const items = rows.filter((j) => canManageJob(req, j));
     return { jobs: items };
@@ -276,6 +285,38 @@ export async function registerJobRoutes(app) {
     if (!canManageJob(req, job)) return reply.code(403).send({ error: 'Восстановить может автор или менеджер', code: 'job_author_required' });
     db.prepare('UPDATE generation_jobs SET deleted_at=NULL, deleted_by_member_id=NULL, deleted_by_name=\'\' WHERE id=?').run(job.id);
     return { ok: true, job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id) };
+  });
+
+  app.patch('/api/jobs/:id/work', { preHandler: requireAuth }, async (req, reply) => {
+    const job = ownJob(req, reply);
+    if (!job) return;
+    const isManager = !req.user.teamMemberId || req.user.teamMemberRole === 'manager';
+    const canStatus = isManager || canManageJob(req, job);
+    if (!canStatus) return reply.code(403).send({ error: 'Можно менять только свои задания', code: 'job_author_required' });
+    const allowed = ['new', 'in_progress', 'review', 'done'];
+    const updates = [];
+    const params = [];
+    if (req.body?.workStatus !== undefined) {
+      const status = String(req.body.workStatus);
+      if (!allowed.includes(status)) return reply.code(400).send({ error: 'Недопустимый рабочий статус' });
+      updates.push('work_status=?'); params.push(status);
+    }
+    if (req.body?.assignedToMemberId !== undefined) {
+      if (!isManager) return reply.code(403).send({ error: 'Назначать ответственного может менеджер или владелец' });
+      const memberId = req.body.assignedToMemberId ? Number(req.body.assignedToMemberId) : null;
+      if (memberId) {
+        const member = db.prepare("SELECT id, name, email FROM team_members WHERE id=? AND owner_id=? AND status='active' AND revoked_at IS NULL").get(memberId, req.user.id);
+        if (!member) return reply.code(400).send({ error: 'Сотрудник не найден' });
+        updates.push('assigned_to_member_id=?', 'assigned_to_name=?');
+        params.push(member.id, member.name || member.email);
+      } else {
+        updates.push('assigned_to_member_id=NULL', "assigned_to_name=''");
+      }
+    }
+    if (!updates.length) return reply.code(400).send({ error: 'Нечего менять' });
+    params.push(job.id);
+    db.prepare('UPDATE generation_jobs SET ' + updates.join(', ') + ' WHERE id=?').run(...params);
+    return { job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id) };
   });
 
   app.get('/api/jobs/:id/comments', { preHandler: requireAuth }, async (req, reply) => {

@@ -757,7 +757,11 @@ const MIGRATIONS = [
      text TEXT NOT NULL,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX IF NOT EXISTS idx_job_comments_job ON job_comments(job_id, id);`
+   CREATE INDEX IF NOT EXISTS idx_job_comments_job ON job_comments(job_id, id);`,
+  // v50 — ответственный и рабочий статус задания
+  `ALTER TABLE generation_jobs ADD COLUMN assigned_to_member_id INTEGER;
+   ALTER TABLE generation_jobs ADD COLUMN assigned_to_name TEXT NOT NULL DEFAULT '';
+   ALTER TABLE generation_jobs ADD COLUMN work_status TEXT NOT NULL DEFAULT 'new';`
 ];
 
 const version = db.pragma('user_version', { simple: true });

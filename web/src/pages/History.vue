@@ -19,11 +19,13 @@ const comments = ref({});
 const commentText = ref({});
 const trash = ref([]);
 const trashLoading = ref(false);
+const assignees = ref([]);
 
 const plan = computed(() => data.value?.plan || { historyDays: 7, archiveMb: 50, formats: [] });
 const jobs = computed(() => data.value?.jobs || []);
 const teamMember = computed(() => store.user?.teamMember || null);
 const canComment = computed(() => !teamMember.value || teamMember.value.role !== 'viewer');
+const canAssign = computed(() => !teamMember.value || teamMember.value.role === 'manager');
 const activity = computed(() => data.value?.activity || []);
 const stats = computed(() => data.value?.stats || { jobs: 0, codes: 0, storage: 0 });
 const canZip = computed(() => (plan.value.formats || []).includes('zip'));
@@ -44,6 +46,7 @@ const fmtDate = (s) => {
   const d = new Date(String(s).replace(' ', 'T') + 'Z');
   return Number.isNaN(d.getTime()) ? s : d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
+const workLabel = { new: 'Новое', in_progress: 'В работе', review: 'На проверке', done: 'Готово' };
 const statusLabel = { queued: 'В очереди', running: 'Генерация', done: 'Готово', error: 'Ошибка' };
 const statusClass = { done: 'text-emerald-500', error: 'text-red-500', queued: 'text-slate-500', running: 'text-amber-500' };
 const modeLabel = { cz: 'ЧЗ', gs1: 'GS1', text: 'Текст' };
@@ -115,7 +118,17 @@ function canManage(job) {
   return Number(job.created_by_member_id) === Number(teamMember.value.id);
 }
 
-onMounted(() => { load(); loadTrash(); });
+async function loadAssignees() {
+  if (!canAssign.value) return;
+  try { assignees.value = (await api.jobAssignees()).members || []; } catch { /* ignore */ }
+}
+
+async function updateWork(job, patch) {
+  try { await api.updateJobWork(job.id, patch); await load(); }
+  catch (e) { error.value = e.message; }
+}
+
+onMounted(() => { load(); loadTrash(); loadAssignees(); });
 </script>
 
 <template>
@@ -181,13 +194,24 @@ onMounted(() => { load(); loadTrash(); });
                 <span class="font-semibold truncate">{{ j.name }}</span>
                 <span class="text-[11px] rounded-full bg-slate-100 dark:bg-white/10 px-2 py-0.5">{{ modeLabel[j.mode] || j.mode }} · {{ (j.format || 'png').toUpperCase() }}</span>
                 <span class="text-xs" :class="statusClass[j.status]">{{ statusLabel[j.status] || j.status }}</span>
+                <span class="text-[11px] rounded-full bg-slate-100 dark:bg-white/10 px-2 py-0.5">{{ workLabel[j.work_status] || 'Новое' }}</span>
               </div>
               <div class="text-xs text-slate-500 mt-1">
                 {{ fmtDate(j.created_at) }} · {{ j.created_by_name || 'Владелец' }} · {{ j.done }}/{{ j.valid }} кодов
+                <span v-if="j.assigned_to_name"> · ответственный: {{ j.assigned_to_name }}</span>
                 <span v-if="j.artifact_size"> · архив {{ fmtBytes(j.artifact_size) }}</span>
                 <span v-if="j.artifact_backend === 's3'"> · S3</span>
                 <span v-if="j.expires_at"> · хранится до {{ fmtDate(j.expires_at) }}</span>
               </div>
+            </div>
+            <div v-if="canManage(j)" class="flex flex-wrap items-center gap-1.5">
+              <select class="input !py-1 !px-2 text-xs w-auto" :value="j.work_status || 'new'" @change="updateWork(j, { workStatus: $event.target.value })">
+                <option value="new">Новое</option><option value="in_progress">В работе</option><option value="review">На проверке</option><option value="done">Готово</option>
+              </select>
+              <select v-if="canAssign" class="input !py-1 !px-2 text-xs w-auto" :value="j.assigned_to_member_id || ''" @change="updateWork(j, { assignedToMemberId: $event.target.value || null })">
+                <option value="">Без ответственного</option>
+                <option v-for="m in assignees" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
             </div>
             <div class="flex flex-wrap gap-1.5">
               <a v-if="j.status === 'done' && canZip" :href="`/api/jobs/${j.id}/archive`" class="btn-primary !py-1.5 !px-3 text-xs">Скачать ZIP</a>

@@ -93,7 +93,27 @@ export async function registerTeamRoutes(app) {
       FROM activity_log WHERE user_id=? AND member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)
       .map((a) => ({ type: 'activity', id: a.id, title: a.title || a.kind, status: a.status, createdAt: a.created_at, actor: a.member_name || a.member_email }));
     const items = [...jobs, ...acts].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 30);
-    return { items };
+    const jobsBy = db.prepare("SELECT created_by_member_id member_id, COUNT(*) c FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL AND created_by_member_id IS NOT NULL GROUP BY created_by_member_id").all(owner.id);
+    const actsBy = db.prepare("SELECT member_id, COUNT(*) c FROM activity_log WHERE user_id=? AND member_id IS NOT NULL GROUP BY member_id").all(owner.id);
+    const commentsBy = db.prepare("SELECT member_id, COUNT(*) c FROM job_comments WHERE user_id=? AND member_id IS NOT NULL GROUP BY member_id").all(owner.id);
+    const map = new Map();
+    for (const m of db.prepare("SELECT id, name, email FROM team_members WHERE owner_id=? AND revoked_at IS NULL").all(owner.id)) map.set(m.id, { id: m.id, name: m.name || m.email, email: m.email, jobs: 0, operations: 0, comments: 0 });
+    for (const r of jobsBy) if (map.has(r.member_id)) map.get(r.member_id).jobs = r.c;
+    for (const r of actsBy) if (map.has(r.member_id)) map.get(r.member_id).operations = r.c;
+    for (const r of commentsBy) if (map.has(r.member_id)) map.get(r.member_id).comments = r.c;
+    return { items, stats: [...map.values()] };
+  });
+
+  app.get('/api/team/activity.csv', { preHandler: ownerOnly }, async (req, reply) => {
+    const owner = req.user;
+    const jobs = db.prepare("SELECT name title, created_at, created_by_name actor, status FROM generation_jobs WHERE user_id=? AND created_by_member_id IS NOT NULL ORDER BY id DESC LIMIT 1000").all(owner.id);
+    const acts = db.prepare("SELECT title, created_at, member_name actor, status FROM activity_log WHERE user_id=? AND member_id IS NOT NULL ORDER BY id DESC LIMIT 1000").all(owner.id);
+    const rows = [...jobs, ...acts].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const csv = '\uFEFF' + ['Дата;Сотрудник;Событие;Статус', ...rows.map((r) => [r.created_at, r.actor || '', r.title || '', r.status || ''].map(esc).join(';'))].join('\r\n');
+    reply.header('Content-Type', 'text/csv; charset=utf-8');
+    reply.header('Content-Disposition', 'attachment; filename="team-activity.csv"');
+    return reply.send(csv);
   });
 
   app.post('/api/team/invite', { preHandler: ownerOnly }, async (req, reply) => {

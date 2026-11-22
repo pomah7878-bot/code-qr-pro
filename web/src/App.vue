@@ -12,6 +12,7 @@ import { trackPageview } from './lib/analytics.js';
 const router = useRouter();
 const route = useRoute();
 const menuOpen = ref(false);
+const year = new Date().getFullYear();
 const showAssistant = computed(() => Boolean(store.user) && route.path.startsWith('/app'));
 const isPublicPage = computed(() => !route.path.startsWith('/app'));
 onMounted(() => trackPageview(route.fullPath));
@@ -179,8 +180,11 @@ async function changePassword() {
     </header>
     <main class="flex-1" :class="showAssistant ? 'pb-24 lg:pb-0' : ''"><router-view /></main>
     <SiteFooter v-if="isPublicPage" />
-    <footer v-else class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-center text-xs sm:text-sm text-slate-500">
-      CODE QR PRO · code-qr.stockcity.ru · GS1 DataMatrix и маркировка «Честный ЗНАК»
+    <footer v-else class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-xs sm:text-sm text-slate-500">
+      <div class="max-w-[1200px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>© {{ year }} CODE QR PRO. Сервис не является официальным сервисом «Честного ЗНАКа».</div>
+        <router-link to="/offer" class="hover:text-brand-400 whitespace-nowrap">Реквизиты и документы →</router-link>
+      </div>
     </footer>
 
     <!-- Принудительная смена временного пароля -->

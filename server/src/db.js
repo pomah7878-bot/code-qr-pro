@@ -742,7 +742,22 @@ const MIGRATIONS = [
    ALTER TABLE generation_jobs ADD COLUMN created_by_email TEXT NOT NULL DEFAULT '';
    ALTER TABLE activity_log ADD COLUMN member_id INTEGER;
    ALTER TABLE activity_log ADD COLUMN member_name TEXT NOT NULL DEFAULT '';
-   ALTER TABLE activity_log ADD COLUMN member_email TEXT NOT NULL DEFAULT '';`
+   ALTER TABLE activity_log ADD COLUMN member_email TEXT NOT NULL DEFAULT '';`,
+  // v49 — комментарии и корзина заданий
+  `ALTER TABLE generation_jobs ADD COLUMN deleted_at TEXT;
+   ALTER TABLE generation_jobs ADD COLUMN deleted_by_member_id INTEGER;
+   ALTER TABLE generation_jobs ADD COLUMN deleted_by_name TEXT NOT NULL DEFAULT '';
+   CREATE TABLE IF NOT EXISTS job_comments (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     job_id INTEGER NOT NULL REFERENCES generation_jobs(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL,
+     member_id INTEGER,
+     author_name TEXT NOT NULL DEFAULT '',
+     author_email TEXT NOT NULL DEFAULT '',
+     text TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_job_comments_job ON job_comments(job_id, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

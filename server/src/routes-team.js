@@ -87,7 +87,7 @@ export async function registerTeamRoutes(app) {
   app.get('/api/team/activity', { preHandler: ownerOnly }, async (req) => {
     const owner = req.user;
     const jobs = db.prepare(`SELECT id, name, status, created_at, created_by_name, created_by_email
-      FROM generation_jobs WHERE user_id=? AND created_by_member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)
+      FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL AND created_by_member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)
       .map((j) => ({ type: 'job', id: j.id, title: j.name, status: j.status, createdAt: j.created_at, actor: j.created_by_name || j.created_by_email }));
     const acts = db.prepare(`SELECT id, kind, title, status, created_at, member_name, member_email
       FROM activity_log WHERE user_id=? AND member_id IS NOT NULL ORDER BY id DESC LIMIT 20`).all(owner.id)

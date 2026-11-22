@@ -14,10 +14,16 @@ const notice = ref('');
 const busyId = ref(null);
 const tab = ref('jobs');
 const mine = ref(false);
+const commentsOpen = ref({});
+const comments = ref({});
+const commentText = ref({});
+const trash = ref([]);
+const trashLoading = ref(false);
 
 const plan = computed(() => data.value?.plan || { historyDays: 7, archiveMb: 50, formats: [] });
 const jobs = computed(() => data.value?.jobs || []);
 const teamMember = computed(() => store.user?.teamMember || null);
+const canComment = computed(() => !teamMember.value || teamMember.value.role !== 'viewer');
 const activity = computed(() => data.value?.activity || []);
 const stats = computed(() => data.value?.stats || { jobs: 0, codes: 0, storage: 0 });
 const canZip = computed(() => (plan.value.formats || []).includes('zip'));
@@ -58,10 +64,43 @@ async function retry(job) {
   finally { busyId.value = null; }
 }
 
+async function toggleComments(job) {
+  const id = job.id;
+  commentsOpen.value[id] = !commentsOpen.value[id];
+  if (!commentsOpen.value[id]) return;
+  commentText.value[id] = commentText.value[id] || '';
+  try { const d = await api.jobComments(id); comments.value[id] = d.comments || []; }
+  catch (e) { error.value = e.message; }
+}
+
+async function sendComment(job) {
+  const text = String(commentText.value[job.id] || '').trim();
+  if (!text) return;
+  try {
+    await api.addJobComment(job.id, text);
+    commentText.value[job.id] = '';
+    const d = await api.jobComments(job.id); comments.value[job.id] = d.comments || [];
+  } catch (e) { error.value = e.message; }
+}
+
+async function loadTrash() {
+  trashLoading.value = true;
+  try { const d = await api.trashJobs(); trash.value = d.jobs || []; }
+  catch (e) { error.value = e.message; }
+  finally { trashLoading.value = false; }
+}
+
+async function restore(job) {
+  busyId.value = job.id;
+  try { await api.restoreJob(job.id); notice.value = 'Задание восстановлено'; await load(); await loadTrash(); }
+  catch (e) { error.value = e.message; }
+  finally { busyId.value = null; }
+}
+
 async function remove(job) {
-  if (!confirm(`Удалить «${job.name}» и его архив? Действие необратимо.`)) return;
+  if (!confirm(`Переместить «${job.name}» в корзину? Файлы сохранятся, задание можно восстановить.`)) return;
   busyId.value = job.id; error.value = ''; notice.value = '';
-  try { await api.deleteJob(job.id); notice.value = 'Задание удалено'; await load(); }
+  try { await api.deleteJob(job.id); notice.value = 'Задание перемещено в корзину'; await load(); await loadTrash(); }
   catch (e) { error.value = e.message; }
   finally { busyId.value = null; }
 }
@@ -76,7 +115,7 @@ function canManage(job) {
   return Number(job.created_by_member_id) === Number(teamMember.value.id);
 }
 
-onMounted(load);
+onMounted(() => { load(); loadTrash(); });
 </script>
 
 <template>
@@ -128,6 +167,7 @@ onMounted(load);
         <button v-if="teamMember" class="btn-ghost !py-2 !px-3 text-sm" :class="mine ? '!bg-brand-500/10 !text-brand-400' : ''" @click="toggleMine">{{ mine ? 'Мои действия' : 'Все действия' }}</button>
         <button class="btn-ghost !py-2 !px-3 text-sm" :class="tab === 'jobs' ? '!bg-brand-500/10 !text-brand-400' : ''" @click="tab = 'jobs'">Пакеты ({{ jobs.length }})</button>
         <button class="btn-ghost !py-2 !px-3 text-sm" :class="tab === 'activity' ? '!bg-brand-500/10 !text-brand-400' : ''" @click="tab = 'activity'">Другие операции ({{ activity.length }})</button>
+        <button class="btn-ghost !py-2 !px-3 text-sm" :class="tab === 'trash' ? '!bg-brand-500/10 !text-brand-400' : ''" @click="tab = 'trash'">Корзина ({{ trash.length }})</button>
       </div>
 
       <p v-if="loading" class="text-sm text-slate-500">Загружаем историю…</p>
@@ -152,14 +192,23 @@ onMounted(load);
             <div class="flex flex-wrap gap-1.5">
               <a v-if="j.status === 'done' && canZip" :href="`/api/jobs/${j.id}/archive`" class="btn-primary !py-1.5 !px-3 text-xs">Скачать ZIP</a>
               <a v-if="j.status === 'done' && canPdf" :href="`/api/jobs/${j.id}/export?format=pdf`" class="btn-ghost !py-1.5 !px-3 text-xs">PDF</a>
+              <button v-if="canComment" class="btn-ghost !py-1.5 !px-3 text-xs" @click="toggleComments(j)">Комментарии</button>
               <button v-if="canManage(j) && ['done', 'error'].includes(j.status)" class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="busyId === j.id" @click="retry(j)">Повторить</button>
               <button v-if="canManage(j)" class="btn-ghost !py-1.5 !px-3 text-xs text-red-500" :disabled="busyId === j.id" @click="remove(j)">Удалить</button>
+            </div>
+            <div v-if="commentsOpen[j.id]" class="w-full mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
+              <div v-if="!(comments[j.id] || []).length" class="text-xs text-slate-500 mb-2">Комментариев пока нет.</div>
+              <div v-for="c in comments[j.id] || []" :key="c.id" class="text-xs mb-2"><b>{{ c.author_name || 'Сотрудник' }}</b> <span class="text-slate-500">{{ fmtDate(c.created_at) }}</span><div class="mt-0.5 whitespace-pre-wrap">{{ c.text }}</div></div>
+              <div v-if="canComment" class="flex gap-2 mt-2">
+                <input v-model="commentText[j.id]" class="input !py-1.5 text-xs" placeholder="Комментарий для команды" @keyup.enter="sendComment(j)">
+                <button class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="sendComment(j)">Отправить</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div v-else class="space-y-3">
+      <div v-else-if="tab === 'activity'" class="space-y-3">
         <p v-if="!activity.length" class="glass rounded-2xl p-8 text-sm text-slate-500 text-center">Пока нет проверок и печати.</p>
         <div v-for="a in activity" :key="a.id" class="glass rounded-2xl p-4 flex flex-wrap items-start gap-3">
           <div class="shrink-0"><BrandIcon :name="kindIcon[a.kind] || 'info'" :size="20" /></div>
@@ -175,6 +224,18 @@ onMounted(load);
           <span class="text-xs" :class="a.status === 'ok' ? 'text-emerald-500' : 'text-red-500'"><BrandIcon :name="a.status === 'ok' ? 'check' : 'close'" :size="13" /></span>
         </div>
       </div>
+      <div v-else-if="tab === 'trash'" class="space-y-3">
+        <p v-if="trashLoading" class="text-sm text-slate-500">Загружаем корзину…</p>
+        <p v-else-if="!trash.length" class="glass rounded-2xl p-8 text-sm text-slate-500 text-center">Корзина пуста.</p>
+        <div v-else v-for="j in trash" :key="j.id" class="glass rounded-2xl p-4 flex flex-wrap items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold truncate">{{ j.name }}</div>
+            <div class="text-xs text-slate-500 mt-1">Удалено {{ fmtDate(j.deleted_at) }} · {{ j.deleted_by_name || 'автор' }} · {{ j.total }} кодов</div>
+          </div>
+          <button v-if="canManage(j)" class="btn-ghost !py-1.5 !px-3 text-xs" :disabled="busyId === j.id" @click="restore(j)">Восстановить</button>
+        </div>
+      </div>
+
     </section>
   </div>
 </template>

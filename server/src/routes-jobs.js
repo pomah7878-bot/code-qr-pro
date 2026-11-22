@@ -82,8 +82,8 @@ export async function registerJobRoutes(app) {
   app.get('/api/jobs', { preHandler: requireAuth }, async (req) => {
     const mine = String(req.query?.mine || '') === '1' && req.user.teamMemberId;
     const jobs = mine
-      ? db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND created_by_member_id=? ORDER BY id DESC LIMIT 50').all(req.user.id, req.user.teamMemberId)
-      : db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? ORDER BY id DESC LIMIT 50').all(req.user.id);
+      ? db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL AND created_by_member_id=? ORDER BY id DESC LIMIT 50').all(req.user.id, req.user.teamMemberId)
+      : db.prepare('SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,expires_at,created_by_member_id,created_by_name,created_by_email FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 50').all(req.user.id);
     return { jobs };
   });
 
@@ -93,8 +93,8 @@ export async function registerJobRoutes(app) {
     return Number(job.created_by_member_id) === Number(req.user.teamMemberId);
   };
 
-  const ownJob = (req, reply) => {
-    const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
+  const ownJob = (req, reply, { includeDeleted = false } = {}) => {
+    const job = db.prepare(`SELECT * FROM generation_jobs WHERE id=? AND user_id=?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`).get(req.params.id, req.user.id);
     if (!job) { reply.code(404).send({ error: 'Задание не найдено' }); return null; }
     return job;
   };
@@ -238,7 +238,7 @@ export async function registerJobRoutes(app) {
     const memberOnly = mine ? ' AND created_by_member_id=?' : '';
     const jobs = db.prepare(
       `SELECT id,name,mode,format,status,total,valid,done,artifact_size,artifact_backend,created_at,finished_at,expires_at,archived_at,created_by_member_id,created_by_name,created_by_email
-       FROM generation_jobs WHERE user_id=?${memberOnly} ORDER BY id DESC LIMIT 100`
+       FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL${memberOnly} ORDER BY id DESC LIMIT 100`
     ).all(...(mine ? [req.user.id, req.user.teamMemberId] : [req.user.id]));
     const activityMemberOnly = mine ? ' AND member_id=?' : '';
     const activity = db.prepare(
@@ -251,7 +251,7 @@ export async function registerJobRoutes(app) {
     });
     const agg = db.prepare(
       `SELECT COUNT(*) AS jobs, COALESCE(SUM(valid),0) AS codes, COALESCE(SUM(artifact_size),0) AS storage
-       FROM generation_jobs WHERE user_id=?`
+       FROM generation_jobs WHERE user_id=? AND deleted_at IS NULL`
     ).get(req.user.id);
     const plan = planOf(req.user);
     return {
@@ -262,13 +262,46 @@ export async function registerJobRoutes(app) {
     };
   });
 
+  app.get('/api/jobs/trash', { preHandler: requireAuth }, async (req) => {
+    const rows = db.prepare(`SELECT id,name,mode,format,status,total,valid,done,artifact_size,created_at,finished_at,deleted_at,deleted_by_name,created_by_member_id,created_by_name,created_by_email
+      FROM generation_jobs WHERE user_id=? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 100`).all(req.user.id);
+    const items = rows.filter((j) => canManageJob(req, j));
+    return { jobs: items };
+  });
+
+  app.post('/api/jobs/:id/restore', { preHandler: requireAuth }, async (req, reply) => {
+    const job = ownJob(req, reply, { includeDeleted: true });
+    if (!job) return;
+    if (!job.deleted_at) return reply.code(400).send({ error: 'Задание не в корзине' });
+    if (!canManageJob(req, job)) return reply.code(403).send({ error: 'Восстановить может автор или менеджер', code: 'job_author_required' });
+    db.prepare('UPDATE generation_jobs SET deleted_at=NULL, deleted_by_member_id=NULL, deleted_by_name=\'\' WHERE id=?').run(job.id);
+    return { ok: true, job: db.prepare('SELECT * FROM generation_jobs WHERE id=?').get(job.id) };
+  });
+
+  app.get('/api/jobs/:id/comments', { preHandler: requireAuth }, async (req, reply) => {
+    const job = ownJob(req, reply);
+    if (!job) return;
+    const comments = db.prepare('SELECT id, author_name, author_email, text, created_at FROM job_comments WHERE job_id=? ORDER BY id').all(job.id);
+    return { comments };
+  });
+
+  app.post('/api/jobs/:id/comments', { preHandler: requireAuth }, async (req, reply) => {
+    const job = ownJob(req, reply);
+    if (!job) return;
+    const text = String(req.body?.text || '').trim().slice(0, 2000);
+    if (!text) return reply.code(400).send({ error: 'Комментарий пустой' });
+    const info = db.prepare('INSERT INTO job_comments (job_id, user_id, member_id, author_name, author_email, text) VALUES (?,?,?,?,?,?)')
+      .run(job.id, req.user.id, req.user.teamMemberId || null, req.user.teamMemberName || req.user.name || '', req.user.teamMemberEmail || req.user.email || '', text);
+    return { comment: db.prepare('SELECT id, author_name, author_email, text, created_at FROM job_comments WHERE id=?').get(info.lastInsertRowid) };
+  });
+
   app.delete('/api/jobs/:id', { preHandler: requireAuth }, async (req, reply) => {
     const job = ownJob(req, reply);
     if (!job) return;
     if (!canManageJob(req, job)) return reply.code(403).send({ error: 'Удалять можно только свои задания. Попросите менеджера.', code: 'job_author_required' });
-    await removeJobFiles(job.id);
-    db.prepare('DELETE FROM generation_jobs WHERE id=?').run(job.id);
-    return { ok: true };
+    db.prepare("UPDATE generation_jobs SET deleted_at=datetime('now'), deleted_by_member_id=?, deleted_by_name=? WHERE id=?")
+      .run(req.user.teamMemberId || null, req.user.teamMemberName || req.user.name || '', job.id);
+    return { ok: true, softDeleted: true };
   });
 }
 

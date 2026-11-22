@@ -234,9 +234,10 @@ function normalizeStatus(data) {
     const map = {
       not_verified: 'Криптоподпись кода не подтверждена — проверьте полный код и повторите.',
       not_found: 'Код не найден в «Честном ЗНАКе».',
-      wrong: 'Код не прошёл проверку «Честного ЗНАКа».'
+      wrong: 'Код не прошёл проверку «Честного ЗНАКа».',
+      wrong_structure: 'Структура кода отличается от эталонного GS1-формата. Товар и статус найдены, криптоподпись проверена; для надёжности сверьте код сканером или в приложении «Честный ЗНАК».'
     };
-    warnings.push(map[String(data.warning)] || String(data.warning));
+    warnings.push(map[String(data.warning)] || 'Источник вернул предупреждение о коде. Товар и статус найдены; проверьте код сканером.');
   }
   if (data?.codeResolveData?.message && !warnings.length) {
     const msg = String(data.codeResolveData.message);

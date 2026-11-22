@@ -180,10 +180,10 @@ async function changePassword() {
     </header>
     <main class="flex-1" :class="showAssistant ? 'pb-24 lg:pb-0' : ''"><router-view /></main>
     <SiteFooter v-if="isPublicPage" />
-    <footer v-else class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-xs sm:text-sm text-slate-500">
+    <footer v-else data-nosnippet class="border-t border-slate-200 dark:border-white/10 py-6 px-4 text-xs sm:text-sm text-slate-500">
       <div class="max-w-[1200px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>© {{ year }} CODE QR PRO. Сервис не является официальным сервисом «Честного ЗНАКа».</div>
-        <router-link to="/offer" class="hover:text-brand-400 whitespace-nowrap">Реквизиты и документы →</router-link>
+        <router-link to="/offer" rel="nofollow" class="hover:text-brand-400 whitespace-nowrap">Реквизиты и документы →</router-link>
       </div>
     </footer>
 

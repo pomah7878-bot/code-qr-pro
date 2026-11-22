@@ -113,9 +113,29 @@ app.log.info({ yookassaConfigured: providerConfigured(), telegramNotify: notifyC
 const dist = join(__dirname, '..', '..', 'web', 'dist');
 const indexHtmlPath = join(dist, 'index.html');
 if (existsSync(dist)) {
+  // index.html читаем один раз; для публичных URL кэшируем уже собранный head,
+  // чтобы не делать readFile + набор regex на каждый запрос робота/страницы.
+  const indexHtml = readFileSync(indexHtmlPath, 'utf8');
+  const seoHtmlCache = new Map();
+  const SEO_HTML_TTL_MS = 60 * 1000;
+  const SEO_HTML_MAX_PATHS = 400;
+  const publicIndexHtml = (path) => {
+    const now = Date.now();
+    const hit = seoHtmlCache.get(path);
+    if (hit && now - hit.at < SEO_HTML_TTL_MS) return hit.html;
+    const html = injectSeo(indexHtml, path);
+    if (seoHtmlCache.size >= SEO_HTML_MAX_PATHS) {
+      const oldest = seoHtmlCache.keys().next();
+      if (!oldest.done) seoHtmlCache.delete(oldest.value);
+    }
+    seoHtmlCache.set(path, { html, at: now });
+    return html;
+  };
   await app.register(fastifyStatic, {
     root: dist,
     prefix: '/',
+    // index.html отдаёт наш обработчик: он подставляет canonical и Cache-Control.
+    index: false,
     setHeaders(res, path) {
       if (path.includes(`${sep}assets${sep}`)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -150,9 +170,9 @@ if (existsSync(dist)) {
       // Отдаём роботам уже правильный canonical/title/description. SPA всё равно
       // обновит head после гидрации, но исходный HTML больше не указывает canonical на «/».
       try {
-        const html = readFileSync(indexHtmlPath, 'utf8');
         reply.header('X-Robots-Tag', 'index, follow');
-        return reply.type('text/html; charset=utf-8').send(injectSeo(html, path));
+        reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+        return reply.type('text/html; charset=utf-8').send(publicIndexHtml(path));
       } catch {
         return reply.sendFile('index.html');
       }

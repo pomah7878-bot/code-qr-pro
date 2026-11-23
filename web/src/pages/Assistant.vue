@@ -23,6 +23,10 @@ const notice = ref('');
 const chatEl = ref(null);
 const tickets = ref([]);
 const ticketsLoading = ref(false);
+const openThreadId = ref(null);
+const threadMessages = ref([]);
+const threadReply = ref('');
+const threadBusy = ref(false);
 const support = reactive({ open: false, busy: false, subject: '', message: '', error: '' });
 
 const isPremium = computed(() => Boolean(
@@ -80,6 +84,21 @@ async function ask() {
     busy.value = false;
     scrollChat();
   }
+}
+
+async function toggleThread(t) {
+  if (openThreadId.value === t.id) { openThreadId.value = null; return; }
+  openThreadId.value = t.id; threadMessages.value = []; threadReply.value = '';
+  try { const d = await api.assistantTicket(t.id); threadMessages.value = d.messages || []; }
+  catch (e) { support.error = e.message; }
+}
+
+async function sendThread(t) {
+  if (!threadReply.value.trim()) return;
+  threadBusy.value = true;
+  try { await api.assistantTicketReply(t.id, threadReply.value.trim()); threadReply.value = ''; const d = await api.assistantTicket(t.id); threadMessages.value = d.messages || []; await loadTickets(); }
+  catch (e) { support.error = e.message; }
+  finally { threadBusy.value = false; }
 }
 
 async function loadTickets() {
@@ -233,6 +252,18 @@ onMounted(() => {
             </div>
             <p class="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{{ t.message }}</p>
             <p v-if="t.admin_note" class="text-xs text-emerald-500 mt-1 whitespace-pre-wrap">Ответ: {{ t.admin_note }}</p>
+            <button class="btn-ghost !py-1 !px-2 text-[11px] mt-2" @click="toggleThread(t)">Диалог</button>
+            <div v-if="openThreadId === t.id" class="mt-2 space-y-2 border-t border-slate-200 dark:border-white/10 pt-2">
+              <div v-if="!threadMessages.length" class="text-xs text-slate-500">Сообщений нет.</div>
+              <div v-for="m in threadMessages" :key="m.id" class="text-xs rounded-lg p-2" :class="m.author_type === 'admin' ? 'bg-brand-500/10' : 'bg-slate-100 dark:bg-white/5'">
+                <div class="text-slate-500 mb-0.5">{{ m.author_name || m.author_type }}</div>
+                <div class="whitespace-pre-wrap">{{ m.text }}</div>
+              </div>
+              <div class="flex gap-2">
+                <input v-model="threadReply" class="input !py-1.5 text-xs" placeholder="Сообщение поддержке" @keyup.enter="sendThread(t)">
+                <button class="btn-primary !py-1.5 !px-2.5 text-xs" :disabled="threadBusy || !threadReply.trim()" @click="sendThread(t)">Отправить</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -722,6 +722,32 @@ function cardImageUrl(card) {
   return '';
 }
 
+function cardForCode(c) {
+  const gtin = String(c?.gtin || '').replace(/\D/g, '');
+  if (!gtin) return null;
+  return cards.value.find((x) => String(x.gtin || '').replace(/\D/g, '') === gtin)?.card || null;
+}
+
+function rowProduct(c) {
+  const card = cardForCode(c);
+  if (card) return {
+    name: card.name || product.name,
+    manufacturer: card.producer || card.brand || product.manufacturer,
+    size: card.quantity || card.size || product.size,
+    composition: card.structure || card.material || product.composition,
+    date: card.productionDate || product.date,
+    expiry: card.expirationDate || product.expiry,
+    form: card.productKind || card.category || product.form,
+    article: card.model || product.article,
+    color: card.color || product.color
+  };
+  const info = productInfo.value.find((p) => p.code === c.code || (c.gtin && p.gtin === c.gtin));
+  return {
+    name: info?.name || product.name,
+    manufacturer: info?.producer || info?.brand || product.manufacturer
+  };
+}
+
 function applyCard(item) {
   const card = item?.card;
   if (!card) return;
@@ -949,26 +975,29 @@ async function downloadPdf() {
     if (!template.elements.length) { error.value = 'Нечего печатать'; return; }
     const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
     const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
-    const rows = result.value.valid.map((c) => ({
-      code: c.code,
-      gtin: c.gtin,
-      serial: c.serial,
-      serialAi: c.serial ? `21 ${c.serial}` : '',
-      kindQty: kindQtyValue,
-      expiryLine: expiryLineValue,
-      barcode: String(product.barcode || '').trim(),
-      name: String(product.name || '').trim(),
-      article: String(product.article || '').trim(),
-      dosage: String(product.dosage || '').trim(),
-      form: String(product.form || '').trim(),
-      size: String(product.size || '').trim(),
-      color: String(product.color || '').trim(),
-      series: String(product.series || '').trim(),
-      expiry: String(product.expiry || '').trim(),
-      date: String(product.date || '').trim(),
-      composition: String(product.composition || '').trim(),
-      manufacturer: String(product.manufacturer || '').trim()
-    }));
+    const rows = result.value.valid.map((c) => {
+      const specific = rowProduct(c);
+      return {
+        code: c.code,
+        gtin: c.gtin,
+        serial: c.serial,
+        serialAi: c.serial ? `21 ${c.serial}` : '',
+        kindQty: kindQtyValue,
+        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : expiryLineValue,
+        barcode: String(product.barcode || '').trim(),
+        name: String(specific.name ?? product.name ?? '').trim(),
+        article: String(specific.article ?? product.article ?? '').trim(),
+        dosage: String(product.dosage || '').trim(),
+        form: String(specific.form ?? product.form ?? '').trim(),
+        size: String(specific.size ?? product.size ?? '').trim(),
+        color: String(specific.color ?? product.color ?? '').trim(),
+        series: String(product.series || '').trim(),
+        expiry: String(specific.expiry ?? product.expiry ?? '').trim(),
+        date: String(specific.date ?? product.date ?? '').trim(),
+        composition: String(specific.composition ?? product.composition ?? '').trim(),
+        manufacturer: String(specific.manufacturer ?? product.manufacturer ?? '').trim()
+      };
+    });
     const controller = new AbortController();
     timer = setTimeout(() => controller.abort(), 120000);
     if (isIOS()) saveDraft();
@@ -1116,18 +1145,27 @@ async function printLabels() {
     if (!template.elements.length) throw new Error('Нечего печатать');
     const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
     const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
-    const rows = result.value.valid.map((c) => ({
-      code: c.code, gtin: c.gtin, serial: c.serial,
-      serialAi: c.serial ? `21 ${c.serial}` : '',
-      kindQty: kindQtyValue,
-      expiryLine: expiryLineValue,
-      barcode: String(product.barcode || '').trim(), name: String(product.name || '').trim(),
-      article: String(product.article || '').trim(), dosage: String(product.dosage || '').trim(),
-      form: String(product.form || '').trim(), size: String(product.size || '').trim(),
-      color: String(product.color || '').trim(), series: String(product.series || '').trim(),
-      expiry: String(product.expiry || '').trim(), date: String(product.date || '').trim(),
-      composition: String(product.composition || '').trim(), manufacturer: String(product.manufacturer || '').trim()
-    }));
+    const rows = result.value.valid.map((c) => {
+      const specific = rowProduct(c);
+      return {
+        code: c.code, gtin: c.gtin, serial: c.serial,
+        serialAi: c.serial ? `21 ${c.serial}` : '',
+        kindQty: kindQtyValue,
+        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : expiryLineValue,
+        barcode: String(product.barcode || '').trim(),
+        name: String(specific.name ?? product.name ?? '').trim(),
+        article: String(specific.article ?? product.article ?? '').trim(),
+        dosage: String(product.dosage || '').trim(),
+        form: String(specific.form ?? product.form ?? '').trim(),
+        size: String(specific.size ?? product.size ?? '').trim(),
+        color: String(specific.color ?? product.color ?? '').trim(),
+        series: String(product.series || '').trim(),
+        expiry: String(specific.expiry ?? product.expiry ?? '').trim(),
+        date: String(specific.date ?? product.date ?? '').trim(),
+        composition: String(specific.composition ?? product.composition ?? '').trim(),
+        manufacturer: String(specific.manufacturer ?? product.manufacturer ?? '').trim()
+      };
+    });
     await openPrintWindow('/api/labels/print', { template, rows, single: true, source: 'reprint', idemKey: `print-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}` }, win);
     notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
   } catch (e) {
@@ -1373,6 +1411,8 @@ async function printLabels() {
         <p class="text-[11px] text-slate-500 mt-2">
           В самом DataMatrix хранятся только GTIN, серийник и криптохвост. Название, бренд и категория берутся из внешних
           источников — «Честного ЗНАКа» (по токену) или открытых баз; если товара там нет, заполните поля вручную.
+          Для каждого кода используется его карточка по GTIN: разные товары в пакете не заменяются первым.
+          Поля в «Данных товара» служат общим шаблоном только там, где карточка не найдена.
         </p>
       </div>
 

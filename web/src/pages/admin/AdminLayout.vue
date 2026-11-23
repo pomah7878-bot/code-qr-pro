@@ -1,9 +1,23 @@
 <script setup>
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { store } from '../../store.js';
+import { api } from '../../api.js';
 
 const route = useRoute();
+const router = useRouter();
+const searchQ = ref('');
+const searchData = ref(null);
+let searchTimer = null;
+watch(searchQ, (v) => {
+  clearTimeout(searchTimer);
+  const q = String(v || '').trim();
+  if (q.length < 2) { searchData.value = null; return; }
+  searchTimer = setTimeout(async () => {
+    try { searchData.value = await api.adminSearch(q); } catch { searchData.value = null; }
+  }, 250);
+});
+function go(path) { searchQ.value = ''; searchData.value = null; router.push(path); }
 const isStaff = computed(() => ['admin', 'support'].includes(store.user?.role));
 
 const groups = computed(() => {
@@ -73,6 +87,16 @@ const isActive = (to) => (to === '/app/admin' ? route.path === '/app/admin' : ro
           <p class="text-xs sm:text-sm text-slate-500 mt-1">CODE QR PRO · клиенты, платежи, тарифы, задания и поддержка</p>
         </div>
         <router-link to="/app" class="btn-ghost !py-2 text-sm">← В кабинет</router-link>
+      </div>
+
+      <div class="glass rounded-2xl p-3 relative">
+        <input v-model="searchQ" class="input !py-2 text-sm" placeholder="Поиск: email, заказ, обращение, задание…" autocomplete="off">
+        <div v-if="searchData" class="mt-2 divide-y divide-slate-200 dark:divide-white/10 max-h-80 overflow-y-auto">
+          <button v-for="u in searchData.users" :key="'u'+u.id" class="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-white/5" @click="go('/app/admin/users/' + u.id)">Клиент #{{ u.id }} · {{ u.email }} · {{ u.plan }}</button>
+          <button v-for="o in searchData.orders" :key="'o'+o.id" class="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-white/5" @click="go('/app/admin/orders?q=' + encodeURIComponent(o.email || o.id))">Заказ #{{ o.id }} · {{ o.amount }} ₽ · {{ o.status }} · {{ o.email }}</button>
+          <button v-for="t in searchData.tickets" :key="'t'+t.id" class="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-white/5" @click="go('/app/admin/support')">Обращение #{{ t.id }} · {{ t.subject }} · {{ t.email }}</button>
+          <button v-for="j in searchData.jobs" :key="'j'+j.id" class="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-white/5" @click="go('/app/admin/jobs')">Задание #{{ j.id }} · {{ j.name }} · {{ j.email }}</button>
+        </div>
       </div>
 
       <nav class="glass rounded-2xl p-3 sm:p-4" aria-label="Разделы админки">

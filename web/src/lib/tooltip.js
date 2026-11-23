@@ -47,11 +47,28 @@ function show(el, text) {
   node.setAttribute('aria-hidden', 'false');
   const box = node.getBoundingClientRect();
   const gap = 8;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const fitsAbove = rect.top - box.height - gap >= 8;
+  const fitsBelow = rect.bottom + gap + box.height <= vh - 8;
+  // Сначала пробуем строго над кнопкой. Если места нет — ставим сбоку,
+  // а не поверх кнопки: подсказка не должна перекрывать целевой контрол.
   let left = rect.left + rect.width / 2 - box.width / 2;
-  left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8));
   let top = rect.top - box.height - gap;
-  if (top < 8) top = rect.bottom + gap;
-  if (top + box.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - box.height - 8);
+  if (!fitsAbove) {
+    const fitsRight = rect.right + gap + box.width <= vw - 8;
+    if (fitsRight) {
+      left = rect.right + gap;
+      top = Math.max(8, Math.min(rect.top + rect.height / 2 - box.height / 2, vh - box.height - 8));
+    } else if (fitsBelow) {
+      top = rect.bottom + gap;
+    } else {
+      left = rect.left - box.width - gap;
+      top = Math.max(8, Math.min(rect.top + rect.height / 2 - box.height / 2, vh - box.height - 8));
+    }
+  }
+  left = Math.max(8, Math.min(left, vw - box.width - 8));
+  if (top + box.height > vh - 8) top = Math.max(8, vh - box.height - 8);
   node.style.left = Math.round(left) + 'px';
   node.style.top = Math.round(top) + 'px';
 }

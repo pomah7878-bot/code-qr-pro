@@ -1,0 +1,11 @@
+﻿blank_issues_enabled: false
+contact_links:
+  - name: Безопасность
+    url: mailto:code-qr-pro@mail.ru
+    about: Сообщить об уязвимости приватно
+  - name: Поддержать проект
+    url: https://code-qr.stockcity.ru/support
+    about: Финансовая поддержка проекта
+  - name: Поддержка пользователей
+    url: mailto:code-qr-pro@mail.ru
+    about: Вопросы по работе сервиса

@@ -1,0 +1,35 @@
+﻿name: Сообщить об ошибке
+description: Ошибка в сервисе без чувствительных данных
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Уязвимости не публикуйте здесь — напишите на code-qr-pro@mail.ru.
+        Не прикладывайте пароли, 2FA, API-ключи и чужие данные.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое и фактическое поведение
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Раздел или URL
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Безопасность
+      options:
+        - label: Это не уязвимость; уязвимости отправляю на email
+          required: true
+        - label: В сообщении нет секретов и персональных данных
+          required: true

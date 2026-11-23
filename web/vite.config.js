@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+﻿import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
@@ -7,5 +7,11 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': 'http://127.0.0.1:3100' }
   },
-  build: { outDir: 'dist', emptyOutDir: true }
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    reportCompressedSize: false
+  }
 });

@@ -1,0 +1,29 @@
+﻿name: Предложить идею
+description: Идея или полезный совет по сервису
+title: "[Идея] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за идею. Не прикладывайте пароли, API-ключи и персональные данные.
+        Код в PR не принимается: проект развивается самостоятельно.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Идея
+      description: Что улучшить и зачем
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Контекст
+      description: Для какой задачи, категории или сценария
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Подтверждение
+      options:
+        - label: Я не прикладываю секреты и персональные данные
+          required: true

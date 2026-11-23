@@ -8,6 +8,7 @@ defineProps({ active: String });
 const route = useRoute();
 const items = [
   { icon: 'overview', t: 'Обзор', to: '/app' },
+  { icon: 'star', t: 'Уведомления', to: '/app/notifications' },
   { icon: 'history', t: 'История', to: '/app/history' },
   { icon: 'generate', t: 'Генерация', to: '/app/generate' },
   { icon: 'label', t: 'Этикетки', to: '/app/labels' },

@@ -15,10 +15,19 @@ import { sendMail } from './lib/mailer.js';
 import { renderBrandEmail } from './lib/email-template.js';
 import { publicUrl } from './lib/public-url.js';
 
+function addNotification(ownerId, memberId, type, title, text) {
+  try {
+    db.prepare('INSERT INTO notifications (owner_id, member_id, type, title, text, link) VALUES (?,?,?,?,?,?)')
+      .run(ownerId, memberId || null, String(type).slice(0, 30), String(title).slice(0, 160), String(text).slice(0, 500), '/app/history');
+  } catch { /* ignore */ }
+}
+
 function notifyJobMembers(job, text, excludeMemberId) {
   const ids = [job.created_by_member_id, job.assigned_to_member_id]
     .map(Number).filter((id) => id && id !== Number(excludeMemberId));
   const unique = [...new Set(ids)];
+  for (const id of unique) addNotification(job.user_id, id, 'job', 'Обновление задания', text);
+  if (excludeMemberId) addNotification(job.user_id, null, 'team', 'Действие сотрудника', text);
   if (!unique.length) return;
   const brand = renderBrandEmail({
     title: 'Обновление задания', badge: 'Команда CODE QR PRO', preheader: String(text).slice(0, 140),
@@ -31,6 +40,19 @@ function notifyJobMembers(job, text, excludeMemberId) {
   }
 }
 
+function notifyMentions(job, text, actorMemberId) {
+  const ownerId = job.user_id;
+  const lower = String(text || '').toLowerCase();
+  const members = db.prepare("SELECT id, email, name FROM team_members WHERE owner_id=? AND status='active' AND revoked_at IS NULL").all(ownerId);
+  for (const m of members) {
+    if (Number(m.id) === Number(actorMemberId)) continue;
+    const email = String(m.email || '').toLowerCase();
+    const name = String(m.name || '').toLowerCase();
+    if ((email && lower.includes('@' + email)) || (name && lower.includes('@' + name))) {
+      addNotification(ownerId, m.id, 'mention', 'Вас упомянули', text.slice(0, 400));
+    }
+  }
+}
 const MODES = ['cz', 'gs1', 'text'];
 
 function validateBatch(rows, mode, plan) {
@@ -365,6 +387,7 @@ export async function registerJobRoutes(app) {
       .run(job.id, req.user.id, req.user.teamMemberId || null, req.user.teamMemberName || req.user.name || '', req.user.teamMemberEmail || req.user.email || '', text);
     const comment = db.prepare('SELECT id, author_name, author_email, text, created_at FROM job_comments WHERE id=?').get(info.lastInsertRowid);
     notifyJobMembers(job, `Новый комментарий от ${req.user.teamMemberName || req.user.name || 'сотрудника'}: ${text.slice(0, 500)}`, req.user.teamMemberId);
+    notifyMentions(job, text, req.user.teamMemberId);
     return { comment };
   });
 

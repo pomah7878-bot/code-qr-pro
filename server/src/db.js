@@ -763,7 +763,20 @@ const MIGRATIONS = [
    ALTER TABLE generation_jobs ADD COLUMN assigned_to_name TEXT NOT NULL DEFAULT '';
    ALTER TABLE generation_jobs ADD COLUMN work_status TEXT NOT NULL DEFAULT 'new';`,
   // v51 — лимит операций на сотрудника
-  `ALTER TABLE team_members ADD COLUMN ops_limit INTEGER NOT NULL DEFAULT 0;`
+  `ALTER TABLE team_members ADD COLUMN ops_limit INTEGER NOT NULL DEFAULT 0;`,
+  // v52 — уведомления и упоминания
+  `CREATE TABLE IF NOT EXISTS notifications (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id INTEGER NOT NULL,
+     member_id INTEGER,
+     type TEXT NOT NULL DEFAULT 'info',
+     title TEXT NOT NULL DEFAULT '',
+     text TEXT NOT NULL DEFAULT '',
+     link TEXT NOT NULL DEFAULT '',
+     read_at TEXT,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(owner_id, member_id, read_at, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

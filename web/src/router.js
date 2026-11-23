@@ -16,6 +16,7 @@ const Reprint = () => import('./pages/Reprint.vue');
 const Security = () => import('./pages/Security.vue');
 const Team = () => import('./pages/Team.vue');
 const TeamAccept = () => import('./pages/TeamAccept.vue');
+const Notifications = () => import('./pages/Notifications.vue');
 const History = () => import('./pages/History.vue');
 const Sets = () => import('./pages/Sets.vue');
 const Billing = () => import('./pages/Billing.vue');
@@ -77,6 +78,7 @@ const router = createRouter({
     { path: '/app/reviews', component: Reviews, meta: { auth: true } },
     { path: '/app/security', component: Security, meta: { auth: true } },
     { path: '/app/team', component: Team, meta: { auth: true, owner: true } },
+    { path: '/app/notifications', component: Notifications, meta: { auth: true } },
     { path: '/team/accept', component: TeamAccept },
     { path: '/app/history', component: History, meta: { auth: true } },
     { path: '/app/assistant', component: Assistant, meta: { auth: true } },

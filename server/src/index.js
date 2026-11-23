@@ -11,6 +11,7 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerRoutes } from './routes.js';
 import { registerTeamRoutes } from './routes-team.js';
+import { registerNotificationRoutes } from './routes-notifications.js';
 import { registerPublicCheckRoutes } from './routes-public-check.js';
 import { registerJobRoutes } from './routes-jobs.js';
 import { registerLabelRoutes } from './routes-labels.js';
@@ -122,6 +123,7 @@ if (RUN_SERVICES) {
 await app.register(cookie);
 await registerRoutes(app);
 await registerTeamRoutes(app);
+await registerNotificationRoutes(app);
 await registerPublicCheckRoutes(app);
 await registerAnalyticsRoutes(app);
 await registerAdminSeoRoutes(app);

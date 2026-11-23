@@ -221,7 +221,7 @@ if (existsSync(dist)) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');
     }
-    const publicPaths = new Set(['/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy']);
+    const publicPaths = new Set(['/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy', '/integrations/1c']);
     // Несуществующая статья должна отдавать 404, а не soft-200 с главной.
     if (path.startsWith('/articles/') && !seoForPath(path)) {
       reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');

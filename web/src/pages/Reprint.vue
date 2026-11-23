@@ -1291,7 +1291,7 @@ async function printLabels() {
         <div class="glass rounded-2xl p-5 space-y-3">
           <div class="flex items-center justify-between gap-2">
             <h2 class="font-display font-semibold">Коды маркировки</h2>
-            <button class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="busy || (!codesCount && !result && !pdfUrl)" title="Очистить коды, результаты и черновик" @click="clearCodes">Очистить</button>
+            <button class="btn-ghost !py-1.5 !px-3 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 disabled:opacity-60" :disabled="busy" aria-label="Очистить коды, результаты и черновик" @click="clearCodes">Очистить</button>
           </div>
           <textarea v-model="codesText" rows="6" class="input font-mono text-xs" placeholder="Вставьте полные коды — по одному на строку"></textarea>
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>

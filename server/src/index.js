@@ -13,6 +13,7 @@ import { registerRoutes } from './routes.js';
 import { registerTeamRoutes } from './routes-team.js';
 import { registerNotificationRoutes } from './routes-notifications.js';
 import { registerAdminSearchRoutes } from './routes-admin-search.js';
+import { registerDonateRoutes } from './routes-donate.js';
 import { registerPublicCheckRoutes } from './routes-public-check.js';
 import { registerJobRoutes } from './routes-jobs.js';
 import { registerLabelRoutes } from './routes-labels.js';
@@ -126,6 +127,7 @@ await registerRoutes(app);
 await registerTeamRoutes(app);
 await registerNotificationRoutes(app);
 await registerAdminSearchRoutes(app);
+await registerDonateRoutes(app);
 await registerPublicCheckRoutes(app);
 await registerAnalyticsRoutes(app);
 await registerAdminSeoRoutes(app);
@@ -221,7 +223,7 @@ if (existsSync(dist)) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');
     }
-    const publicPaths = new Set(['/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy', '/integrations/1c']);
+    const publicPaths = new Set(['/check', '/pricing', '/articles', '/faq', '/offer', '/terms', '/privacy', '/integrations/1c', '/support']);
     // Несуществующая статья должна отдавать 404, а не soft-200 с главной.
     if (path.startsWith('/articles/') && !seoForPath(path)) {
       reply.code(404).header('X-Robots-Tag', 'noindex, nofollow');

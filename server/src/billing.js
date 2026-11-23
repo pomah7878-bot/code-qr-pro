@@ -84,6 +84,23 @@ export function planOffer(planId, period = 'month') {
   return { kind: 'subscription', planId: plan.id, plan, days: p.days, price, title: `${plan.title} на ${p.label}`, period: period === 'year' ? 'year' : 'month' };
 }
 
+export async function createDonationPayment({ amount, email = '', message = '' } = {}) {
+  const value = Math.round(Number(amount) * 100) / 100;
+  if (!Number.isFinite(value) || value < 100 || value > 100000) throw Object.assign(new Error('Сумма поддержки: от 100 до 100 000 ₽'), { statusCode: 400 });
+  if (!providerConfigured()) throw Object.assign(new Error('Платёжный провайдер не настроен'), { statusCode: 503 });
+  const info = db.prepare('INSERT INTO donations (amount, email, message) VALUES (?,?,?)').run(value, String(email).slice(0, 160), String(message).slice(0, 500));
+  const id = Number(info.lastInsertRowid);
+  const data = await yk('POST', '/payments', {
+    amount: { value: value.toFixed(2), currency: 'RUB' },
+    capture: true,
+    confirmation: { type: 'redirect', return_url: `${PUBLIC_URL}/support?thanks=1&donation=${id}` },
+    description: 'Добровольная поддержка CODE QR PRO',
+    metadata: { kind: 'donation', donation_id: String(id), product: 'code-qr-pro' }
+  }, `donation-${id}`);
+  db.prepare('UPDATE donations SET external_id=?, confirmation_url=? WHERE id=?').run(data.id, data.confirmation?.confirmation_url || '', id);
+  return { id, amount: value, confirmationUrl: data.confirmation?.confirmation_url || '' };
+}
+
 export async function createCheckout(user, planId = 'pro', period = 'month', promoCode = '') {
   const offer = planOffer(planId, period);
   let amount = Number(offer.price);
@@ -336,6 +353,13 @@ export async function handleYooKassaNotification(body = {}) {
   if (seen) return { ok: true, duplicated: true, orderId: seen.order_id };
   const payment = await yk('GET', '/payments/' + encodeURIComponent(paymentId));
   if (payment.status !== 'succeeded') return { ok: true, ignored: true, status: payment.status };
+  if (payment.metadata?.kind === 'donation') {
+    const donationId = Number(payment.metadata?.donation_id || 0);
+    if (!donationId) return { ok: true, ignored: true, reason: 'donation_not_found' };
+    db.prepare("UPDATE donations SET status='paid', paid_at=datetime('now') WHERE id=? AND status<>'paid'").run(donationId);
+    return { ok: true, donationId, status: 'paid' };
+  }
+
   const orderId = Number(payment.metadata?.order_id || 0);
   const order = orderId
     ? db.prepare('SELECT * FROM orders WHERE id=?').get(orderId)

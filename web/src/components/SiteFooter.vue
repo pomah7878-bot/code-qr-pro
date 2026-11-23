@@ -32,6 +32,7 @@ const year = new Date().getFullYear();
             <li><router-link to="/faq" rel="nofollow" class="hover:text-brand-400">Ответы на вопросы</router-link></li>
             <li><router-link to="/app/assistant" rel="nofollow" class="hover:text-brand-400">AI-помощник</router-link></li>
             <li><a :href="'mailto:' + LEGAL.email" rel="nofollow" class="hover:text-brand-400">Поддержка</a></li>
+            <li><router-link to="/support" rel="nofollow" class="hover:text-brand-400">Поддержать проект</router-link></li>
           </ul>
         </div>
         <div>

@@ -18,6 +18,7 @@ const Team = () => import('./pages/Team.vue');
 const TeamAccept = () => import('./pages/TeamAccept.vue');
 const Notifications = () => import('./pages/Notifications.vue');
 const Soon1C = () => import('./pages/Soon1C.vue');
+const Support = () => import('./pages/Support.vue');
 const History = () => import('./pages/History.vue');
 const Sets = () => import('./pages/Sets.vue');
 const Billing = () => import('./pages/Billing.vue');
@@ -60,6 +61,7 @@ const router = createRouter({
     { path: '/', component: Landing },
     { path: '/check', component: PublicCheck },
     { path: '/integrations/1c', component: Soon1C },
+    { path: '/support', component: Support },
     { path: '/pricing', component: Pricing },
     { path: '/articles', component: Articles },
     { path: '/articles/:slug', component: Article, props: true },

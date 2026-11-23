@@ -794,7 +794,20 @@ const MIGRATIONS = [
   `ALTER TABLE team_members ADD COLUMN checks_limit INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE team_members ADD COLUMN exports_limit INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE team_members ADD COLUMN api_limit INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE usage_events ADD COLUMN member_id INTEGER;`
+   ALTER TABLE usage_events ADD COLUMN member_id INTEGER;`,
+  // v55 — добровольная поддержка проекта
+  `CREATE TABLE IF NOT EXISTS donations (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     amount REAL NOT NULL DEFAULT 0,
+     email TEXT NOT NULL DEFAULT '',
+     message TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'pending',
+     external_id TEXT,
+     confirmation_url TEXT,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     paid_at TEXT
+   );
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_donations_external ON donations(external_id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

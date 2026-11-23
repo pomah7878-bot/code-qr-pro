@@ -3,6 +3,10 @@ import { getPublicKbArticle } from './kb.js';
 const SITE = 'https://code-qr.stockcity.ru';
 
 const PAGES = {
+  '/support': {
+    title: 'Поддержать CODE QR PRO — открытый проект маркировки',
+    description: 'Поддержать развитие CODE QR PRO: маркировка «Честный ЗНАК», GS1 DataMatrix, проверка кодов, этикетки, печать и API для 1С. Добровольная поддержка через ЮKassa.'
+  },
   '/': {
     title: 'CODE QR PRO — маркировка «Честный ЗНАК», DataMatrix и печать этикеток',
     description: 'Генерация GS1 DataMatrix, проверка кодов, наборы с КИН, редактор этикеток, печать PDF и из браузера, Print Bridge и API для 1С. FREE, PRO, BUSINESS и ENTERPRISE.'

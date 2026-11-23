@@ -59,6 +59,8 @@ const pdfPercent = computed(() => {
 });
 const result = ref(null);
 const pdfUrl = ref('');
+const pdfIdemKey = ref('');
+const pdfFingerprint = ref('');
 const shortWarning = ref('');
 const qrOnly = ref(false);
 const qrMargin = ref(0.5);
@@ -918,6 +920,7 @@ function buildTemplate() {
 }
 
 async function downloadPdf() {
+  if (busy.value) return;
   error.value = '';
   notice.value = '';
   if (!premium.value) { error.value = 'PDF-печать доступна на тарифе PREMIUM'; return; }
@@ -972,6 +975,12 @@ async function downloadPdf() {
     // Большие пакеты готовим в фоне: виден прогресс, и запрос не рвётся
     // мобильным таймаутом на десятках секунд генерации.
     const body = { template, rows, single: true, source: 'reprint' };
+    const fingerprint = JSON.stringify(body);
+    if (!pdfIdemKey.value || pdfFingerprint.value !== fingerprint) {
+      pdfIdemKey.value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      pdfFingerprint.value = fingerprint;
+    }
+    body.idemKey = pdfIdemKey.value;
     let blobUrl;
     if (rows.length > 200) {
       pdfProgress.value = { done: 0, total: rows.length };
@@ -990,6 +999,8 @@ async function downloadPdf() {
     notice.value = pdfNotice || 'PDF готов. Если файл не скачался — открой его по ссылке ниже.';
     if (pdfUrl.value) URL.revokeObjectURL(pdfUrl.value);
     pdfUrl.value = blobUrl;
+    pdfIdemKey.value = '';
+    pdfFingerprint.value = '';
   } catch (e) {
     error.value = e.name === 'AbortError' ? 'PDF формируется слишком долго. Уменьшите число кодов и попробуйте снова.' : e.message;
   } finally {
@@ -1023,6 +1034,7 @@ function buildMarketplaceTemplate() {
 function marketplaceBody() {
   const digits = eanInfo.value.valid ? eanInfo.value.digits : eanDigits(product.barcode);
   return {
+    idemKey: `marketplace-${digits}-${currentFormat.value.id}-${JSON.stringify(fields)}-${JSON.stringify(product)}`,
     template: buildMarketplaceTemplate(),
     rows: [{
       barcode: digits,
@@ -1116,7 +1128,7 @@ async function printLabels() {
       expiry: String(product.expiry || '').trim(), date: String(product.date || '').trim(),
       composition: String(product.composition || '').trim(), manufacturer: String(product.manufacturer || '').trim()
     }));
-    await openPrintWindow('/api/labels/print', { template, rows, source: 'reprint' }, win);
+    await openPrintWindow('/api/labels/print', { template, rows, single: true, source: 'reprint', idemKey: `print-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}` }, win);
     notice.value = 'Окно печати открыто. Выберите принтер и нажмите «Печать».';
   } catch (e) {
     try { win?.close?.(); } catch { /* ignore */ }

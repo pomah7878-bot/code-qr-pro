@@ -1,6 +1,6 @@
 import { db } from './db.js';
 import { planOf } from './plans.js';
-import { consumeOperations, consumeExports, UsageError } from './lib/usage.js';
+import { consumeOperations, consumeExports, UsageError, rollbackUsageEvent } from './lib/usage.js';
 import { requireAuth } from './routes.js';
 import { resolveElements, resolveElementsMany, renderLabelsPdf } from './labels.js';
 import PDFDocument from 'pdfkit';
@@ -90,10 +90,14 @@ function pdfTaskPrune() {
   }
 }
 
-function pdfTaskCountForUser(userId) {
+function samePdfPrincipal(task, user) {
+  return task.userId === user.id && Number(task.memberId || 0) === Number(user.teamMemberId || 0);
+}
+
+function pdfTaskCountForUser(user) {
   let count = 0;
   for (const task of pdfTasks.values()) {
-    if (task.userId === userId && (task.status === 'queued' || task.status === 'running')) count += 1;
+    if (samePdfPrincipal(task, user) && (task.status === 'queued' || task.status === 'running')) count += 1;
   }
   return count;
 }
@@ -230,7 +234,7 @@ export async function registerLabelRoutes(app) {
       reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
       return null;
     }
-    const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, user.id);
+    const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=? AND deleted_at IS NULL').get(jobId, user.id);
     if (!job) {
       reply.code(404).send({ error: 'Задание не найдено' });
       return null;
@@ -289,6 +293,8 @@ export async function registerLabelRoutes(app) {
       consumeOperations(req.user, dataRows.length, { idemKey: idem ? `${idem}:pdf` : '', context: 'labels_pdf' });
       consumeExports(req.user, 1, { idemKey: idem ? `${idem}:pdf_export` : '', context: 'labels_pdf_export' });
     } catch (e) {
+      // Если экспорт запрещён лимитом, операции за эту же сборку не должны остаться списанными.
+      if (idem) rollbackUsageEvent(req.user.id, `${idem}:pdf`);
       if (e instanceof UsageError) {
         reply.code(e.statusCode || 402).send({ error: e.message, ...e.payload });
         return null;
@@ -338,7 +344,7 @@ export async function registerLabelRoutes(app) {
         pdfCacheSet(key, built);
         return built;
       })();
-      const ticketId = putPdfTicket(task.userId, pdf, task.name);
+      const ticketId = putPdfTicket(task.userId, pdf, task.name, task.memberId || null);
       if (!ticketId) throw new Error('Файл слишком большой — уменьшите количество этикеток');
       task.ticketId = ticketId;
       task.done = task.total;
@@ -347,6 +353,13 @@ export async function registerLabelRoutes(app) {
     } catch (e) {
       task.status = 'error';
       task.error = String(e?.message || e);
+      // Фоновая сборка не должна съедать лимит при ошибке/недостатке места.
+      if (task.idemKey) {
+        try {
+          rollbackUsageEvent(task.userId, `${task.idemKey}:pdf`);
+          rollbackUsageEvent(task.userId, `${task.idemKey}:pdf_export`);
+        } catch { /* не меняем исходную ошибку задачи */ }
+      }
     }
     task.at = Date.now();
   }
@@ -356,33 +369,52 @@ export async function registerLabelRoutes(app) {
     const prepared = preparePdfRequest(req, reply);
     if (!prepared) return reply;
     const { template, dataRows, singlePage } = prepared;
-    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
-    logPdfActivity(req.user, req, dataRows, template, singlePage);
-    reply.header('Content-Type', 'application/pdf');
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
+      logPdfActivity(req.user, req, dataRows, template, singlePage);
+      reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', 'attachment; filename="labels.pdf"');
     reply.header('Content-Length', String(pdf.length));
     reply.header('Cache-Control', 'private, no-store');
     return reply.send(pdf);
+    } catch (e) {
+      if (idem) {
+        rollbackUsageEvent(req.user.id, `${idem}:pdf`);
+        rollbackUsageEvent(req.user.id, `${idem}:pdf_export`);
+      }
+      throw e;
+    }
   });
 
   // Задание на PDF с прогрессом: клиент опрашивает статус и показывает полосу
   // «готово N из M этикеток», а не ждёт один длинный ответ.
   app.post('/api/labels/pdf/task', { preHandler: requireAuth }, async (req, reply) => {
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    // Повторная отправка после таймаута отдаёт уже существующее задание, а не
+    // создаёт новую платную сборку.
+    if (idem) {
+      for (const task of pdfTasks.values()) {
+        if (task.idemKey === idem && samePdfPrincipal(task, req.user)) return { ...pdfTaskView(task), duplicated: true };
+      }
+    }
     const prepared = preparePdfRequest(req, reply);
     if (!prepared) return reply;
     pdfTaskPrune();
-    if (pdfTaskCountForUser(req.user.id) >= PDF_TASK_MAX_PER_USER) {
+    if (pdfTaskCountForUser(req.user) >= PDF_TASK_MAX_PER_USER) {
       return reply.code(429).send({ error: 'Предыдущая подготовка PDF ещё идёт — дождитесь её окончания' });
     }
     const { template, dataRows, singlePage } = prepared;
     const task = {
       id: randomUUID().replace(/-/g, ''),
       userId: req.user.id,
+      memberId: req.user.teamMemberId || null,
       user: req.user,
       template,
       dataRows,
       singlePage,
       name: req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf',
+      idemKey: String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100),
       status: 'queued',
       done: 0,
       total: dataRows.length,
@@ -400,11 +432,11 @@ export async function registerLabelRoutes(app) {
   app.get('/api/labels/pdf/task/:id', { preHandler: requireAuth }, async (req, reply) => {
     pdfTaskPrune();
     const task = pdfTasks.get(String(req.params.id || ''));
-    if (!task || task.userId !== req.user.id) {
+    if (!task || !samePdfPrincipal(task, req.user)) {
       return reply.code(404).send({ error: 'Задание не найдено — сформируйте PDF заново' });
     }
-    // если файл по тикету уже истёк — считаем задание устаревшим
-    if (task.status === 'ready' && !getPdfTicket(task.ticketId, req.user.id)) {
+    // если файл по тикету уже истёк — считаем задание устаревшим.
+    if (task.status === 'ready' && !getPdfTicket(task.ticketId, req.user.id, req.user.teamMemberId || null)) {
       task.status = 'error';
       task.error = 'Файл устарел — сформируйте PDF заново';
     }
@@ -417,17 +449,32 @@ export async function registerLabelRoutes(app) {
     const prepared = preparePdfRequest(req, reply);
     if (!prepared) return reply;
     const { template, dataRows, singlePage } = prepared;
-    const { pdf } = await cachedLabelsPdf(template, dataRows, singlePage);
     const name = req.body?.source === 'reprint' ? 'reprint.pdf' : 'labels.pdf';
-    const id = putPdfTicket(req.user.id, pdf, name);
-    if (!id) return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество этикеток' });
-    logPdfActivity(req.user, req, dataRows, template, singlePage);
-    return { id, url: `/api/labels/pdf/file/${id}`, name };
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      const pdf = (await cachedLabelsPdf(template, dataRows, singlePage)).pdf;
+      const id = putPdfTicket(req.user.id, pdf, name, req.user.teamMemberId || null);
+      if (!id) {
+        if (idem) {
+          rollbackUsageEvent(req.user.id, `${idem}:pdf`);
+          rollbackUsageEvent(req.user.id, `${idem}:pdf_export`);
+        }
+        return reply.code(413).send({ error: 'Файл слишком большой — уменьшите количество этикеток' });
+      }
+      logPdfActivity(req.user, req, dataRows, template, singlePage);
+      return { id, url: `/api/labels/pdf/file/${id}`, name };
+    } catch (e) {
+      if (idem) {
+        rollbackUsageEvent(req.user.id, `${idem}:pdf`);
+        rollbackUsageEvent(req.user.id, `${idem}:pdf_export`);
+      }
+      throw e;
+    }
   });
 
   app.get('/api/labels/pdf/file/:id', { preHandler: requireAuth }, async (req, reply) => {
-    const item = getPdfTicket(req.params.id, req.user.id);
-    if (!item) return reply.code(404).send({ error: 'Ссылка устарела — сформируйте PDF заново' });
+    const item = getPdfTicket(req.params.id, req.user.id, req.user.teamMemberId || null);
+    if (!item) return reply.code(404).send({ error: 'Ссылка устарела или недоступна — сформируйте PDF заново' });
     reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', `inline; filename="${item.name}"`);
     reply.header('X-Content-Type-Options', 'nosniff');

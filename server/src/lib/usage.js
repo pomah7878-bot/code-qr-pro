@@ -26,6 +26,31 @@ function findEvent(userId, idemKey) {
   return db.prepare('SELECT * FROM usage_events WHERE user_id=? AND idem_key=?').get(userId, String(idemKey).slice(0, 120)) || null;
 }
 
+export function findUsageEvent(userId, idemKey) {
+  return findEvent(userId, idemKey);
+}
+
+/** Откат конкретного списания при сбое последующей сборки файла.
+ * Не трогает другие операции пользователя и не меняет историю событий.
+ */
+export function rollbackUsageEvent(userId, idemKey) {
+  const event = findEvent(userId, idemKey);
+  if (!event || !idemKey) return false;
+  db.transaction(() => {
+    const col = kindColumn(event.kind);
+    db.prepare(`UPDATE usage_periods SET ${col}=MAX(0,${col}-?), updated_at=datetime('now') WHERE id=?`).run(event.count, event.period_id);
+    if (event.kind === 'operation' || event.kind === 'check') {
+      const daily = dailyColumn(event.kind);
+      const day = String(event.created_at || '').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        db.prepare(`UPDATE usage_daily SET ${daily}=MAX(0,${daily}-?) WHERE user_id=? AND day=?`).run(event.count, userId, day);
+      }
+    }
+    db.prepare('DELETE FROM usage_events WHERE id=?').run(event.id);
+  })();
+  return true;
+}
+
 function capacity(user, kind, count) {
   const period = currentPeriod(user);
   const row = ensureUsagePeriod(user, period);

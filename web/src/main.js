@@ -38,6 +38,13 @@ function reportClientError(event, payload) {
 }
 
 window.addEventListener('error', (e) => {
+  const source = String(e.filename || '');
+  const message = String(e.message || '');
+  const stack = String(e.error?.stack || '');
+  // Встроенные Android/Instagram WebView вставляют собственный navigation logger.
+  // Это не ошибка CODE QR PRO и не должно засорять журнал сервера.
+  if (/iabjs:\/\/|navigation_performance_logger_android/i.test(source + ' ' + stack)) return;
+  if (/Java object is gone/i.test(message) && /Instagram/i.test(navigator.userAgent)) return;
   reportClientError('window_error', {
     message: e.message,
     stack: e.error?.stack,

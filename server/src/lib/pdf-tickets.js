@@ -15,7 +15,7 @@ const MAX_PER_USER = 10;
 const MAX_BYTES = 60 * 1024 * 1024;
 const MAX_TOTAL_BYTES = Math.max(32, Number(process.env.PDF_TICKET_MAX_MB) || 220) * 1024 * 1024;
 
-const items = new Map(); // id -> { userId, buffer, name, at }
+const items = new Map(); // id -> { userId, memberId, buffer, name, at }
 let totalBytes = 0;
 
 function drop(id) {
@@ -32,11 +32,13 @@ function prune() {
   }
 }
 
-export function putPdfTicket(userId, buffer, name = 'file.pdf') {
+export function putPdfTicket(userId, buffer, name = 'file.pdf', memberId = null) {
   prune();
   if (!buffer || buffer.length > MAX_BYTES) return null;
   const own = [];
-  for (const [id, item] of items) if (item.userId === userId) own.push([id, item]);
+  for (const [id, item] of items) {
+    if (item.userId === userId && Number(item.memberId || 0) === Number(memberId || 0)) own.push([id, item]);
+  }
   own.sort((a, b) => a[1].at - b[1].at);
   while (own.length >= MAX_PER_USER) {
     const [id] = own.shift();
@@ -54,15 +56,15 @@ export function putPdfTicket(userId, buffer, name = 'file.pdf') {
   }
   if (totalBytes + buffer.length > MAX_TOTAL_BYTES) return null;
   const id = crypto.randomBytes(16).toString('hex');
-  items.set(id, { userId, buffer, name: String(name || 'file.pdf'), at: Date.now() });
+  items.set(id, { userId, memberId: memberId || null, buffer, name: String(name || 'file.pdf'), at: Date.now() });
   totalBytes += buffer.length;
   return id;
 }
 
-export function getPdfTicket(id, userId) {
+export function getPdfTicket(id, userId, memberId = null) {
   prune();
   const item = items.get(String(id || ''));
-  if (!item || item.userId !== userId) return null;
+  if (!item || item.userId !== userId || Number(item.memberId || 0) !== Number(memberId || 0)) return null;
   item.at = Date.now();
   return item;
 }

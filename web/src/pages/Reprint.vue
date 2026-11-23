@@ -485,6 +485,10 @@ function clearCodes() {
     try { URL.revokeObjectURL(pdfUrl.value); } catch { /* ignore */ }
   }
   pdfUrl.value = '';
+  // Очистка относится к текущей партии: данные товара и ручной шаблон
+  // не должны незаметно попасть в следующую партию кодов.
+  for (const key of Object.keys(product)) product[key] = '';
+  eanInput.value = '';
   try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* приватный режим */ }
 }
 
@@ -945,7 +949,7 @@ function buildTemplate(sample = null) {
   const kindQty = [valueOf('form'), valueOf('size')].filter(Boolean).join(' ');
   const expiryLine = valueOf('expiry') ? `Годен до: ${valueOf('expiry')}` : '';
   const rightFields = [
-    { key: 'name', value: valueOf('name'), enabled: fields.name, fontSize: 7.2 },
+    { key: 'name', value: valueOf('name'), enabled: true, fontSize: 7.2 },
     { key: 'kindQty', value: kindQty, enabled: true, fontSize: 6.8 },
     { key: 'expiryLine', value: expiryLine, enabled: true, fontSize: 6.8 }
   ];

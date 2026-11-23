@@ -198,7 +198,7 @@ export async function registerLabelRoutes(app) {
     if (err) return reply.code(400).send({ error: err });
     let d = data || {};
     if (jobId != null) {
-      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
+      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=? AND deleted_at IS NULL').get(jobId, req.user.id);
       if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
       const item = db.prepare('SELECT * FROM job_items WHERE job_id=? AND row_index=?').get(job.id, Number(row) || 0);
       if (!item || !item.normalized) return reply.code(404).send({ error: 'Строка задания не найдена' });
@@ -495,7 +495,7 @@ export async function registerLabelRoutes(app) {
       if (!dataRows) return reply.code(400).send({ error: 'Нужны строки данных (до 10 000)' });
     } else {
       if (jobId == null) return reply.code(400).send({ error: 'Выберите пакет или загрузите данные' });
-      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=?').get(jobId, req.user.id);
+      const job = db.prepare('SELECT * FROM generation_jobs WHERE id=? AND user_id=? AND deleted_at IS NULL').get(jobId, req.user.id);
       if (!job) return reply.code(404).send({ error: 'Задание не найдено' });
       if (job.status !== 'done') return reply.code(409).send({ error: 'Генерация ещё не завершена' });
       const items = db.prepare("SELECT * FROM job_items WHERE job_id=? AND status='generated' ORDER BY row_index").all(job.id);

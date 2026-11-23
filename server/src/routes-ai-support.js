@@ -16,6 +16,8 @@ const SUPPORT_ACTIONS = [
   'clear_rate_limits', 'compensate', 'revoke_api_keys', 'view_as_client', 'send_email'
 ];
 
+const SLA_HOURS = { urgent: 2, high: 8, normal: 24, low: 72 };
+
 const SUPPORT_SOLVER_SYSTEM = `Ты — старший инженер поддержки CODE QR PRO (маркировка «Честный ЗНАК», GS1 DataMatrix, печать этикеток).
 Администратор прислал обращение клиента. Проанализируй его вместе с фактами аккаунта и предложи решение.
 
@@ -304,7 +306,7 @@ export async function registerAiSupportRoutes(app) {
     const aiContext = String(req.body?.aiContext || '').trim().slice(0, 4000);
 
     const info = db.prepare(
-      'INSERT INTO support_tickets (user_id, subject, message, ai_context) VALUES (?,?,?,?)'
+      "INSERT INTO support_tickets (user_id, subject, message, ai_context, priority, due_at) VALUES (?,?,?,?,'normal',datetime('now','+24 hours'))"
     ).run(user.id, subject, message, aiContext);
 
     logEvent({
@@ -313,7 +315,9 @@ export async function registerAiSupportRoutes(app) {
       userId: user.id, ip: req.ip, method: 'USER', url: req.url,
       meta: { subject: subject.slice(0, 120), ticketId: Number(info.lastInsertRowid) }
     });
-    audit(req, 'support.ticket_create', 'support_ticket', Number(info.lastInsertRowid), { subject: subject.slice(0, 120) });
+    const ticketId = Number(info.lastInsertRowid);
+    db.prepare("INSERT INTO support_messages (ticket_id, author_type, author_id, author_name, text) VALUES (?, 'client', ?, ?, ?)").run(ticketId, user.id, user.name || user.email, message);
+    audit(req, 'support.ticket_create', 'support_ticket', ticketId, { subject: subject.slice(0, 120) });
 
     // Уведомляем администратора: Telegram + живой счётчик в админке (см. /api/admin/tickets/count)
     notifySupportTicket(
@@ -337,17 +341,35 @@ export async function registerAiSupportRoutes(app) {
 
   app.get('/api/assistant/tickets', { preHandler: requireAuth }, async (req) => {
     const rows = db.prepare(
-      'SELECT id, subject, message, status, admin_note, created_at, updated_at FROM support_tickets WHERE user_id = ? ORDER BY id DESC LIMIT 20'
+      'SELECT id, subject, message, status, admin_note, priority, due_at, created_at, updated_at FROM support_tickets WHERE user_id = ? ORDER BY id DESC LIMIT 20'
     ).all(req.user.id);
     return { tickets: rows };
   });
 
   // --- админ: обращения клиентов ---
+  app.get('/api/assistant/tickets/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const ticket = db.prepare('SELECT * FROM support_tickets WHERE id=? AND user_id=?').get(Number(req.params.id), req.user.id);
+    if (!ticket) return reply.code(404).send({ error: 'Обращение не найдено' });
+    const messages = db.prepare('SELECT id, author_type, author_name, text, created_at FROM support_messages WHERE ticket_id=? ORDER BY id').all(ticket.id);
+    return { ticket: { id: ticket.id, subject: ticket.subject, status: ticket.status, priority: ticket.priority, due_at: ticket.due_at, created_at: ticket.created_at }, messages };
+  });
+
+  app.post('/api/assistant/tickets/:id/messages', { preHandler: requireAuth }, async (req, reply) => {
+    const ticket = db.prepare('SELECT * FROM support_tickets WHERE id=? AND user_id=?').get(Number(req.params.id), req.user.id);
+    if (!ticket) return reply.code(404).send({ error: 'Обращение не найдено' });
+    const text = String(req.body?.text || '').trim().slice(0, 4000);
+    if (!text) return reply.code(400).send({ error: 'Сообщение пустое' });
+    db.prepare("INSERT INTO support_messages (ticket_id, author_type, author_id, author_name, text) VALUES (?, 'client', ?, ?, ?)").run(ticket.id, req.user.id, req.user.name || req.user.email, text);
+    db.prepare("UPDATE support_tickets SET status='open', updated_at=datetime('now') WHERE id=?").run(ticket.id);
+    notifySupportTicket({ ...ticket, message: text, subject: 'Ответ клиента: ' + ticket.subject }, req.user, publicUrl() + '/app/admin/support');
+    return { ok: true };
+  });
+
   app.get('/api/admin/tickets', { preHandler: requireAdmin }, async (req) => {
     const status = String(req.query?.status || '').trim();
     const where = ['open', 'in_progress', 'resolved'].includes(status) ? 'WHERE t.status = ?' : '';
     const rows = db.prepare(
-      `SELECT t.id, t.user_id, t.subject, t.message, t.ai_context, t.status, t.admin_note, t.created_at, t.updated_at,
+      `SELECT t.id, t.user_id, t.subject, t.message, t.ai_context, t.status, t.admin_note, t.priority, t.due_at, t.created_at, t.updated_at,
               u.email, u.name
        FROM support_tickets t JOIN users u ON u.id = t.user_id
        ${where}
@@ -359,19 +381,42 @@ export async function registerAiSupportRoutes(app) {
     return { tickets: rows, counts: Object.fromEntries(counts.map((r) => [r.status, r.c])) };
   });
 
+  app.get('/api/admin/tickets/:id', { preHandler: requireAdmin }, async (req, reply) => {
+    const ticket = db.prepare('SELECT * FROM support_tickets WHERE id=?').get(Number(req.params.id));
+    if (!ticket) return reply.code(404).send({ error: 'Обращение не найдено' });
+    const messages = db.prepare('SELECT id, author_type, author_name, text, created_at FROM support_messages WHERE ticket_id=? ORDER BY id').all(ticket.id);
+    return { ticket, messages };
+  });
+
+  app.post('/api/admin/tickets/:id/messages', { preHandler: requireAdmin }, async (req, reply) => {
+    const ticket = db.prepare('SELECT * FROM support_tickets WHERE id=?').get(Number(req.params.id));
+    if (!ticket) return reply.code(404).send({ error: 'Обращение не найдено' });
+    const text = String(req.body?.text || '').trim().slice(0, 4000);
+    if (!text) return reply.code(400).send({ error: 'Сообщение пустое' });
+    db.prepare("INSERT INTO support_messages (ticket_id, author_type, author_id, author_name, text) VALUES (?, 'admin', ?, ?, ?)").run(ticket.id, req.user.id, req.user.name || req.user.email, text);
+    db.prepare("UPDATE support_tickets SET status='in_progress', updated_at=datetime('now') WHERE id=?").run(ticket.id);
+    db.prepare("INSERT INTO notifications (owner_id, member_id, type, title, text, link) VALUES (?, NULL, 'support', 'Ответ поддержки', ?, '/app/assistant')").run(ticket.user_id, text.slice(0, 400));
+    audit(req, 'support.reply', 'support_ticket', ticket.id, { length: text.length });
+    return { ok: true };
+  });
+
   app.patch('/api/admin/tickets/:id', { preHandler: requireAdmin }, async (req, reply) => {
     const id = Number(req.params.id);
     const row = db.prepare('SELECT id, user_id FROM support_tickets WHERE id = ?').get(id);
     if (!row) return reply.code(404).send({ error: 'Обращение не найдено' });
     const status = ['open', 'in_progress', 'resolved'].includes(req.body?.status) ? req.body.status : null;
     const note = req.body?.adminNote !== undefined ? String(req.body.adminNote || '').slice(0, 3000) : null;
+    const priority = ['urgent','high','normal','low'].includes(req.body?.priority) ? req.body.priority : null;
+    const due = priority ? db.prepare("SELECT datetime('now','+' || ? || ' hours') d").get(SLA_HOURS[priority]).d : null;
     db.prepare(
       `UPDATE support_tickets SET
          status = COALESCE(?, status),
          admin_note = COALESCE(?, admin_note),
+         priority = COALESCE(?, priority),
+         due_at = COALESCE(?, due_at),
          updated_at = datetime('now')
        WHERE id = ?`
-    ).run(status, note, id);
+    ).run(status, note, priority, due, id);
     audit(req, 'support.ticket_update', 'support_ticket', id, { status, note: note ? note.slice(0, 120) : undefined });
     if (status === 'resolved') {
       logEvent({
@@ -380,7 +425,7 @@ export async function registerAiSupportRoutes(app) {
         userId: row.user_id, ip: req.ip, method: 'ADMIN', url: req.url, meta: { ticketId: id }
       });
     }
-    return { ok: true, id, status, adminNote: note };
+    return { ok: true, id, status, adminNote: note, priority, dueAt: due };
   });
 
   // Отправить обращение AI-помощнику: он изучает тикет + факты аккаунта и предлагает решение.

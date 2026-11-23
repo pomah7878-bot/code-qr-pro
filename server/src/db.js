@@ -776,7 +776,20 @@ const MIGRATIONS = [
      read_at TEXT,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(owner_id, member_id, read_at, id);`
+   CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(owner_id, member_id, read_at, id);`,
+  // v53 — диалог поддержки и SLA
+  `ALTER TABLE support_tickets ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal';
+   ALTER TABLE support_tickets ADD COLUMN due_at TEXT;
+   CREATE TABLE IF NOT EXISTS support_messages (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     ticket_id INTEGER NOT NULL,
+     author_type TEXT NOT NULL DEFAULT 'client',
+     author_id INTEGER,
+     author_name TEXT NOT NULL DEFAULT '',
+     text TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_messages(ticket_id, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

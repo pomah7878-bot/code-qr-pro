@@ -14,7 +14,10 @@ const counts = ref({});
 const ticketsBusy = ref(false);
 const filter = ref('');
 const selectedTicket = ref(null);
-const ticketForm = reactive({ status: 'open', adminNote: '', busy: false });
+const ticketForm = reactive({ status: 'open', adminNote: '', priority: 'normal', busy: false });
+const thread = ref([]);
+const replyText = ref('');
+const threadBusy = ref(false);
 
 // AI-разбор обращения
 const aiBusy = ref(false);
@@ -61,7 +64,7 @@ const REPLY_TEMPLATES = [
   }
 ];
 function useTemplate(t) {
-  ticketForm.adminNote = t.text;
+  replyText.value = t.text;
   notice.value = `Шаблон «${t.label}» подставлен — можно отредактировать перед отправкой`;
 }
 
@@ -83,6 +86,11 @@ function openTicket(t) {
   selectedTicket.value = t;
   ticketForm.status = t.status;
   ticketForm.adminNote = t.admin_note || '';
+  ticketForm.priority = t.priority || 'normal';
+  replyText.value = '';
+  thread.value = [];
+  api.adminTicket(t.id).then((d) => { thread.value = d.messages || []; }).catch((e) => { error.value = e.message; });
+  ticketForm.busy = false;
   aiResult.value = null;
   error.value = '';
   notice.value = '';
@@ -108,12 +116,25 @@ function useAiReply() {
   notice.value = 'Ответ AI подставлен в поле ответа — проверьте и нажмите «Сохранить»';
 }
 
+async function sendReply() {
+  if (!selectedTicket.value || !replyText.value.trim()) return;
+  threadBusy.value = true; error.value = '';
+  try {
+    await api.adminTicketReply(selectedTicket.value.id, replyText.value.trim());
+    replyText.value = '';
+    const d = await api.adminTicket(selectedTicket.value.id); thread.value = d.messages || [];
+    notice.value = 'Ответ отправлен клиенту';
+    await loadTickets();
+  } catch (e) { error.value = e.message; }
+  finally { threadBusy.value = false; }
+}
+
 async function saveTicket() {
   if (!selectedTicket.value) return;
   ticketForm.busy = true;
   error.value = '';
   try {
-    await api.adminTicketUpdate(selectedTicket.value.id, { status: ticketForm.status, adminNote: ticketForm.adminNote });
+    await api.adminTicketUpdate(selectedTicket.value.id, { status: ticketForm.status, adminNote: ticketForm.adminNote, priority: ticketForm.priority });
     notice.value = 'Обращение обновлено';
     await loadTickets();
     const fresh = tickets.value.find((x) => x.id === selectedTicket.value.id);
@@ -249,6 +270,9 @@ onMounted(() => { loadTickets(); loadKb(); });
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'open' ? '!border-brand-500/50 !text-brand-400' : ''" @click="ticketForm.status = 'open'">Открыто</button>
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'in_progress' ? '!border-amber-500/50 !text-amber-500' : ''" @click="ticketForm.status = 'in_progress'">В работе</button>
               <button class="btn-ghost !py-1.5 !px-3 text-xs" :class="ticketForm.status === 'resolved' ? '!border-emerald-500/50 !text-emerald-500' : ''" @click="ticketForm.status = 'resolved'">Решено</button>
+              <select v-model="ticketForm.priority" class="input !py-1 !px-2 text-xs w-auto" @change="saveTicket">
+                <option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option><option value="urgent">Срочный</option>
+              </select>
               <button
                 class="btn-primary !py-1.5 !px-3 text-xs ml-auto inline-flex items-center gap-1.5"
                 :disabled="aiBusy" @click="askAiForTicket"
@@ -289,6 +313,20 @@ onMounted(() => { loadTickets(); loadKb(); });
               </div>
               <div v-if="aiResult.needHuman" class="text-[11px] text-amber-500">AI считает, что нужен ручной разбор администратора.</div>
             </div>
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2 max-h-64 overflow-y-auto">
+              <div class="text-[11px] text-slate-500">Диалог с клиентом</div>
+              <div v-if="!thread.length" class="text-xs text-slate-500">Сообщений пока нет.</div>
+              <div v-for="m in thread" :key="m.id" class="text-xs rounded-lg p-2" :class="m.author_type === 'admin' ? 'bg-brand-500/10' : 'bg-slate-100 dark:bg-white/5'">
+                <div class="text-slate-500 mb-0.5">{{ m.author_name || m.author_type }} · {{ fmtDateTime(m.created_at) }}</div>
+                <div class="whitespace-pre-wrap">{{ m.text }}</div>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <label class="label !text-xs" for="t-reply">Сообщение клиенту</label>
+              <textarea id="t-reply" v-model="replyText" rows="3" class="input text-sm" placeholder="Напишите ответ…"></textarea>
+              <button class="btn-primary !py-1.5 !px-3 text-xs" :disabled="threadBusy || !replyText.trim()" @click="sendReply">{{ threadBusy ? 'Отправляем…' : 'Отправить клиенту' }}</button>
+            </div>
+
             <div>
               <div class="flex flex-wrap items-center justify-between gap-1.5 mb-1">
                 <label class="label !text-xs !mb-0" for="t-note">Ответ клиенту (увидит в кабинете)</label>

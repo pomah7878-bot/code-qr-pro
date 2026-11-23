@@ -8,6 +8,8 @@
     "dev:web": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
     "start": "npm --prefix server start",
-    "check:mojibake": "node scripts/check-mojibake.mjs"
+    "check:mojibake": "node scripts/check-mojibake.mjs",
+    "security:audit": "node scripts/security-audit.mjs",
+    "hooks:install": "node scripts/install-hooks.mjs"
   }
 }

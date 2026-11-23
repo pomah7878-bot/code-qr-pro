@@ -1,0 +1,13 @@
+﻿#!/bin/sh
+# Pre-commit защита от случайной утечки секретов.
+files=$(git diff --cached --name-only --diff-filter=ACM | tr '\n' ' ')
+for f in $files; do
+  case "$f" in
+    .env|*/.env|*.env|server/.env|*.app-key|*/.app-key|server/data/*|*bridge-token.txt|*.pem|*.p12|*id_rsa*)
+      echo "BLOCKED: секретный файл в коммите: $f" >&2; exit 1;;
+  esac
+done
+if git diff --cached -U0 | grep -E "BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|TELEGRAM_BOT_TOKEN=|YOOKASSA_SECRET_KEY=|MAIL_PASSWORD=|CZ_TOKEN=" >/dev/null 2>&1; then
+  echo "BLOCKED: в коммите похоже на секрет/токен. Проверьте diff." >&2; exit 1
+fi
+exit 0

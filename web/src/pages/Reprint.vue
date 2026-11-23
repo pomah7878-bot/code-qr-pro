@@ -16,9 +16,17 @@ const MAX = 5000;
 const categories = [
   { id: 'lp', title: 'Легпром', icon: 'shirt', defaults: { name: true, article: true, size: true, color: true, date: false, composition: true, ean13: true } },
   { id: 'shoes', title: 'Обувь', icon: 'shoe', defaults: { name: true, article: true, size: true, color: true, date: false, composition: false, ean13: true } },
-  { id: 'toys', title: 'Игрушки', icon: 'toy', defaults: { name: true, article: true, size: false, color: false, date: true, composition: false, ean13: true } },
-  { id: 'cosmetic', title: 'Косметика и химия', icon: 'bottle', defaults: { name: true, article: true, size: false, color: false, date: true, composition: true, ean13: true } },
-  { id: 'pharmacy', title: 'Аптека / медикаменты', icon: 'pill', defaults: { name: true, article: false, size: false, color: false, date: false, composition: false, ean13: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true } }
+  { id: 'toys', title: 'Игрушки', icon: 'toy', defaults: { name: true, article: true, date: true, manufacturer: true, composition: true, ean13: true } },
+  { id: 'cosmetic', title: 'Косметика и химия', icon: 'bottle', defaults: { name: true, article: true, size: true, series: true, expiry: true, manufacturer: true, composition: true, ean13: true } },
+  { id: 'pharmacy', title: 'Аптека / медикаменты', icon: 'pill', defaults: { name: true, dosage: true, form: true, series: true, expiry: true, manufacturer: true, ean13: true } },
+  { id: 'food', title: 'Продукты питания', icon: 'set', defaults: { name: true, article: true, size: true, series: true, date: true, expiry: true, manufacturer: true, composition: true, ean13: true } },
+  { id: 'electronics', title: 'Электроника и РЭП', icon: 'api', defaults: { name: true, article: true, manufacturer: true, series: true, ean13: true } },
+  { id: 'tyres', title: 'Шины', icon: 'set', defaults: { name: true, article: true, size: true, manufacturer: true, series: true, ean13: true } },
+  { id: 'milk', title: 'Молочная продукция', icon: 'bottle', defaults: { name: true, size: true, date: true, expiry: true, manufacturer: true, series: true, composition: true, ean13: true } },
+  { id: 'alcohol', title: 'Алкоголь', icon: 'bottle', defaults: { name: true, size: true, manufacturer: true, series: true, expiry: true, composition: true, ean13: true } },
+  { id: 'water', title: 'Питьевая вода', icon: 'bottle', defaults: { name: true, size: true, manufacturer: true, series: true, expiry: true, composition: true, ean13: true } },
+  { id: 'furniture', title: 'Мебель', icon: 'set', defaults: { name: true, article: true, size: true, color: true, manufacturer: true, composition: true, ean13: true } },
+  { id: 'supplies', title: 'Упаковка и расходники', icon: 'set', defaults: { name: true, article: true, size: true, manufacturer: true, ean13: true } }
 ];
 const formats = [
   { id: '58x40h', label: '58×40 мм — горизонтальный (5.8×4 см)', w: 58, h: 40 },
@@ -32,13 +40,13 @@ const fieldList = [
   { key: 'article', label: 'Артикул' },
   { key: 'dosage', label: 'Дозировка' },
   { key: 'form', label: 'Форма выпуска' },
-  { key: 'size', label: 'Размер' },
-  { key: 'color', label: 'Цвет' },
-  { key: 'series', label: 'Серия' },
+  { key: 'size', label: 'Размер / объём / модель' },
+  { key: 'color', label: 'Цвет / вариант' },
+  { key: 'series', label: 'Серия / партия' },
   { key: 'expiry', label: 'Срок годности' },
-  { key: 'date', label: 'Дата' },
-  { key: 'composition', label: 'Состав' },
-  { key: 'manufacturer', label: 'Производитель' },
+  { key: 'date', label: 'Дата производства' },
+  { key: 'composition', label: 'Состав / материал' },
+  { key: 'manufacturer', label: 'Производитель / бренд' },
   { key: 'ean13', label: 'Штрихкод' }
 ];
 
@@ -455,6 +463,44 @@ function restoreDraft() {
     if (d.fields && typeof d.fields === 'object') Object.assign(fields, d.fields);
   } catch { /* битый черновик — игнорируем */ }
 }
+function clearCodes() {
+  if (busy.value) return;
+  codesText.value = '';
+  result.value = null;
+  productInfo.value = [];
+  cards.value = [];
+  cardsMessage.value = '';
+  cardsLoading.value = false;
+  infoMessage.value = '';
+  infoLoading.value = false;
+  shortWarning.value = '';
+  notice.value = '';
+  error.value = '';
+  cameraCount.value = 0;
+  contours.value = [];
+  pdfProgress.value = null;
+  pdfIdemKey.value = '';
+  pdfFingerprint.value = '';
+  if (pdfUrl.value) {
+    try { URL.revokeObjectURL(pdfUrl.value); } catch { /* ignore */ }
+  }
+  pdfUrl.value = '';
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* приватный режим */ }
+}
+
+watch(codesText, (value) => {
+  // Новый ввод после ручной очистки должен начинать новую партию,
+  // а не воскрешать прежние результаты проверки.
+  if (!String(value || '').trim()) return;
+  result.value = null;
+  productInfo.value = [];
+  cards.value = [];
+  cardsMessage.value = '';
+  pdfIdemKey.value = '';
+  pdfFingerprint.value = '';
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+});
+
 onMounted(() => { restoreDraft(); loadCzToken(); });
 
 const codesCount = computed(() => codesText.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).length);
@@ -728,7 +774,7 @@ function cardForCode(c) {
   return cards.value.find((x) => String(x.gtin || '').replace(/\D/g, '') === gtin)?.card || null;
 }
 
-function rowProduct(c) {
+function rowProduct(c = {}) {
   const card = cardForCode(c);
   if (card) return {
     name: card.name || product.name,
@@ -845,7 +891,9 @@ async function loadProductInfo() {
   }
 }
 
-function buildTemplate() {
+function buildTemplate(sample = null) {
+  const source = sample?.code ? rowProduct(sample) : rowProduct({ gtin: product.gtin, code: '' });
+  const valueOf = (key, fallback = '') => String(source[key] ?? product[key] ?? fallback).trim();
   const f = currentFormat.value;
   const W = f.w, H = f.h;
   // Читаемые значения под DataMatrix: GTIN и серийник — те же данные, что зашиты в коде.
@@ -894,12 +942,12 @@ function buildTemplate() {
   const rightX = m + dm + Math.max(1.2, m * 0.8);
   const rightW = Math.max(0, W - rightX - m);
   let rightY = m;
-  const kindQty = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
-  const expiryLine = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
+  const kindQty = [valueOf('form'), valueOf('size')].filter(Boolean).join(' ');
+  const expiryLine = valueOf('expiry') ? `Годен до: ${valueOf('expiry')}` : '';
   const rightFields = [
-    { key: 'name', value: String(product.name || '').trim(), enabled: fields.name, fontSize: 7.2 },
-    { key: 'kindQty', value: kindQty, enabled: fields.form || fields.size, fontSize: 6.8 },
-    { key: 'expiryLine', value: expiryLine, enabled: fields.expiry, fontSize: 6.8 }
+    { key: 'name', value: valueOf('name'), enabled: fields.name, fontSize: 7.2 },
+    { key: 'kindQty', value: kindQty, enabled: true, fontSize: 6.8 },
+    { key: 'expiryLine', value: expiryLine, enabled: true, fontSize: 6.8 }
   ];
   for (const item of rightFields) {
     if (!item.enabled || !item.value) continue;
@@ -936,7 +984,7 @@ function buildTemplate() {
   let y = Math.max(rightY, belowY + 1);
   for (const { key } of (eanPlaced ? [] : fieldList)) {
     if (['ean13', 'name', 'form', 'size', 'expiry'].includes(key) || !fields[key]) continue;
-    const value = String(product[key] || '').trim();
+    const value = valueOf(key);
     if (!value) continue;
     if (y + lineH > H - m) break;
     elements.push({ id: key, type: 'field', field: key, x: m, y, w: W - 2 * m, h: lineH, fontSize: 6.5, align: 'left' });
@@ -973,8 +1021,6 @@ async function downloadPdf() {
     }
     const template = buildTemplate();
     if (!template.elements.length) { error.value = 'Нечего печатать'; return; }
-    const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
-    const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
     const rows = result.value.valid.map((c) => {
       const specific = rowProduct(c);
       return {
@@ -982,8 +1028,8 @@ async function downloadPdf() {
         gtin: c.gtin,
         serial: c.serial,
         serialAi: c.serial ? `21 ${c.serial}` : '',
-        kindQty: kindQtyValue,
-        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : expiryLineValue,
+        kindQty: [String(specific.form || '').trim(), String(specific.size || '').trim()].filter(Boolean).join(' '),
+        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : '',
         barcode: String(product.barcode || '').trim(),
         name: String(specific.name ?? product.name ?? '').trim(),
         article: String(specific.article ?? product.article ?? '').trim(),
@@ -1143,15 +1189,13 @@ async function printLabels() {
     }
     const template = buildTemplate();
     if (!template.elements.length) throw new Error('Нечего печатать');
-    const kindQtyValue = [String(product.form || '').trim(), String(product.size || '').trim()].filter(Boolean).join(' ');
-    const expiryLineValue = String(product.expiry || '').trim() ? `Годен до: ${String(product.expiry).trim()}` : '';
     const rows = result.value.valid.map((c) => {
       const specific = rowProduct(c);
       return {
         code: c.code, gtin: c.gtin, serial: c.serial,
         serialAi: c.serial ? `21 ${c.serial}` : '',
-        kindQty: kindQtyValue,
-        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : expiryLineValue,
+        kindQty: [String(specific.form || '').trim(), String(specific.size || '').trim()].filter(Boolean).join(' '),
+        expiryLine: String(specific.expiry || '').trim() ? `Годен до: ${String(specific.expiry).trim()}` : '',
         barcode: String(product.barcode || '').trim(),
         name: String(specific.name ?? product.name ?? '').trim(),
         article: String(specific.article ?? product.article ?? '').trim(),
@@ -1241,7 +1285,10 @@ async function printLabels() {
         </div>
 
         <div class="glass rounded-2xl p-5 space-y-3">
-          <h2 class="font-display font-semibold">Коды маркировки</h2>
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="font-display font-semibold">Коды маркировки</h2>
+            <button class="btn-ghost !py-1 !px-2.5 text-xs" :disabled="busy || (!codesCount && !result && !pdfUrl)" title="Очистить коды, результаты и черновик" @click="clearCodes">Очистить</button>
+          </div>
           <textarea v-model="codesText" rows="6" class="input font-mono text-xs" placeholder="Вставьте полные коды — по одному на строку"></textarea>
           <p class="text-xs text-slate-500">До {{ MAX }} кодов. Нужен полный код с криптохвостом.</p>
           <div class="flex flex-wrap items-center gap-2">

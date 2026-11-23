@@ -294,14 +294,14 @@ const openFaq = ref(null);
       <div class="relative grid sm:grid-cols-2 xl:grid-cols-4 gap-5 items-stretch">
         <div v-for="plan in pricingPlans" :key="plan.id"
           class="reveal glass rounded-3xl p-6 flex flex-col relative"
-          :class="plan.id === 'pro' ? 'plan-premium shadow-2xl shadow-violet-600/20 ring-2 ring-violet-500/40' : 'hover:-translate-y-1 transition-transform duration-300'">
+          :class="plan.recommended ? 'plan-premium shadow-2xl shadow-violet-600/20 ring-2 ring-violet-500/40' : 'hover:-translate-y-1 transition-transform duration-300'">
           <div v-if="plan.recommended" class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-violet-600 to-accent-500 text-white rounded-full px-4 py-1 shadow-lg whitespace-nowrap">Рекомендуем</div>
           <div class="flex items-center gap-2 mb-2 mt-1">
-            <h3 class="font-display font-extrabold text-2xl" :class="plan.id === 'pro' ? 'grad-text' : ''">{{ plan.title }}</h3>
+            <h3 class="font-display font-extrabold text-2xl" :class="plan.recommended ? 'grad-text' : ''">{{ plan.title }}</h3>
           </div>
           <p class="text-sm text-slate-500 mb-4 min-h-[44px]">{{ plan.description }}</p>
           <div class="flex items-end gap-1.5 mb-1">
-            <span class="text-4xl font-extrabold" :class="plan.id === 'pro' ? 'grad-text' : ''">{{ priceOf(plan).toLocaleString('ru') }} ₽</span>
+            <span class="text-4xl font-extrabold" :class="plan.recommended ? 'grad-text' : ''">{{ priceOf(plan).toLocaleString('ru') }} ₽</span>
             <span v-if="plan.id !== 'free'" class="text-sm text-slate-500 mb-1">/{{ landingPeriod === 'year' ? 'год' : 'мес' }}</span>
           </div>
           <div v-if="plan.id === 'free'" class="text-xs text-slate-500 mb-5">бесплатно, без карты</div>
@@ -311,7 +311,7 @@ const openFaq = ref(null);
               <span class="text-emerald-500 font-bold mt-0.5"><BrandIcon name="check" :size="14" /></span> {{ f.text }}
             </li>
           </ul>
-          <router-link :to="landingCta(plan).to" class="w-full text-center" :class="plan.id === 'pro' ? 'btn-glow' : 'btn-ghost'">{{ landingCta(plan).label }}</router-link>
+          <router-link :to="landingCta(plan).to" class="w-full text-center" :class="plan.recommended ? 'btn-glow' : 'btn-ghost'">{{ landingCta(plan).label }}</router-link>
         </div>
       </div>
       <p class="reveal text-center text-sm text-slate-500 mt-8"><BrandIcon name="info" :size="15" class="inline-block mr-1 -mt-0.5" />Не уверены? Начните с FREE — {{ freeCodeLimit.toLocaleString('ru') }} операций в день бесплатно, переход на платный тариф в любой момент.</p>

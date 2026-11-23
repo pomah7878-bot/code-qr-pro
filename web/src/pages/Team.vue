@@ -49,8 +49,8 @@ async function reinvite(m) {
   } catch (e) { error.value = e.message; }
 }
 
-async function saveLimit(m) {
-  try { await api.teamSetLimit(m.id, Number(m.opsLimit) || 0); notice.value = 'Лимит сотрудника сохранён'; await load(); }
+async function saveLimit(m, kind, field) {
+  try { await api.teamSetLimit(m.id, { kind, limit: Number(m[field]) || 0 }); notice.value = 'Лимит сотрудника сохранён'; await load(); }
   catch (e) { error.value = e.message; }
 }
 
@@ -128,8 +128,10 @@ onMounted(load);
               <div class="text-xs text-slate-500 mt-1">Операций в этом месяце: {{ m.opsUsed }} <span v-if="m.opsLimit">/ {{ m.opsLimit }}</span></div>
             </div>
             <div class="flex items-center gap-1">
-              <input v-model.number="m.opsLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-24" placeholder="лимит">
-              <button class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="saveLimit(m)">Лимит</button>
+              <div class="text-[10px] text-slate-500">генерация</div><input v-model.number="m.opsLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-20" placeholder="0"><button class="btn-ghost !py-1 !px-1.5 text-[10px]" @click="saveLimit(m, 'ops', 'opsLimit')">OK</button>
+              <div class="text-[10px] text-slate-500">проверки</div><input v-model.number="m.checksLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-20" placeholder="0"><button class="btn-ghost !py-1 !px-1.5 text-[10px]" @click="saveLimit(m, 'checks', 'checksLimit')">OK</button>
+              <div class="text-[10px] text-slate-500">экспорт</div><input v-model.number="m.exportsLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-20" placeholder="0"><button class="btn-ghost !py-1 !px-1.5 text-[10px]" @click="saveLimit(m, 'exports', 'exportsLimit')">OK</button>
+              <div class="text-[10px] text-slate-500">API</div><input v-model.number="m.apiLimit" type="number" min="0" class="input !py-1 !px-2 text-xs w-20" placeholder="0"><button class="btn-ghost !py-1 !px-1.5 text-[10px]" @click="saveLimit(m, 'api', 'apiLimit')">OK</button>
             </div>
             <button v-if="!m.hasAccount" class="btn-ghost !py-1.5 !px-2.5 text-xs" @click="reinvite(m)">Отправить снова</button>
             <span v-else class="text-[11px] text-slate-500">Личный вход</span>

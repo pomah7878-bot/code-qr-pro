@@ -73,6 +73,15 @@ export function consume(user, kind = 'operation', count = 1, { idemKey = '', con
     const c = capacity(user, kind, n);
     return { ok: true, duplicated: true, kind, count: n, left: c.left, limit: c.limit, period: c.period };
   }
+  if (user.teamMemberId) {
+    const col = kind === 'check' ? 'checks_limit' : kind === 'export' ? 'exports_limit' : kind === 'api' ? 'api_limit' : null;
+    const member = col ? db.prepare('SELECT ' + col + ' l FROM team_members WHERE id=?').get(user.teamMemberId) : null;
+    const limit = Number(member?.l || 0);
+    if (limit > 0) {
+      const used = Number(db.prepare("SELECT COALESCE(SUM(count),0) c FROM usage_events WHERE user_id=? AND member_id=? AND kind=? AND created_at >= datetime('now','start of month')").get(user.id, user.teamMemberId, kind).c || 0);
+      if (used + n > limit) throw new UsageError('Лимит сотрудника по ' + kind + ': осталось ' + Math.max(0, limit - used) + ' из ' + limit + '.', { kind, needed: n, left: Math.max(0, limit - used), limit });
+    }
+  }
   const c = capacity(user, kind, n);
   if (c.left < n) {
     throw new UsageError(
@@ -96,9 +105,9 @@ export function consume(user, kind = 'operation', count = 1, { idemKey = '', con
   try {
     db.transaction(() => {
       db.prepare(
-        `INSERT INTO usage_events (user_id, period_id, kind, count, context, idem_key, external)
-         VALUES (?,?,?,?,?,?,?)`
-      ).run(user.id, c.row.id, kind, n, String(context || '').slice(0, 200), key, external ? 1 : 0);
+        `INSERT INTO usage_events (user_id, period_id, kind, count, context, idem_key, external, member_id)
+         VALUES (?,?,?,?,?,?,?,?)`
+      ).run(user.id, c.row.id, kind, n, String(context || '').slice(0, 200), key, external ? 1 : 0, user.teamMemberId || null);
       db.prepare(
         `UPDATE usage_periods SET ${kindColumn(kind)} = ${kindColumn(kind)} + ?, updated_at=datetime('now') WHERE id=?`
       ).run(n, c.row.id);

@@ -789,7 +789,12 @@ const MIGRATIONS = [
      text TEXT NOT NULL,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_messages(ticket_id, id);`
+   CREATE INDEX IF NOT EXISTS idx_support_messages_ticket ON support_messages(ticket_id, id);`,
+  // v54 — лимиты проверок/экспорта/API по сотрудникам
+  `ALTER TABLE team_members ADD COLUMN checks_limit INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE team_members ADD COLUMN exports_limit INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE team_members ADD COLUMN api_limit INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE usage_events ADD COLUMN member_id INTEGER;`
 ];
 
 const version = db.pragma('user_version', { simple: true });

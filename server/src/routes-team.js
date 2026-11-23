@@ -167,12 +167,13 @@ export async function registerTeamRoutes(app) {
     const owner = req.user;
     const member = db.prepare('SELECT * FROM team_members WHERE id=? AND owner_id=? AND revoked_at IS NULL').get(Number(req.params.id), owner.id);
     if (!member) return reply.code(404).send({ error: 'Сотрудник не найден' });
-    const raw = Number(req.body?.opsLimit);
+    const raw = req.body?.limit !== undefined ? Number(req.body.limit) : Number(req.body?.opsLimit);
     if (!Number.isFinite(raw) || raw < 0 || raw > 100000000) return reply.code(400).send({ error: 'Некорректный лимит' });
     const limit = Math.round(raw);
-    db.prepare('UPDATE team_members SET ops_limit=? WHERE id=?').run(limit, member.id);
-    audit(req, 'team.limit', 'team_member', String(member.id), { opsLimit: limit });
-    return { ok: true, opsLimit: limit };
+    const field = req.body?.kind === 'checks' ? 'checks_limit' : req.body?.kind === 'exports' ? 'exports_limit' : req.body?.kind === 'api' ? 'api_limit' : 'ops_limit';
+    db.prepare('UPDATE team_members SET ' + field + '=? WHERE id=?').run(limit, member.id);
+    audit(req, 'team.limit', 'team_member', String(member.id), { field, limit });
+    return { ok: true, field, limit };
   });
 
   app.delete('/api/team/members/:id', { preHandler: ownerOnly }, async (req, reply) => {

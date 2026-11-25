@@ -807,7 +807,44 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
      paid_at TEXT
    );
-   CREATE UNIQUE INDEX IF NOT EXISTS idx_donations_external ON donations(external_id);`
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_donations_external ON donations(external_id);`,
+  // v56 — раздел «Маркетплейсы»: товары и загруженные оригиналы этикеток
+  `CREATE TABLE IF NOT EXISTS marketplace_products (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     marketplace TEXT NOT NULL DEFAULT '',
+     name TEXT NOT NULL,
+     manufacturer TEXT NOT NULL DEFAULT '',
+     produced_at TEXT NOT NULL DEFAULT '',
+     brand TEXT NOT NULL DEFAULT '',
+     sku TEXT NOT NULL DEFAULT '',
+     gtin TEXT NOT NULL DEFAULT '',
+     barcode TEXT NOT NULL DEFAULT '',
+     size TEXT NOT NULL DEFAULT '',
+     color TEXT NOT NULL DEFAULT '',
+     composition TEXT NOT NULL DEFAULT '',
+     batch TEXT NOT NULL DEFAULT '',
+     expires_at TEXT NOT NULL DEFAULT '',
+     code TEXT NOT NULL DEFAULT '',
+     extra TEXT NOT NULL DEFAULT '{}',
+     archived INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_mp_products_user ON marketplace_products(user_id, archived, id);
+   CREATE TABLE IF NOT EXISTS marketplace_documents (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     marketplace TEXT NOT NULL,
+     kind TEXT NOT NULL DEFAULT 'shipping',
+     profile_id TEXT NOT NULL DEFAULT '',
+     filename TEXT NOT NULL DEFAULT '',
+     mime TEXT NOT NULL,
+     size INTEGER NOT NULL DEFAULT 0,
+     sha256 TEXT NOT NULL,
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_mp_documents_user ON marketplace_documents(user_id, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

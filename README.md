@@ -29,6 +29,7 @@ CODE QR PRO — российский SaaS для работы с маркиро�
 - массовая проверка GTIN и выгрузка в CSV;
 - редактор этикеток, шаблоны, PDF и Print Bridge;
 - API для 1С и складов;
+- этикетки для маркетплейсов (Wildberries, Ozon, Яндекс Маркет);
 - тарифы FREE / PRO / BUSINESS / ENTERPRISE;
 - командный доступ с ролями и лимитами;
 - AI-помощник и база знаний;
@@ -58,6 +59,7 @@ SaaS-платформа для генерации GS1 DataMatrix («Честны
 - **Billing:** YooKassa (redirect, чек 54-ФЗ), предоплата 30 дней, продление, polling статуса 30 с + кнопка «Проверить». Ключи: /opt/code-qr/server/.env (chmod 600).
 - **Честный ЗНАК:** локальная валидация кодов + интеграционный слой ГИС МТ (онлайн-проверка требует УКЭП; настройки в админке).
 - **API для 1С:** ключи X-API-Key (sha256), POST /api/v1/generate, GET /api/v1/jobs/{id}, GET /api/v1/me.
+- **Маркетплейсы:** профили этикеток WB/Ozon/Яндекс Маркет с официальными источниками (server/src/marketplaces.js), товары, генерация PDF точного размера и А4, загрузка и печать оригиналов PDF/PNG без перерисовки. Доступ всем клиентам, лимиты по тарифу.
 - **Безопасность:** rate-limit (auth 10/мин, глобально 300/мин), security-заголовки + HSTS, body limit 8 МБ, защита от path traversal, изоляция от ECLIPSE.
 
 ## Админка (`/app/admin`)
@@ -82,6 +84,8 @@ npm run build        # web/dist
 ```bash
 node scripts/test-stage2.mjs   # генерация/экспорт
 node scripts/test-stage3.mjs   # этикетки/шаблоны
+node scripts/test-marketplaces.mjs # маркетплейсы (отдельный сервер :3101, см. шапку скрипта)
+node scripts/mp-ui-check.mjs   # UI маркетплейсов: десктоп + мобильный (Chrome)
 node scripts/test-stage5.mjs   # безопасность (rate-limit исчерпывает лимит IP на 1 мин)
 node scripts/test-admin-a.mjs  # админка: клиенты, блокировка, пароли, заказы
 node scripts/test-admin-b.mjs  # аналитика, здоровье, задания

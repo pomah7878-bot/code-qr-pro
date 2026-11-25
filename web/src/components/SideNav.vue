@@ -14,6 +14,7 @@ const items = [
   { icon: 'label', t: 'Этикетки', to: '/app/labels' },
   { icon: 'set', t: 'Наборы', to: '/app/sets' },
   { icon: 'print', t: 'Повторная печать', to: '/app/reprint' },
+  { icon: 'set', t: 'Маркетплейсы', to: '/app/marketplaces' },
   ...(!store.user?.teamMember ? [{ icon: 'billing', t: 'Подписка', to: '/app/billing' }, { icon: 'api', t: 'API', to: '/app/apikeys' }] : []),
   { icon: 'cz', t: 'Честный ЗНАК', to: '/app/cz' },
   { icon: 'cz', t: 'Проверка GTIN', href: '/check' },

@@ -1,4 +1,5 @@
 ﻿import { renderBarcode, renderBarcodeMany, renderDatamatrixVectorMany } from './lib/barcode-pool.js';
+import PDFDocument from 'pdfkit';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toRawGs1, gs1BarcodeText } from './gs1.js';
@@ -238,4 +239,22 @@ export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
     }
   }
   if (i === 0) doc.fontSize(12).fillColor('#333333').text('Нет сформированных строк', margin, margin);
+}
+
+// Готовый PDF-буфер: страница точного размера этикетки (single) или лист А4.
+// Используется разделом «Маркетплейсы»; движок отрисовки общий с редактором.
+export async function renderLabelsPdfBuffer(template, dataRows, options = {}) {
+  const single = options.single === true;
+  const pageSize = single ? [Number(template.widthMm) * K, Number(template.heightMm) * K] : 'A4';
+  const doc = new PDFDocument({ size: pageSize, margin: 0 });
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+  const ended = new Promise((resolve, reject) => {
+    doc.on('end', resolve);
+    doc.on('error', reject);
+  });
+  await renderLabelsPdf(doc, template, dataRows, { single, onProgress: options.onProgress, vectorDatamatrix: true });
+  doc.end();
+  await ended;
+  return Buffer.concat(chunks);
 }

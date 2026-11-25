@@ -138,6 +138,10 @@ const fmtDate = (s) => s ? new Date(s.replace(' ', 'T') + 'Z').toLocaleDateStrin
             <div class="font-semibold mb-1"><BrandIcon name="label" :size="16" class="inline-block mr-1.5 -mt-0.5" />Этикетки →</div>
             <p class="text-slate-500">Редактор шаблонов и печать на термопринтеры через Print Bridge.</p>
           </router-link>
+          <router-link to="/app/marketplaces" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
+            <div class="font-semibold mb-1"><BrandIcon name="set" :size="16" class="inline-block mr-1.5 -mt-0.5" />Маркетплейсы →</div>
+            <p class="text-slate-500">Этикетки WB, Ozon и Яндекс Маркета: товарные и транспортные, PDF точного размера.</p>
+          </router-link>
           <router-link to="/app/billing" class="rounded-xl border border-brand-500/40 bg-brand-500/5 p-4 hover:bg-brand-500/10 transition block">
             <div class="font-semibold mb-1"><BrandIcon name="billing" :size="16" class="inline-block mr-1.5 -mt-0.5" />Подписка →</div>
             <p class="text-slate-500">Оплата подписки, расширенные лимиты и API.</p>

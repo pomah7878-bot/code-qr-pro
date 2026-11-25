@@ -220,6 +220,16 @@ export const api = {
   adminIssueNpdReceipt: (orderId) => req('POST', `/api/admin/npd/orders/${orderId}/receipt`, {}),
   adminResendNpdReceipt: (orderId) => req('POST', `/api/admin/npd/orders/${orderId}/resend`, {}),
 
+  // Маркетплейсы
+  mpOverview: () => req('GET', '/api/marketplaces/overview'),
+  mpProducts: (params) => req('GET', '/api/marketplaces/products' + qs(params || {})),
+  mpSaveProduct: (b) => req('POST', '/api/marketplaces/products', b),
+  mpArchiveProduct: (id) => req('POST', '/api/marketplaces/products/' + id + '/archive'),
+  mpDeleteProduct: (id) => req('DELETE', '/api/marketplaces/products/' + id),
+  mpPreview: (b) => req('POST', '/api/marketplaces/labels/preview', b),
+  mpDocuments: () => req('GET', '/api/marketplaces/documents'),
+  mpDeleteDocument: (id) => req('DELETE', '/api/marketplaces/documents/' + id),
+
   reviews: () => req('GET', '/api/reviews'),
   myReview: () => req('GET', '/api/reviews/mine'),
   submitReview: (b) => req('POST', '/api/reviews', b),

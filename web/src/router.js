@@ -13,6 +13,7 @@ const Dashboard = () => import('./pages/Dashboard.vue');
 const Generator = () => import('./pages/Generator.vue');
 const Labels = () => import('./pages/Labels.vue');
 const Reprint = () => import('./pages/Reprint.vue');
+const Marketplaces = () => import('./pages/Marketplaces.vue');
 const Security = () => import('./pages/Security.vue');
 const Team = () => import('./pages/Team.vue');
 const TeamAccept = () => import('./pages/TeamAccept.vue');
@@ -76,6 +77,7 @@ const router = createRouter({
     { path: '/app/labels', component: Labels, meta: { auth: true } },
     { path: '/app/sets', component: Sets, meta: { auth: true } },
     { path: '/app/reprint', component: Reprint, meta: { auth: true } },
+    { path: '/app/marketplaces', component: Marketplaces, meta: { auth: true } },
     { path: '/app/billing', component: Billing, meta: { auth: true } },
     { path: '/app/apikeys', component: ApiKeys, meta: { auth: true } },
     { path: '/app/cz', component: Cz, meta: { auth: true } },

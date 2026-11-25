@@ -494,6 +494,11 @@ function handleScanText(text) {
   }
   if (activeBox.value) {
     const it = activeBox.value.items.find((i) => (i.barcode && i.barcode === text) || String(i.codes || '').split('\n').includes(text));
+    if (reconcileMode.value) {
+      if (it) { scanned[it.id] = (scanned[it.id] || 0) + 1; scanNotice.value = 'Считано: ' + it.name + ' (' + scanned[it.id] + ' из ' + it.quantity + ')'; }
+      else { extraCodes.value.push(text); scanNotice.value = 'Лишний код: ' + String(text).slice(0, 40); }
+      return;
+    }
     if (it) { scanNotice.value = 'В этом коробе: ' + it.name + ' × ' + it.quantity; return; }
   }
   scanNotice.value = 'Код считан, но это не паспорт короба и не позиция текущего короба';
@@ -615,6 +620,89 @@ async function pickShare() {
   }
 }
 
+const tgState = ref({ configured: false, linked: false, chatTitle: '', botUsername: '' });
+const tgBusy = ref(false);
+const tgLinkUrl = ref('');
+const reconcileMode = ref(false);
+const scanned = reactive({});
+const extraCodes = ref([]);
+const reconcileBusy = ref(false);
+const totalScanned = computed(() => Object.values(scanned).reduce((s, n) => s + n, 0));
+const reconcileRows = computed(() => (activeBox.value ? activeBox.value.items : []).map((it) => {
+  const actual = scanned[it.id] || 0;
+  return { it, declared: it.quantity, actual, delta: actual - it.quantity };
+}));
+
+async function loadTg() {
+  try { tgState.value = await api.mpTelegram(); } catch { /* не критично */ }
+}
+async function linkTg() {
+  error.value = ''; tgBusy.value = true;
+  try {
+    const d = await api.mpTelegramLink();
+    tgLinkUrl.value = d.url;
+    window.open(d.url, '_blank');
+    notice.value = 'Нажмите «Запустить» в боте — чат привяжется автоматически, затем «Проверить привязку»';
+  } catch (e) { error.value = e.message; } finally { tgBusy.value = false; }
+}
+async function unlinkTg() {
+  error.value = '';
+  try { await api.mpTelegramUnlink(); tgLinkUrl.value = ''; await loadTg(); notice.value = 'Чат отвязан'; }
+  catch (e) { error.value = e.message; }
+}
+async function sendPickTelegram() {
+  error.value = ''; notice.value = ''; tgBusy.value = true;
+  try {
+    const d = await api.mpPickTelegram(activeBox.value.box.id);
+    notice.value = 'Пик-лист отправлен в Telegram-чат' + (d.chatTitle ? ' «' + d.chatTitle + '»' : '');
+  } catch (e) { error.value = e.message; } finally { tgBusy.value = false; }
+}
+async function controlSamples() {
+  error.value = ''; notice.value = '';
+  const win = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
+  boxBusy.value = true;
+  try {
+    await downloadBlob('/api/marketplaces/control-samples', { idemKey: 'mp-samples' }, 'control-samples.pdf', win);
+    navigated = true;
+    notice.value = mobilePdfNotice() || 'Контрольные образцы готовы — распечатайте, замерьте линейкой и прочитайте сканером';
+  } catch (e) { error.value = e.message; } finally {
+    if (!navigated && win && !win.closed) { try { win.close(); } catch { /* ignore */ } }
+    boxBusy.value = false;
+  }
+}
+function startReconcile() {
+  for (const k of Object.keys(scanned)) delete scanned[k];
+  extraCodes.value = [];
+  reconcileMode.value = true;
+  openScanner();
+  scanNotice.value = 'Сверка: сканируйте штрихкоды товаров короба';
+}
+function resetReconcile() {
+  for (const k of Object.keys(scanned)) delete scanned[k];
+  extraCodes.value = [];
+}
+function closeReconcile() {
+  reconcileMode.value = false;
+  closeScanner();
+}
+async function applyReconcile() {
+  error.value = ''; reconcileBusy.value = true;
+  const boxId = activeBox.value.box.id;
+  try {
+    let changed = 0;
+    for (const r of reconcileRows.value) {
+      if (r.actual > 0 && r.actual !== r.declared) {
+        await api.mpUpdateItem(boxId, r.it.id, { quantity: r.actual });
+        changed += 1;
+      }
+    }
+    await openBox(boxId);
+    reconcileMode.value = false;
+    notice.value = changed ? 'Состав обновлён по сканам (' + changed + ' поз.). Перепечатайте этикетки.' : 'Расхождений по количеству нет';
+  } catch (e) { error.value = e.message; } finally { reconcileBusy.value = false; }
+}
+
 function openRuler() {
   const win = openPlaceholderWindow();
   if (!win) return;
@@ -660,7 +748,7 @@ onMounted(async () => {
   window.addEventListener('resize', updateScale);
   try {
     await loadOverview();
-    await Promise.all([loadProducts(), loadDocuments(), loadBoxes()]);
+    await Promise.all([loadProducts(), loadDocuments(), loadBoxes(), loadTg()]);
     const qBox = Number(route.query.box);
     if (qBox) { tab.value = 'boxes'; await openBox(qBox); }
   } catch (e) { error.value = e.message; }
@@ -857,6 +945,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateScale); closeScan
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="font-display font-semibold">Загруженные этикетки · {{ marketTitle }}</h2>
             <button type="button" class="btn-ghost !py-2 text-xs min-h-[44px]" @click="openRuler">Тестовая линейка 100 мм</button>
+            <button type="button" class="btn-ghost !py-2 text-xs min-h-[44px]" :disabled="boxBusy" @click="controlSamples">Контрольные образцы</button>
           </div>
           <p v-if="!marketDocs.length" class="text-sm text-slate-500">Пока пусто. Загрузите оригинал этикетки из кабинета площадки.</p>
           <div v-for="d in marketDocs" :key="d.id" class="rounded-xl border border-slate-200 dark:border-white/10 p-3 flex flex-wrap items-center gap-2">
@@ -1009,6 +1098,31 @@ onUnmounted(() => { window.removeEventListener('resize', updateScale); closeScan
             </div>
           </div>
 
+          <div v-if="reconcileMode" class="glass rounded-2xl p-5 space-y-3 border-l-4 border-brand-500">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="font-display font-semibold">Сверка сканером · считано {{ totalScanned }}</h2>
+              <button type="button" class="btn-ghost !py-2 text-xs min-h-[44px]" @click="closeReconcile">Закрыть сверку</button>
+            </div>
+            <div v-for="r in reconcileRows" :key="'rc' + r.it.id" class="flex flex-wrap items-center gap-2 text-sm border-b border-slate-100 dark:border-white/5 pb-1">
+              <span class="flex-1 min-w-[140px] truncate">{{ r.it.name }}</span>
+              <span class="text-xs text-slate-500">заявлено {{ r.declared }} · считано {{ r.actual }}</span>
+              <span v-if="r.delta === 0 && r.actual > 0" class="text-xs text-emerald-600 dark:text-emerald-400">ок</span>
+              <span v-else-if="r.delta < 0" class="text-xs text-red-600 dark:text-red-400">недостача {{ -r.delta }}</span>
+              <span v-else-if="r.delta > 0" class="text-xs text-amber-600 dark:text-amber-400">больше на {{ r.delta }}</span>
+              <span v-else class="text-xs text-slate-400">не сканировался</span>
+            </div>
+            <div v-if="extraCodes.length" class="text-xs text-amber-600 dark:text-amber-400">
+              <p class="font-medium">Лишние коды (нет в составе):</p>
+              <p v-for="(c, i) in extraCodes.slice(0, 20)" :key="'ex' + i" class="font-mono truncate">{{ c }}</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="reconcileBusy || !totalScanned" @click="applyReconcile">Применить фактический состав</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" @click="resetReconcile">Сбросить сканы</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" @click="openScanner">Открыть сканер</button>
+            </div>
+            <p class="text-xs text-slate-500">Сканируйте штрихкод каждой единицы (или записанный код КИЗ). Система сравнит с заявленным составом и покажет недостачу/лишнее.</p>
+          </div>
+
           <div class="glass rounded-2xl p-5 space-y-3">
             <h2 class="font-display font-semibold">Печать вложений</h2>
             <div class="flex flex-col sm:flex-row gap-2">
@@ -1016,6 +1130,22 @@ onUnmounted(() => { window.removeEventListener('resize', updateScale); closeScan
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy || !boxUnits" @click="packingList">Упаковочный лист А4</button>
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy" @click="passportLabel">Паспорт-наклейка на короб</button>
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="pickBusy || !boxUnits" @click="pickingList">{{ pickBusy ? 'Готовим…' : 'Пик-лист на сборку' }}</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxLocked || !boxUnits" @click="startReconcile">Сверка сканером</button>
+            </div>
+            <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-medium">Telegram-чат склада</span>
+                <span v-if="tgState.linked" class="text-xs text-emerald-600 dark:text-emerald-400">привязан: {{ tgState.chatTitle || 'чат' }}</span>
+                <span v-else-if="tgState.configured" class="text-xs text-slate-500">не привязан</span>
+                <span v-else class="text-xs text-slate-400">бот не настроен на сервере</span>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <button v-if="tgState.configured && tgState.linked" type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="tgBusy || !boxUnits" @click="sendPickTelegram">Отправить пик-лист в чат</button>
+                <button v-if="tgState.configured && !tgState.linked" type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="tgBusy" @click="linkTg">Привязать чат</button>
+                <button v-if="tgState.configured && !tgState.linked" type="button" class="btn-ghost min-h-[44px] !py-2.5" @click="loadTg">Проверить привязку</button>
+                <button v-if="tgState.linked" type="button" class="btn-ghost min-h-[44px] !py-2.5" @click="unlinkTg">Отвязать</button>
+              </div>
+              <p v-if="tgLinkUrl && !tgState.linked" class="text-xs text-slate-500 break-all">Ссылка: {{ tgLinkUrl }} — откройте бота и нажмите «Запустить».</p>
             </div>
             <div v-if="pickBlob" class="flex flex-col sm:flex-row gap-2 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
               <button type="button" class="btn-primary min-h-[44px] !py-2.5 flex-1" @click="pickDownload">Скачать PDF</button>

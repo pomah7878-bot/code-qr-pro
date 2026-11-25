@@ -54,6 +54,18 @@ export const PAGE_CONTEXTS = {
   help: {
     label: 'Помощь',
     chips: ['Как напечатать этикетку с телефона?', 'Как передать обращение в поддержку?', 'Где найти инструкцию?']
+  },
+  marketplaces: {
+    label: 'Маркетплейсы',
+    chips: ['Как собрать разносортный короб?', 'Как проверить сроки годности без вскрытия?', 'Как отправить пик-лист в мессенджер?']
+  },
+  notifications: {
+    label: 'Уведомления',
+    chips: ['Почему нет уведомлений?', 'Как отметить прочитанным?']
+  },
+  team: {
+    label: 'Команда',
+    chips: ['Как пригласить сотрудника?', 'Какие роли и лимиты?']
   }
 };
 
@@ -70,6 +82,9 @@ const ROUTE_TO_KEY = [
   ['/app/security', 'security'],
   ['/app/assistant', 'assistant'],
   ['/app/help', 'help'],
+  ['/app/marketplaces', 'marketplaces'],
+  ['/app/notifications', 'notifications'],
+  ['/app/team', 'team'],
   ['/app', 'overview']
 ];
 

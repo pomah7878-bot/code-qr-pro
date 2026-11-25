@@ -12,6 +12,7 @@ import { issueNpdReceiptForOrder, resendNpdReceipt, npdSettings } from './npd-re
 import { notifyStatusChange } from '../notify.js';
 import { logEvent } from './app-log.js';
 import { smtpConfigured } from './mailer.js';
+import { consumeMarketplaceTgToken } from './marketplace-telegram.js';
 import { providerConfigured } from '../billing.js';
 
 const PUBLIC_URL = String(process.env.PUBLIC_URL || 'https://code-qr.stockcity.ru').replace(/\/+$/, '');
@@ -549,6 +550,18 @@ export async function handleTelegramUpdate(update) {
   try {
     if (update.message?.chat?.id) {
       const chatId = String(update.message.chat.id);
+      // Привязка чата склада к аккаунту CODE QR PRO (одноразовый токен из раздела «Маркетплейсы»).
+      const linkMatch = String(update.message.text || '').match(/^\/start\s+mp_([A-Za-z0-9]+)/);
+      if (linkMatch) {
+        const title = update.message.chat?.title || update.message.from?.first_name || 'личный чат';
+        const res = consumeMarketplaceTgToken(linkMatch[1], chatId, title);
+        if (res.ok) {
+          await send(chatId, '✅ Чат «' + esc(title) + '» привязан к аккаунту CODE QR PRO.\nТеперь пик-листы на сборку коробов можно отправлять сюда из раздела «Маркетплейсы» → «Коробки».');
+        } else {
+          await send(chatId, '⛔ Ссылка привязки устарела или уже использована. Сформируйте новую в разделе «Маркетплейсы» → «Коробки» → «В Telegram-чат склада».');
+        }
+        return;
+      }
       if (!tgIsAdmin(chatId)) {
         if (update.message.text) send(chatId, '⛔ Доступ только для администратора.\nВаш chat_id: <code>' + chatId + '</code>');
         return;

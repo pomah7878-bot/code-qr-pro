@@ -14,6 +14,8 @@ import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
 import { verifyCodes } from './cz.js';
 import { getSetting } from './settings.js';
 import { publicUrl } from './lib/public-url.js';
+import { tgSendDocument } from './lib/telegram-api.js';
+import { telegramReady, botUsername, getMarketplaceTgLink, createMarketplaceTgLink, unlinkMarketplaceTg } from './lib/marketplace-telegram.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -928,6 +930,83 @@ export async function registerMarketplaceRoutes(app) {
     }
     return { boxes: [...byBox.values()].slice(0, 20) };
   });
+
+  // --- Telegram-чат склада: привязка и доставка пик-листов ---
+  app.get('/api/marketplaces/telegram', { preHandler: requireAuth }, async (req) => {
+    const link = getMarketplaceTgLink(req.user.id);
+    return {
+      configured: telegramReady(),
+      linked: Boolean(link),
+      chatTitle: link ? link.title : '',
+      botUsername: telegramReady() ? await botUsername() : ''
+    };
+  });
+
+  app.post('/api/marketplaces/telegram/link', { preHandler: requireAuth }, async (req, reply) => {
+    if (!telegramReady()) return reply.code(400).send({ error: 'Telegram-бот не настроен на сервере — отправка недоступна. Используйте «Отправить в мессенджер».' });
+    const { url } = await createMarketplaceTgLink(req.user.id);
+    return { url };
+  });
+
+  app.delete('/api/marketplaces/telegram', { preHandler: requireAuth }, async (req) => {
+    unlinkMarketplaceTg(req.user.id);
+    return { ok: true };
+  });
+
+  app.post('/api/marketplaces/boxes/:id/picking-list/telegram', { preHandler: requireAuth }, async (req, reply) => {
+    const row = ownBox(req, reply);
+    if (!row) return reply;
+    const link = getMarketplaceTgLink(req.user.id);
+    if (!link) return reply.code(409).send({ error: 'Сначала привяжите Telegram-чат склада кнопкой «В Telegram-чат склада».' });
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    // Тот же эндпоинт пик-листа (учёт экспорта и идемпотентность внутри него).
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/marketplaces/boxes/' + row.id + '/picking-list',
+      payload: { idemKey: idem ? idem + ':tg' : '' },
+      headers: { cookie: req.headers.cookie || '', origin: req.headers.origin || '' }
+    });
+    if (res.statusCode !== 200) return reply.code(res.statusCode).send(res.json());
+    const pdf = res.rawPayload;
+    const caption = 'Пик-лист на сборку · короб ' + row.name + ' · ' + row.scheme.toUpperCase();
+    try {
+      await tgSendDocument(link.chat_id, pdf, 'box-' + row.id + '-picking-list.pdf', caption);
+    } catch (e) {
+      return reply.code(502).send({ error: 'Не удалось отправить в Telegram: ' + String(e?.message || e).slice(0, 150) });
+    }
+    logBoxEvent(row.id, req.user.id, 'picking_telegram', 'чат ' + (link.title || link.chat_id));
+    logActivity(req.user, 'marketplaces_pick_tg', 'Пик-лист отправлен в Telegram', { total: 1, ok: 1, meta: { boxId: row.id } });
+    return { ok: true, chatTitle: link.title };
+  });
+
+  // Контрольные образцы всех подтверждённых товарных профилей — для печати и замера.
+  app.post('/api/marketplaces/control-samples', { preHandler: requireAuth }, async (req, reply) => {
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      consumeExports(req.user, 1, { idemKey: idem ? idem + ':mp_samples' : '', context: 'marketplaces_samples' });
+    } catch (e) { return usageErrorReply(reply, e); }
+    try {
+      const sample = {
+        name: 'Образец товара', barcode: '4638230913287', gtin: '04638230913287', sku: 'ART-1',
+        manufacturer: 'ООО «Образец»', produced_at: '01.11.2026', expires_at: '01.11.2028',
+        composition: 'Состав образца', brand: 'Бренд', size: 'M', color: 'Синий', batch: 'П-1', code: ''
+      };
+      const row = toDataRow(sample);
+      const groups = PROFILES_IMPORT
+        .filter((p) => p.kind === 'product' && !p.requiresCheck)
+        .map((p) => ({ template: buildTemplate(p), rows: [row] }));
+      const pdf = await renderMixedLabelsPdfBuffer(groups);
+      logActivity(req.user, 'marketplaces_samples', 'Контрольные образцы профилей', { total: groups.length, ok: groups.length });
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', 'attachment; filename="control-samples.pdf"');
+      reply.header('Cache-Control', 'private, no-store');
+      return reply.send(pdf);
+    } catch (e) {
+      if (idem) rollbackUsageEvent(req.user.id, idem + ':mp_samples');
+      throw e;
+    }
+  });
+
 
 
 }

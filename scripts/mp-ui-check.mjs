@@ -148,6 +148,17 @@ const deepId = boxesData.boxes[0].id;
 await send('Page.navigate', { url: BASE + '/app/marketplaces?box=' + deepId });
 assert(await waitFor('(document.body.innerText || "").includes("Состав короба")'), 'deep-link ?box= открывает короб');
 
+
+// сверка сканером и telegram
+assert(await clickText('Сверка сканером') === 'clicked', 'сверка запущена');
+assert(await waitFor('(document.body.innerText || "").includes("Сверка сканером · считано")'), 'панель сверки видна');
+assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /Применить фактический состав/.test(b.textContent || ""))'), 'кнопка применения сверки есть');
+assert(await clickText('Закрыть сверку') === 'clicked', 'сверка закрыта');
+assert(await evaluate('(document.body.innerText || "").includes("Telegram-чат склада")'), 'блок telegram-чата виден');
+// AI-помощник знает раздел
+assert(await clickText('AI-помощник') === 'clicked', 'виджет помощника открыт');
+assert(await waitFor('(document.body.innerText || "").includes("Как собрать разносортный короб?")'), 'подсказки раздела Маркетплейсы в помощнике');
+
 // мобильный вид 390×844
 await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
 await send('Page.navigate', { url: BASE + '/app/marketplaces' });

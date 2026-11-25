@@ -881,7 +881,19 @@ const MIGRATIONS = [
      detail TEXT NOT NULL DEFAULT '',
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX IF NOT EXISTS idx_mp_box_events_box ON marketplace_box_events(box_id, id);`
+   CREATE INDEX IF NOT EXISTS idx_mp_box_events_box ON marketplace_box_events(box_id, id);`,
+  // v59 — Telegram-чат склада: привязка через одноразовый токен бота
+  `CREATE TABLE IF NOT EXISTS marketplace_tg_links (
+     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+     chat_id TEXT NOT NULL,
+     title TEXT NOT NULL DEFAULT '',
+     linked_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE TABLE IF NOT EXISTS marketplace_tg_tokens (
+     token TEXT PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     expires_at TEXT NOT NULL
+   );`
 ];
 
 const version = db.pragma('user_version', { simple: true });

@@ -54,6 +54,13 @@
 
 Миграция v58: codes в marketplace_box_items, labels_stale в marketplace_boxes, таблица marketplace_box_events.
 
+### Сверка сканером, Telegram-чат склада, контрольные образцы
+
+- **Сверка сканером** (кнопка в коробе): сканируются фактические штрихкоды/коды единиц; система считает по позициям и показывает «недостача N» / «больше на N» / лишние коды; «Применить фактический состав» обновляет количества (поднимает флаг перепечатки).
+- **Telegram-чат склада** (миграция v59: marketplace_tg_links, marketplace_tg_tokens): «Привязать чат» → одноразовая ссылка t.me/<bot>?start=mp_<token> (10 мин) → бот сохраняет chat_id → «Отправить пик-лист в чат» (POST …/boxes/:id/picking-list/telegram, тот же PDF через app.inject, учёт экспорта внутри). Бот: lib/marketplace-telegram.js + обработка /start mp_ в telegram-bot.js до admin-гейта.
+- **Контрольные образцы** (POST /api/marketplaces/control-samples): PDF образцов всех подтверждённых товарных профилей (6 шт.) для контрольной печати с замером и сканером.
+- **AI-помощник знает раздел**: PAGES.marketplaces + правило 15 системного промпта (routes-ai-support.js), статьи БЗ marketplaces-section/boxes/passport (scripts/kb-marketplaces.mjs → articles.json), контекст страницы и подсказки (pageContext.js: marketplaces/notifications/team).
+
 ### API коробов
 
 - `GET/POST /api/marketplaces/boxes`, `GET/POST/DELETE …/boxes/:id`

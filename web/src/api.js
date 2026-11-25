@@ -240,6 +240,10 @@ export const api = {
   mpLinkDoc: (id, documentId) => req('POST', '/api/marketplaces/boxes/' + id + '/link-document', { documentId }),
   mpCheckCodes: (id) => req('POST', '/api/marketplaces/boxes/' + id + '/check-codes', {}),
   mpBoxSearch: (q) => req('GET', '/api/marketplaces/box-search?q=' + encodeURIComponent(q)),
+  mpTelegram: () => req('GET', '/api/marketplaces/telegram'),
+  mpTelegramLink: () => req('POST', '/api/marketplaces/telegram/link', {}),
+  mpTelegramUnlink: () => req('DELETE', '/api/marketplaces/telegram'),
+  mpPickTelegram: (id) => req('POST', '/api/marketplaces/boxes/' + id + '/picking-list/telegram', {}),
 
   reviews: () => req('GET', '/api/reviews'),
   myReview: () => req('GET', '/api/reviews/mine'),

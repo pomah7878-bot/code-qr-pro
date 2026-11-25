@@ -198,6 +198,19 @@ assert(r.status === 200, 'возврат статуса собираётся');
 r = await req('GET', '/api/marketplaces/boxes/' + boxId);
 assert(r.data.events.some((e) => e.action === 'status'), 'смена статуса в истории');
 
+
+// --- Telegram и контрольные образцы ---
+r = await req('GET', '/api/marketplaces/telegram');
+assert(r.status === 200 && r.data.configured === false, 'telegram: бот не настроен в тестовой среде');
+r = await req('POST', '/api/marketplaces/telegram/link', {});
+assert(r.status === 400, 'привязка чата без бота → 400');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/picking-list/telegram', {});
+assert(r.status === 409, 'пик-лист в telegram без привязки → 409');
+r = await req('POST', '/api/marketplaces/control-samples', { idemKey: 'mp-samples-test' });
+assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'контрольные образцы PDF');
+const samplePages = (r.data.toString('latin1').match(/MediaBox/g) || []).length;
+assert(samplePages === 6, 'образцы: 6 подтверждённых товарных профилей', samplePages);
+
 // Архив и удаление товара
 r = await req('POST', '/api/marketplaces/products/' + productId + '/archive');
 assert(r.status === 200, 'товар архивирован');

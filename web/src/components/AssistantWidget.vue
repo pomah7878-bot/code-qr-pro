@@ -32,9 +32,9 @@ const currentPage = computed(() => pageContext(route.path));
 const pageKey = computed(() => assistantUi.pageKey || currentPage.value.key);
 const pageLabel = computed(() => pageContext(`/app/${pageKey.value === 'overview' ? '' : pageKey.value}`).label || currentPage.value.label);
 
-const isPremium = computed(() => Boolean(
-  store.plan?.aiAssistant || store.plan?.features?.aiAssistant || ['admin', 'support'].includes(store.user?.role)
-));
+// Помощник доступен всем вошедшим клиентам (сервер: FREE/START — 10 вопросов в день,
+// остальные тарифы — 60 в час). Премиум-оформление сохранено, заглушка больше не блокирует чат.
+const isPremium = computed(() => Boolean(store.user));
 
 function greeting() {
   return `Вы в разделе «${pageLabel.value}». Опишите, что не получается — подскажу по шагам.`;

@@ -29,9 +29,8 @@ const threadReply = ref('');
 const threadBusy = ref(false);
 const support = reactive({ open: false, busy: false, subject: '', message: '', error: '' });
 
-const isPremium = computed(() => Boolean(
-  store.plan?.aiAssistant || store.plan?.features?.aiAssistant || store.user?.role === 'admin' || store.user?.role === 'support'
-));
+// Доступно всем вошедшим: сервер ограничивает FREE/START 10 вопросами в день, остальные — 60 в час.
+const isPremium = computed(() => Boolean(store.user));
 
 const QUICK = [
   'Как сгенерировать GS1 DataMatrix?',

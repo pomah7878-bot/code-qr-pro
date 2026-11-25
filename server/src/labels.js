@@ -241,6 +241,42 @@ export async function renderLabelsPdf(doc, template, dataRows, options = {}) {
   if (i === 0) doc.fontSize(12).fillColor('#333333').text('Нет сформированных строк', margin, margin);
 }
 
+// PDF из групп с РАЗНЫМИ шаблонами (разносортный короб): каждая этикетка —
+// страница точного размера своего шаблона. Порядок групп = порядок печати.
+export async function renderMixedLabelsPdfBuffer(groups) {
+  const list = (groups || []).filter((g) => g && g.template && Array.isArray(g.rows) && g.rows.length);
+  if (!list.length) throw new Error('Нет этикеток для сборки');
+  const sizeOf = (t) => [Number(t.widthMm) * K, Number(t.heightMm) * K];
+  const doc = new PDFDocument({ size: sizeOf(list[0].template), margin: 0 });
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+  const ended = new Promise((resolve, reject) => {
+    doc.on('end', resolve);
+    doc.on('error', reject);
+  });
+  try { doc.registerFont('LabelFont', LABEL_FONT); doc.font('LabelFont'); } catch { /* fallback */ }
+  let page = 0;
+  for (const g of list) {
+    const size = sizeOf(g.template);
+    for (let start = 0; start < g.rows.length; start += RESOLVE_CHUNK) {
+      const resolved = await resolveElementsMany(g.template, g.rows.slice(start, start + RESOLVE_CHUNK), { vectorDatamatrix: true });
+      for (const els of resolved) {
+        if (page > 0) doc.addPage({ size, margin: 0 });
+        for (const el of els) {
+          const ex = el.x * K, ey = el.y * K, ew = el.w * K, eh = el.h * K;
+          if (el.dmRuns) drawDatamatrixRuns(doc, el.dmRuns, ex, ey, ew, eh);
+          else if (el.pngBuffer) doc.image(el.pngBuffer, ex, ey, { width: ew, height: eh });
+          else if (el.text) doc.fontSize(el.fontSize).fillColor('#000000').text(el.text, ex, ey, { width: ew, height: eh, align: el.align });
+        }
+        page += 1;
+      }
+    }
+  }
+  doc.end();
+  await ended;
+  return Buffer.concat(chunks);
+}
+
 // Готовый PDF-буфер: страница точного размера этикетки (single) или лист А4.
 // Используется разделом «Маркетплейсы»; движок отрисовки общий с редактором.
 export async function renderLabelsPdfBuffer(template, dataRows, options = {}) {

@@ -5,6 +5,7 @@ import Database from '../server/node_modules/better-sqlite3/lib/index.js';
 
 const BASE = process.env.MP_BASE || 'http://127.0.0.1:3101';
 const DB_PATH = process.env.MP_DB || 'server/data/test-mp.db';
+const RUN = Date.now();
 let cookie = '';
 async function req(method, path, body, headers) {
   const res = await fetch(BASE + path, {
@@ -56,15 +57,15 @@ r = await req('POST', '/api/marketplaces/labels/preview', { profileId: 'wb-produ
 assert(r.status === 200 && !r.data.canPrint && r.data.problems.some((p) => /контрольная цифра/.test(p)), 'неверная контрольная цифра EAN-13 блокирует');
 
 // PDF точного размера
-r = await req('POST', '/api/marketplaces/labels/pdf', { profileId: 'wb-product-58x40', productId, copies: 2, mode: 'label', idemKey: 'mp-test-1' });
+r = await req('POST', '/api/marketplaces/labels/pdf', { profileId: 'wb-product-58x40', productId, copies: 2, mode: 'label', idemKey: 'mp-test-1-' + RUN });
 assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'PDF сформирован');
 const mb = r.data.toString('latin1').match(/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/);
 assert(mb && Math.abs(Number(mb[1]) - 164.41) < 0.5 && Math.abs(Number(mb[2]) - 113.39) < 0.5, 'PDF: страница 58×40 мм (164.41×113.39 pt)', mb);
 // Идемпотентность: повтор с тем же idemKey не списывает повторно
-r = await req('POST', '/api/marketplaces/labels/pdf', { profileId: 'wb-product-58x40', productId, copies: 2, mode: 'label', idemKey: 'mp-test-1' });
+r = await req('POST', '/api/marketplaces/labels/pdf', { profileId: 'wb-product-58x40', productId, copies: 2, mode: 'label', idemKey: 'mp-test-1-' + RUN });
 assert(r.status === 200, 'повторный PDF с тем же idemKey');
 const db = new Database(DB_PATH);
-const ev = db.prepare("SELECT COUNT(*) n FROM usage_events WHERE idem_key='mp-test-1:mp_pdf'").get();
+const ev = db.prepare('SELECT COUNT(*) n FROM usage_events WHERE idem_key=?').get('mp-test-1-' + RUN + ':mp_pdf');
 assert(ev.n === 1, 'идемпотентность: одно списание на idemKey');
 db.close();
 // А4
@@ -122,6 +123,45 @@ assert(r.status === 200, 'FREE: 20 этикеток в суточный лими
 r = await req('POST', '/api/marketplaces/labels/pdf', { profileId: 'ozon-product-58x40', productId: pid2, copies: 1, idemKey: 'mp-limit-1' });
 assert(r.status === 402, 'FREE: сверх суточного лимита → 402');
 cookie = cookie1;
+
+
+// --- Короба (грузоместа) ---
+r = await req('POST', '/api/marketplaces/boxes', { marketplace: 'ozon', scheme: 'fbs', name: 'Тест-короб' });
+assert(r.status === 201 && r.data.box.id, 'короб создан');
+const boxId = r.data.box.id;
+r = await req('GET', '/api/marketplaces/boxes');
+assert(r.data.boxes.length === 1, 'список коробов');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items', { productId, quantity: 2 });
+assert(r.status === 201, 'позиция из сохранённого товара');
+const itemId1 = r.data.item.id;
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items', { name: 'Ручной товар', barcode: '4638230913287', quantity: 2, profileId: 'ozon-product-30x20' });
+assert(r.status === 201, 'позиция вручную с профилем 30×20');
+const itemId2 = r.data.item.id;
+r = await req('GET', '/api/marketplaces/boxes/' + boxId);
+assert(r.data.items.length === 2 && r.data.guide && r.data.guide.steps.length, 'состав и инструкция площадки');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items/' + itemId1, { quantity: 3 });
+assert(r.status === 200 && r.data.item.quantity === 3, 'количество обновлено');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/labels/pdf', { idemKey: 'mp-box-test' });
+assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'PDF этикеток короба');
+const boxesMb = (r.data.toString('latin1').match(/MediaBox\s*\[0 0 ([\d.]+) ([\d.]+)\]/g) || []).map((s) => { const m = s.match(/([\d.]+) ([\d.]+)\]/); return [Number(m[1]), Number(m[2])]; });
+assert(boxesMb.length === 5, 'PDF: 5 страниц (3+2)', boxesMb.length);
+assert(boxesMb.some(([w, h]) => Math.abs(w - 85.04) < 0.5 && Math.abs(h - 56.69) < 0.5) && boxesMb.some(([w, h]) => Math.abs(w - 164.41) < 0.5 && Math.abs(h - 113.39) < 0.5), 'PDF: разные размеры этикеток в одном файле (30×20 и 58×40)', boxesMb);
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/packing-list', { idemKey: 'mp-box-list-test' });
+assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'упаковочный лист PDF');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/link-document', { documentId: pdfDocId });
+assert(r.status === 200 && r.data.documentId === pdfDocId, 'оригинал привязан к коробу');
+r = await req('GET', '/api/marketplaces/boxes/' + boxId);
+assert(r.data.document && r.data.document.id === pdfDocId, 'привязанный документ в деталях');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/link-document', { documentId: null });
+assert(r.status === 200 && r.data.documentId === null, 'оригинал отвязан');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId, { status: 'ready' });
+assert(r.status === 200 && r.data.box.status === 'ready', 'статус короба обновлён');
+r = await req('POST', '/api/marketplaces/boxes', { marketplace: 'ozon', scheme: 'fbs', name: 'Пустой' });
+const emptyBoxId = r.data.box.id;
+r = await req('POST', '/api/marketplaces/boxes/' + emptyBoxId + '/labels/pdf', {});
+assert(r.status === 400, 'пустой короб → 400');
+r = await req('DELETE', '/api/marketplaces/boxes/' + emptyBoxId);
+assert(r.status === 200, 'пустой короб удалён');
 
 // Архив и удаление товара
 r = await req('POST', '/api/marketplaces/products/' + productId + '/archive');

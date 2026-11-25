@@ -844,7 +844,32 @@ const MIGRATIONS = [
      sha256 TEXT NOT NULL,
      created_at TEXT NOT NULL DEFAULT (datetime('now'))
    );
-   CREATE INDEX IF NOT EXISTS idx_mp_documents_user ON marketplace_documents(user_id, id);`
+   CREATE INDEX IF NOT EXISTS idx_mp_documents_user ON marketplace_documents(user_id, id);`,
+  // v57 — короба (грузоместа) для отгрузки разносортных товаров на маркетплейсы
+  `CREATE TABLE IF NOT EXISTS marketplace_boxes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     marketplace TEXT NOT NULL,
+     scheme TEXT NOT NULL DEFAULT 'fbs',
+     name TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'packing',
+     document_id INTEGER,
+     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_mp_boxes_user ON marketplace_boxes(user_id, id);
+   CREATE TABLE IF NOT EXISTS marketplace_box_items (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     box_id INTEGER NOT NULL REFERENCES marketplace_boxes(id) ON DELETE CASCADE,
+     product_id INTEGER,
+     name TEXT NOT NULL,
+     barcode TEXT NOT NULL DEFAULT '',
+     gtin TEXT NOT NULL DEFAULT '',
+     sku TEXT NOT NULL DEFAULT '',
+     profile_id TEXT NOT NULL DEFAULT '',
+     quantity INTEGER NOT NULL DEFAULT 1
+   );
+   CREATE INDEX IF NOT EXISTS idx_mp_box_items_box ON marketplace_box_items(box_id, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

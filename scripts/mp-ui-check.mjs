@@ -116,6 +116,22 @@ assert(await clickText('Этикетка отправки') === 'clicked', 'вк
 assert(await waitFor('(document.body.innerText || "").includes("Оригинал из кабинета")'), 'блок загрузки оригинала виден');
 assert(await evaluate('!!document.querySelector("input[type=file]")'), 'поле загрузки файла есть');
 
+
+// вкладка «Коробки»
+assert(await clickText('Коробки') === 'clicked', 'вкладка коробок открыта');
+assert(await waitFor('(document.body.innerText || "").includes("Короба (грузоместа)")'), 'список коробов виден');
+assert(await clickText('Создать короб') === 'clicked', 'короб создан');
+assert(await waitFor('[...document.querySelectorAll("button")].some((b) => (b.textContent || "").trim() === "Открыть")'), 'короб в списке');
+assert(await clickText('Открыть') === 'clicked', 'короб открыт');
+assert(await waitFor('(document.body.innerText || "").includes("Состав короба")'), 'редактор короба с составом');
+assert(await evaluate('(document.body.innerText || "").includes("Wildberries") && (document.body.innerText || "").includes("НЕ клейте стикеры заказа")'), 'инструкция WB FBS с предупреждением');
+assert(await setInput('input[aria-label="Наименование товара"]', 'Тест-товар') === 'typed', 'наименование позиции введено');
+assert(await setInput('input[aria-label="Штрихкод товара"]', '4638230913287') === 'typed', 'штрихкод позиции введён');
+assert(await clickText('Добавить') === 'clicked', 'позиция добавлена');
+assert(await waitFor('(document.body.innerText || "").includes("Тест-товар")'), 'позиция в составе');
+assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /PDF этикеток товаров/.test(b.textContent || ""))'), 'кнопка пакетного PDF есть');
+await shot('docs/marketplaces-box.png');
+
 // мобильный вид 390×844
 await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
 await send('Page.navigate', { url: BASE + '/app/marketplaces' });

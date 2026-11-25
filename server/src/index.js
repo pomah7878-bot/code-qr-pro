@@ -202,9 +202,10 @@ if (existsSync(dist)) {
     prefix: '/',
     // index.html отдаёт наш обработчик: он подставляет canonical и Cache-Control.
     index: false,
-    setHeaders(res, path) {
+    // @fastify/static 10 передаёт Fastify reply (в 7 был raw res).
+    setHeaders(reply, path) {
       if (path.includes(`${sep}assets${sep}`)) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       }
     }
   });

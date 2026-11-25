@@ -6,7 +6,7 @@ import { validateRow } from './gs1.js';
 import { enqueue, renderSVG, renderPNG, removeJobFiles, archiveJob, JOBS_DIR } from './jobs.js';
 import { artifactExists, artifactStats, openArtifact } from './lib/artifacts.js';
 import { presignArtifact } from './lib/s3.js';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import PDFDocument from 'pdfkit';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -223,7 +223,7 @@ export async function registerJobRoutes(app) {
       }
       reply.hijack();
       reply.raw.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${fname}"` });
-      const archive = archiver('zip', { zlib: { level: 6 } });
+      const archive = new ZipArchive({ zlib: { level: 6 } });
       archive.pipe(reply.raw);
       for (const it of items) {
         if (job.format === 'svg') archive.append(await renderSVG(it, job.mode), { name: `${it.row_index}.svg` });

@@ -1,4 +1,4 @@
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, rmSync, createWriteStream, createReadStream, existsSync, statSync, renameSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -140,7 +140,7 @@ export async function archiveJob(jobId) {
   const path = ensureArtifactDir(key);
   const tmp = `${path}.tmp-${process.pid}`;
   const output = createWriteStream(tmp);
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = new ZipArchive({ zlib: { level: 6 } });
   const finished = new Promise((resolve, reject) => {
     output.on('close', resolve);
     output.on('error', reject);

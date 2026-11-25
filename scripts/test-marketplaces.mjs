@@ -163,6 +163,39 @@ assert(r.status === 400, 'пустой короб → 400');
 r = await req('DELETE', '/api/marketplaces/boxes/' + emptyBoxId);
 assert(r.status === 200, 'пустой короб удалён');
 
+
+// --- Паспорт короба ---
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items/' + itemId1, { codes: 'CODE-A\nCODE-B\nCODE-C' });
+assert(r.status === 200 && r.data.item.codesCount === 3, 'коды единиц записаны (3 из 3)');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items/' + itemId1, { codes: 'CODE-A\nCODE-B' });
+assert(r.status === 400, 'кодов меньше количества → 400');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items/' + itemId1, { codes: 'CODE-A\nCODE-A\nCODE-C' });
+assert(r.status === 400, 'дубли кодов → 400');
+r = await req('GET', '/api/marketplaces/boxes/' + boxId);
+assert(r.data.items[0].expiry && r.data.items[0].expiry.status, 'срок годности в паспорте');
+assert(Array.isArray(r.data.warnings) && Array.isArray(r.data.events) && r.data.events.length > 0, 'предупреждения и история событий');
+assert(r.data.box.labelsStale === true, 'флаг перепечатки после изменения состава');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/passport-label', { idemKey: 'mp-passport-test' });
+assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'паспорт-наклейка PDF');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/check-codes', {});
+assert(r.status === 200 && (r.data.results || []).length === 3, 'онлайн-проверка кодов короба');
+r = await req('GET', '/api/marketplaces/box-search?q=' + encodeURIComponent('Ручной'));
+assert(r.status === 200 && r.data.boxes.some((b) => b.id === boxId), 'поиск товара по коробам');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/labels/pdf', { idemKey: 'mp-box-test-2' });
+assert(r.status === 200, 'повторная печать этикеток');
+r = await req('GET', '/api/marketplaces/boxes/' + boxId);
+assert(r.data.box.labelsStale === false, 'флаг перепечатки снят после печати');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId, { status: 'shipped' });
+assert(r.status === 200, 'короб отгружен');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/items', { name: 'Нельзя', quantity: 1 });
+assert(r.status === 409, 'отгруженный короб: состав заблокирован');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId, { name: 'Новое имя' });
+assert(r.status === 409, 'отгруженный короб: имя заблокировано');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId, { status: 'packing' });
+assert(r.status === 200, 'возврат статуса собираётся');
+r = await req('GET', '/api/marketplaces/boxes/' + boxId);
+assert(r.data.events.some((e) => e.action === 'status'), 'смена статуса в истории');
+
 // Архив и удаление товара
 r = await req('POST', '/api/marketplaces/products/' + productId + '/archive');
 assert(r.status === 200, 'товар архивирован');

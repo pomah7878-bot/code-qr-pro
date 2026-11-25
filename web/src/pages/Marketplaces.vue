@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { api } from '../api.js';
 import SideNav from '../components/SideNav.vue';
 import PageGuide from '../components/PageGuide.vue';
@@ -416,6 +417,144 @@ function downloadBoxDoc() {
   if (d) downloadDoc(d);
 }
 
+const route = useRoute();
+const boxSearchQuery = ref('');
+const boxSearchResults = ref([]);
+const boxSearchBusy = ref(false);
+const codeCheckResult = ref(null);
+const codeCheckBusy = ref(false);
+const boxLocked = computed(() => Boolean(activeBox.value && activeBox.value.box.status === 'shipped'));
+
+const scanOpen = ref(false);
+const scanError = ref('');
+const scanNotice = ref('');
+const videoEl = ref(null);
+let scanWorker = null, scanStream = null, scanTimer = 0, scanPending = false;
+let scanCanvas = null, scanCtx = null, lastScanTime = 0, scanSession = 0, lastScanText = '', lastScanAt = 0;
+
+function expiryBadge(expiry) {
+  if (!expiry || expiry.status === 'none') return { text: 'Срок не указан', cls: 'text-slate-400 border-slate-300 dark:border-white/10' };
+  if (expiry.status === 'expired') return { text: 'Просрочен · ' + expiry.date, cls: 'text-red-600 dark:text-red-400 border-red-500/40 bg-red-500/10' };
+  if (expiry.status === 'soon') return { text: 'Истекает через ' + expiry.daysLeft + ' дн.', cls: 'text-amber-600 dark:text-amber-400 border-amber-500/40 bg-amber-500/10' };
+  return { text: 'Годен до ' + expiry.date, cls: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10' };
+}
+const eventTitle = (a) => ({ created: 'Короб создан', updated: 'Изменён', status: 'Статус', item_added: 'Добавлена позиция', item_updated: 'Позиция изменена', item_removed: 'Позиция удалена', labels_printed: 'Этикетки напечатаны', passport_printed: 'Паспорт-наклейка напечатана', document_linked: 'Привязан документ' }[a] || a);
+
+async function boxSearch() {
+  error.value = '';
+  if (!boxSearchQuery.value.trim()) { error.value = 'Введите название, штрихкод или GTIN'; return; }
+  boxSearchBusy.value = true;
+  try {
+    const d = await api.mpBoxSearch(boxSearchQuery.value.trim());
+    boxSearchResults.value = d.boxes || [];
+    if (!boxSearchResults.value.length) notice.value = 'Ничего не найдено среди ваших коробов';
+  } catch (e) { error.value = e.message; } finally { boxSearchBusy.value = false; }
+}
+
+async function saveItemCodes(it, value) {
+  error.value = '';
+  try { await api.mpUpdateItem(activeBox.value.box.id, it.id, { codes: value }); await openBox(activeBox.value.box.id); notice.value = 'Коды единиц сохранены'; }
+  catch (e) { error.value = e.message; }
+}
+
+async function passportLabel() {
+  error.value = ''; notice.value = '';
+  const id = activeBox.value.box.id;
+  const win = isIOS() ? openPlaceholderWindow() : null;
+  let navigated = false;
+  boxBusy.value = true;
+  try {
+    await downloadBlob('/api/marketplaces/boxes/' + id + '/passport-label', { idemKey: 'mp-passport-' + id }, 'box-' + id + '-passport.pdf', win);
+    navigated = true;
+    notice.value = mobilePdfNotice() || 'Паспорт-наклейка готова — наклейте на короб рядом с этикеткой площадки';
+  } catch (e) { error.value = e.message; } finally {
+    if (!navigated && win && !win.closed) { try { win.close(); } catch { /* ignore */ } }
+    boxBusy.value = false;
+  }
+}
+
+async function checkCodes() {
+  error.value = ''; codeCheckResult.value = null;
+  codeCheckBusy.value = true;
+  try { codeCheckResult.value = await api.mpCheckCodes(activeBox.value.box.id); }
+  catch (e) { error.value = e.message; } finally { codeCheckBusy.value = false; }
+}
+
+function handleScanText(text) {
+  const now = Date.now();
+  if (text === lastScanText && now - lastScanAt < 2500) return;
+  lastScanText = text; lastScanAt = now;
+  const m = String(text).match(/\/app\/marketplaces\?box=(\d+)/);
+  if (m) {
+    closeScanner();
+    tab.value = 'boxes';
+    openBox(Number(m[1]));
+    notice.value = 'Короб открыт по паспорт-наклейке';
+    return;
+  }
+  if (activeBox.value) {
+    const it = activeBox.value.items.find((i) => (i.barcode && i.barcode === text) || String(i.codes || '').split('\n').includes(text));
+    if (it) { scanNotice.value = 'В этом коробе: ' + it.name + ' × ' + it.quantity; return; }
+  }
+  scanNotice.value = 'Код считан, но это не паспорт короба и не позиция текущего короба';
+}
+
+function ensureScanWorker() {
+  if (scanWorker) return;
+  scanWorker = new Worker(new URL('../lib/zxing-worker.js', import.meta.url), { type: 'module' });
+  scanWorker.onmessage = ({ data }) => {
+    scanPending = false;
+    if (data?.error) { scanError.value = 'Декодер: ' + data.error; return; }
+    for (const r of data?.results || []) { if (r.text) handleScanText(r.text); }
+  };
+  scanWorker.onerror = (e) => { scanPending = false; scanError.value = e.message || 'Ошибка декодера'; };
+}
+
+async function openScanner() {
+  scanError.value = '';
+  scanNotice.value = 'Наведите камеру на DataMatrix паспорт-наклейки короба';
+  scanOpen.value = true;
+  const session = ++scanSession;
+  await nextTick();
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Браузер не поддерживает доступ к камере');
+    scanStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+    if (session !== scanSession) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; return; }
+    videoEl.value.srcObject = scanStream;
+    await videoEl.value.play().catch(() => {});
+    ensureScanWorker();
+    scanLoop(session);
+  } catch (e) {
+    scanError.value = e?.name === 'NotAllowedError' ? 'Доступ к камере запрещён — разрешите камеру в настройках браузера' : (e?.message || 'Не удалось открыть камеру');
+  }
+}
+
+function scanLoop(session) {
+  if (!scanOpen.value || session !== scanSession) return;
+  const video = videoEl.value;
+  if (video && !scanPending && video.readyState >= 2 && video.videoWidth && video.currentTime !== lastScanTime) {
+    lastScanTime = video.currentTime;
+    const width = video.videoWidth, height = video.videoHeight;
+    if (!scanCanvas) { scanCanvas = document.createElement('canvas'); scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true }); }
+    if (scanCanvas.width !== width || scanCanvas.height !== height) { scanCanvas.width = width; scanCanvas.height = height; }
+    scanCtx.drawImage(video, 0, 0, width, height);
+    const image = scanCtx.getImageData(0, 0, width, height);
+    scanPending = true;
+    try { scanWorker.postMessage({ type: 'decode', id: 1, width, height, buffer: image.data.buffer }, [image.data.buffer]); }
+    catch { scanPending = false; }
+  }
+  scanTimer = setTimeout(() => scanLoop(session), 80);
+}
+
+function closeScanner() {
+  scanSession += 1;
+  clearTimeout(scanTimer);
+  if (scanWorker) { scanWorker.terminate(); scanWorker = null; }
+  scanPending = false;
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  scanOpen.value = false;
+}
+
 function openRuler() {
   const win = openPlaceholderWindow();
   if (!win) return;
@@ -462,9 +601,11 @@ onMounted(async () => {
   try {
     await loadOverview();
     await Promise.all([loadProducts(), loadDocuments(), loadBoxes()]);
+    const qBox = Number(route.query.box);
+    if (qBox) { tab.value = 'boxes'; await openBox(qBox); }
   } catch (e) { error.value = e.message; }
 });
-onUnmounted(() => window.removeEventListener('resize', updateScale));
+onUnmounted(() => { window.removeEventListener('resize', updateScale); closeScanner(); });
 </script>
 
 <template>
@@ -698,6 +839,20 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
             </div>
             <button type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="boxBusy" @click="createBox">Создать короб</button>
           </div>
+          <div class="rounded-xl border border-slate-200 dark:border-white/10 p-3 space-y-2">
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input v-model="boxSearchQuery" class="input flex-1" placeholder="Где лежит товар? Название, штрихкод или GTIN" aria-label="Поиск товара по коробам" @keyup.enter="boxSearch">
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxSearchBusy" @click="boxSearch">Найти</button>
+              <button type="button" class="btn-primary min-h-[44px] !py-2.5" @click="openScanner"><BrandIcon name="camera" :size="16" class="inline-block mr-1.5 -mt-0.5" />Сканер</button>
+            </div>
+            <div v-for="b in boxSearchResults" :key="'s' + b.id" class="rounded-lg border border-brand-500/30 bg-brand-500/5 p-2 flex flex-wrap items-center gap-2">
+              <div class="flex-1 min-w-[160px]">
+                <div class="text-sm font-medium">{{ b.name }} <span class="text-xs text-slate-500">· {{ b.scheme.toUpperCase() }} · {{ statusTitle(b.status) }}</span></div>
+                <div class="text-xs text-slate-500 truncate">{{ b.matches.map((m) => m.name + ' × ' + m.quantity).join(', ') }}</div>
+              </div>
+              <button type="button" class="btn-ghost !py-2 !px-3 text-xs min-h-[44px]" @click="openBox(b.id)">Открыть</button>
+            </div>
+          </div>
           <p v-if="!boxes.length" class="text-sm text-slate-500">Коробов пока нет. Создайте первый — подскажем шаги для вашей площадки.</p>
           <div v-for="b in boxes" :key="b.id" class="rounded-xl border border-slate-200 dark:border-white/10 p-3 flex flex-wrap items-center gap-2">
             <div class="flex-1 min-w-[180px]">
@@ -737,6 +892,10 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
             </div>
           </div>
 
+          <p v-if="boxLocked" class="rounded-xl border border-slate-400/40 bg-slate-500/10 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">Короб отгружен — состав заблокирован от случайных изменений. Чтобы исправить, верните статус «Собирается» (действие попадёт в историю).</p>
+          <div v-if="activeBox.warnings && activeBox.warnings.length" class="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 space-y-1">
+            <p v-for="(w, i) in activeBox.warnings" :key="'bw' + i" class="text-sm text-amber-700 dark:text-amber-400">⚠ {{ w }}</p>
+          </div>
           <div v-if="activeBox.guide" class="glass rounded-2xl p-5 border-l-4 border-brand-500 space-y-3">
             <h2 class="font-display font-semibold text-sm">{{ activeBox.guide.title }}</h2>
             <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
@@ -762,7 +921,7 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
                 <label class="label" for="box-item-qty">Кол-во</label>
                 <input id="box-item-qty" v-model.number="itemForm.quantity" type="number" min="1" max="1000" class="input">
               </div>
-              <button type="button" class="btn-primary min-h-[44px] !py-2.5" @click="addItem">Добавить</button>
+              <button type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="boxLocked" @click="addItem">Добавить</button>
             </div>
             <div v-if="!itemForm.productId" class="grid sm:grid-cols-2 gap-2">
               <input v-model="itemForm.name" class="input" placeholder="Наименование товара" aria-label="Наименование товара">
@@ -774,13 +933,19 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
                 <div class="flex-1 min-w-[160px]">
                   <div class="text-sm font-medium truncate">{{ it.name }}</div>
                   <div class="text-xs text-slate-500 font-mono truncate">{{ it.barcode || 'без штрихкода' }}{{ it.sku ? ' · ' + it.sku : '' }}</div>
+                  <span class="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full border" :class="expiryBadge(it.expiry).cls">{{ expiryBadge(it.expiry).text }}</span>
                 </div>
-                <input type="number" min="1" max="1000" :value="it.quantity" class="input w-24" aria-label="Количество" @change="setItemQty(it, $event.target.value)">
-                <button type="button" class="btn-ghost !py-2 !px-3 text-xs min-h-[44px] text-red-500" @click="removeItem(it)" aria-label="Убрать позицию"><BrandIcon name="trash" :size="14" /></button>
+                <input type="number" min="1" max="1000" :value="it.quantity" class="input w-24" aria-label="Количество" :disabled="boxLocked" @change="setItemQty(it, $event.target.value)">
+                <button type="button" class="btn-ghost !py-2 !px-3 text-xs min-h-[44px] text-red-500" :disabled="boxLocked" @click="removeItem(it)" aria-label="Убрать позицию"><BrandIcon name="trash" :size="14" /></button>
               </div>
-              <select class="input text-xs" :value="it.profileId" aria-label="Профиль этикетки" @change="setItemProfile(it, $event.target.value)">
+              <select class="input text-xs" :value="it.profileId" aria-label="Профиль этикетки" :disabled="boxLocked" @change="setItemProfile(it, $event.target.value)">
                 <option v-for="p in boxProductProfiles" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
+              <details class="text-xs">
+                <summary class="cursor-pointer text-slate-500 min-h-[32px] flex items-center">Коды единиц ({{ it.codesCount }} из {{ it.quantity }}) — для проверки без вскрытия</summary>
+                <textarea class="input font-mono text-xs mt-1" rows="3" :value="it.codes" :disabled="boxLocked" placeholder="По одному коду на строку — сканируйте каждую единицу при упаковке" @change="saveItemCodes(it, $event.target.value)"></textarea>
+                <p class="text-slate-400 mt-1">Записанные коды можно проверить онлайн кнопкой «Проверить коды» — статусы и сроки без вскрытия короба.</p>
+              </details>
             </div>
           </div>
 
@@ -789,9 +954,30 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
             <div class="flex flex-col sm:flex-row gap-2">
               <button type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="boxBusy || !boxUnits" @click="boxLabelsPdf">PDF этикеток товаров · {{ boxUnits }} шт</button>
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy || !boxUnits" @click="packingList">Упаковочный лист А4</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy" @click="passportLabel">Паспорт-наклейка на короб</button>
             </div>
-            <p class="text-xs text-slate-500">Каждая этикетка — страница точного размера своего профиля. Упаковочный лист — внутренний документ для сверки, не этикетка площадки.</p>
+            <p class="text-xs text-slate-500">Каждая этикетка — страница точного размера своего профиля. Упаковочный лист — внутренний документ для сверки, не этикетка площадки. Паспорт-наклейка (DataMatrix) открывает состав короба сканером — клейте рядом с этикеткой площадки.</p>
+            <div class="flex flex-col sm:flex-row gap-2 items-start">
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="codeCheckBusy" @click="checkCodes">{{ codeCheckBusy ? 'Проверяем…' : 'Проверить коды единиц онлайн' }}</button>
+            </div>
+            <div v-if="codeCheckResult" class="space-y-1 text-sm">
+              <p class="text-xs text-slate-500">{{ codeCheckResult.online ? 'Онлайн-проверка ГИС МТ выполнена' : 'Локальная проверка GS1 (онлайн-статусы недоступны)' }} · кодов: {{ (codeCheckResult.results || []).length }}</p>
+              <div v-for="(r, i) in (codeCheckResult.results || []).slice(0, 100)" :key="'cc' + i" class="flex flex-wrap gap-2 items-center text-xs border-b border-slate-100 dark:border-white/5 pb-1">
+                <span class="font-mono truncate max-w-[220px]">{{ r.code }}</span>
+                <span :class="r.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">{{ r.ok ? 'валиден' : 'ошибка' }}</span>
+                <span v-if="r.status" class="text-slate-500">{{ r.status }}</span>
+                <span v-if="r.error" class="text-amber-600 dark:text-amber-400">{{ r.error }}</span>
+              </div>
+            </div>
           </div>
+
+          <details class="glass rounded-2xl p-5">
+            <summary class="cursor-pointer font-display font-semibold text-sm">История изменений</summary>
+            <div class="mt-3 space-y-1 text-xs text-slate-500">
+              <p v-if="!activeBox.events || !activeBox.events.length">Пока пусто.</p>
+              <p v-for="(e, i) in activeBox.events" :key="'ev' + i">{{ String(e.createdAt || '').slice(0, 16).replace('T', ' ') }} · {{ eventTitle(e.action) }}{{ e.detail ? ' — ' + e.detail : '' }}</p>
+            </div>
+          </details>
 
           <div class="glass rounded-2xl p-5 space-y-3">
             <h2 class="font-display font-semibold">Этикетка короба (грузоместа)</h2>
@@ -856,6 +1042,15 @@ onUnmounted(() => window.removeEventListener('resize', updateScale));
           <button type="button" class="btn-ghost !py-2 !px-3 text-xs min-h-[44px]" @click="downloadDoc(d)">Скачать</button>
           <button type="button" class="btn-ghost !py-2 !px-3 text-xs min-h-[44px] text-red-500" @click="deleteDoc(d)" aria-label="Удалить документ"><BrandIcon name="trash" :size="14" /></button>
         </div>
+      </div>
+      <!-- Сканер паспорт-наклейки -->
+      <div v-if="scanOpen" class="fixed inset-0 z-50 bg-black/95 flex flex-col">
+        <div class="flex items-center justify-between gap-2 p-3">
+          <p class="text-sm text-white/90 flex-1">{{ scanNotice }}</p>
+          <button type="button" class="min-h-[44px] px-4 py-2 rounded-xl bg-white/15 text-white text-sm font-medium" @click="closeScanner">Закрыть</button>
+        </div>
+        <video ref="videoEl" autoplay playsinline muted class="flex-1 w-full object-cover"></video>
+        <p v-if="scanError" class="p-3 text-sm text-red-400">{{ scanError }}</p>
       </div>
     </section>
   </div>

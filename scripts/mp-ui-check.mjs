@@ -122,6 +122,7 @@ assert(await clickText('Коробки') === 'clicked', 'вкладка коро
 assert(await waitFor('(document.body.innerText || "").includes("Короба (грузоместа)")'), 'список коробов виден');
 assert(await clickText('Создать короб') === 'clicked', 'короб создан');
 assert(await waitFor('[...document.querySelectorAll("button")].some((b) => (b.textContent || "").trim() === "Открыть")'), 'короб в списке');
+assert(await evaluate('!!document.querySelector("input[aria-label=\\"Поиск товара по коробам\\"]")'), 'поиск по коробам есть');
 assert(await clickText('Открыть') === 'clicked', 'короб открыт');
 assert(await waitFor('(document.body.innerText || "").includes("Состав короба")'), 'редактор короба с составом');
 assert(await evaluate('(document.body.innerText || "").includes("Wildberries") && (document.body.innerText || "").includes("НЕ клейте стикеры заказа")'), 'инструкция WB FBS с предупреждением');
@@ -131,6 +132,18 @@ assert(await clickText('Добавить') === 'clicked', 'позиция доб
 assert(await waitFor('(document.body.innerText || "").includes("Тест-товар")'), 'позиция в составе');
 assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /PDF этикеток товаров/.test(b.textContent || ""))'), 'кнопка пакетного PDF есть');
 await shot('docs/marketplaces-box.png');
+
+
+// паспорт короба
+assert(await evaluate('(document.body.innerText || "").includes("Коды единиц")'), 'блок кодов единиц виден');
+assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /Паспорт-наклейка на короб/.test(b.textContent || ""))'), 'кнопка паспорт-наклейки есть');
+assert(await evaluate('(document.body.innerText || "").includes("История изменений")'), 'история изменений видна');
+// deep-link паспорта
+const boxesRes = await fetch(BASE + '/api/marketplaces/boxes', { headers: { cookie: 'cq_session=' + cookie } });
+const boxesData = await boxesRes.json();
+const deepId = boxesData.boxes[0].id;
+await send('Page.navigate', { url: BASE + '/app/marketplaces?box=' + deepId });
+assert(await waitFor('(document.body.innerText || "").includes("Состав короба")'), 'deep-link ?box= открывает короб');
 
 // мобильный вид 390×844
 await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

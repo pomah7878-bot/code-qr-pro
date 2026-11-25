@@ -11,6 +11,9 @@ import PDFDocument from 'pdfkit';
 import { labelHtml, printDocument } from './lib/print-html.js';
 import { logActivity } from './lib/activity.js';
 import { putPdfTicket, getPdfTicket } from './lib/pdf-tickets.js';
+import { verifyCodes } from './cz.js';
+import { getSetting } from './settings.js';
+import { publicUrl } from './lib/public-url.js';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -405,6 +408,50 @@ export async function registerMarketplaceRoutes(app) {
   const MAX_BOX_ITEMS = 200;
   const MAX_BOX_UNITS = 1000;
 
+  function logBoxEvent(boxId, userId, action, detail = '') {
+    try {
+      db.prepare('INSERT INTO marketplace_box_events (box_id, user_id, action, detail) VALUES (?,?,?,?)')
+        .run(boxId, userId, action, String(detail).slice(0, 500));
+    } catch { /* история не должна ломать операцию */ }
+  }
+
+  // Срок годности: DD.MM.YYYY или YYYY-MM-DD; soon — менее 30 дней (требование WB).
+  function expiryInfo(value) {
+    const s = String(value || '').trim();
+    if (!s) return { status: 'none', daysLeft: null, date: '' };
+    let d = null;
+    let m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (m) d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) d = new Date(s + 'T00:00:00');
+    if (!d || isNaN(d.getTime())) return { status: 'none', daysLeft: null, date: s };
+    const daysLeft = Math.ceil((d.getTime() - Date.now()) / 86400000);
+    const status = daysLeft < 0 ? 'expired' : daysLeft <= 30 ? 'soon' : 'ok';
+    return { status, daysLeft, date: s };
+  }
+
+  function normalizeCodes(raw, quantity) {
+    const lines = String(raw || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    if (!lines.length) return { codes: '' };
+    if (lines.length > 1000) return { error: 'Не больше 1000 кодов на позицию' };
+    if (lines.some((c) => c.length > 200)) return { error: 'Слишком длинный код (до 200 символов)' };
+    if (new Set(lines).size !== lines.length) return { error: 'Коды единиц должны быть уникальными — есть дубли' };
+    if (lines.length !== quantity) return { error: 'Кодов ' + lines.length + ', а количество ' + quantity + ' — запишите код каждой единицы' };
+    return { codes: lines.join('\n') };
+  }
+
+  function shippedGuard(row, reply) {
+    if (row.status === 'shipped') {
+      reply.code(409).send({ error: 'Короб отгружен — состав заблокирован. Верните статус «Собирается», если нужно исправить.' });
+      return true;
+    }
+    return false;
+  }
+
+  function markStale(boxId, userId, action, detail) {
+    db.prepare("UPDATE marketplace_boxes SET labels_stale=1, updated_at=datetime('now') WHERE id=?").run(boxId);
+    logBoxEvent(boxId, userId, action, detail);
+  }
+
   function ownBox(req, reply) {
     const row = db.prepare('SELECT * FROM marketplace_boxes WHERE id=? AND user_id=?').get(Number(req.params.id), req.user.id);
     if (!row) { reply.code(404).send({ error: 'Короб не найден' }); return null; }
@@ -415,13 +462,13 @@ export async function registerMarketplaceRoutes(app) {
     const agg = db.prepare('SELECT COUNT(*) n, COALESCE(SUM(quantity),0) units FROM marketplace_box_items WHERE box_id=?').get(r.id);
     return {
       id: r.id, marketplace: r.marketplace, scheme: r.scheme, name: r.name,
-      status: r.status, documentId: r.document_id,
+      status: r.status, documentId: r.document_id, labelsStale: Boolean(r.labels_stale),
       itemsCount: agg.n, units: agg.units, createdAt: r.created_at, updatedAt: r.updated_at
     };
   }
 
   function itemView(r) {
-    return { id: r.id, productId: r.product_id, name: r.name, barcode: r.barcode, gtin: r.gtin, sku: r.sku, profileId: r.profile_id, quantity: r.quantity };
+    return { id: r.id, productId: r.product_id, name: r.name, barcode: r.barcode, gtin: r.gtin, sku: r.sku, profileId: r.profile_id, quantity: r.quantity, codes: r.codes || '', codesCount: r.codes ? r.codes.split('\n').filter(Boolean).length : 0 };
   }
 
   function defaultProductProfile(marketplace) {
@@ -441,19 +488,37 @@ export async function registerMarketplaceRoutes(app) {
     const name = String(body.name || '').trim().slice(0, 100) || ('Короб ' + (count + 1));
     const info = db.prepare('INSERT INTO marketplace_boxes (user_id, marketplace, scheme, name) VALUES (?,?,?,?)')
       .run(req.user.id, String(body.marketplace), scheme, name);
+    logBoxEvent(info.lastInsertRowid, req.user.id, 'created', name);
     return reply.code(201).send({ box: boxView(db.prepare('SELECT * FROM marketplace_boxes WHERE id=?').get(info.lastInsertRowid)) });
   });
 
   app.get('/api/marketplaces/boxes/:id', { preHandler: requireAuth }, async (req, reply) => {
     const row = ownBox(req, reply);
     if (!row) return reply;
-    const items = db.prepare('SELECT * FROM marketplace_box_items WHERE box_id=? ORDER BY id').all(row.id).map(itemView);
+    const rows = db.prepare('SELECT * FROM marketplace_box_items WHERE box_id=? ORDER BY id').all(row.id);
+    const warnings = [];
+    const items = rows.map((r) => {
+      const view = itemView(r);
+      let expiresAt = '';
+      let producedAt = '';
+      if (r.product_id) {
+        const p = db.prepare('SELECT expires_at, produced_at FROM marketplace_products WHERE id=?').get(r.product_id);
+        if (p) { expiresAt = p.expires_at; producedAt = p.produced_at; }
+      }
+      const expiry = expiryInfo(expiresAt);
+      if (expiry.status === 'expired') warnings.push('«' + r.name + '»: срок годности истёк ' + expiry.date + ' — замените товар до отгрузки.');
+      if (expiry.status === 'soon') warnings.push('«' + r.name + '»: срок годности истекает через ' + expiry.daysLeft + ' дн. WB принимает товары с остатком не менее 30 дней.');
+      return Object.assign(view, { expiresAt, producedAt, expiry });
+    });
+    if (row.labels_stale) warnings.push('Состав менялся после последней печати — перепечатайте этикетки товаров.');
     let document = null;
     if (row.document_id) {
       const d = db.prepare('SELECT * FROM marketplace_documents WHERE id=? AND user_id=?').get(row.document_id, req.user.id);
       if (d) document = { id: d.id, filename: d.filename, mime: d.mime, size: d.size, marketplace: d.marketplace };
     }
-    return { box: boxView(row), items, document, guide: boxGuide(row.marketplace, row.scheme) };
+    const events = db.prepare('SELECT action, detail, created_at FROM marketplace_box_events WHERE box_id=? ORDER BY id DESC LIMIT 30').all(row.id)
+      .map((e) => ({ action: e.action, detail: e.detail, createdAt: e.created_at }));
+    return { box: boxView(row), items, document, guide: boxGuide(row.marketplace, row.scheme), warnings, events };
   });
 
   app.post('/api/marketplaces/boxes/:id', { preHandler: requireAuth }, async (req, reply) => {
@@ -464,7 +529,12 @@ export async function registerMarketplaceRoutes(app) {
     const scheme = BOX_SCHEMES.includes(body.scheme) ? body.scheme : row.scheme;
     const status = BOX_STATUSES.includes(body.status) ? body.status : row.status;
     if (!name) return reply.code(400).send({ error: 'Укажите название короба' });
+    if (row.status === 'shipped' && (name !== row.name || scheme !== row.scheme)) {
+      return reply.code(409).send({ error: 'Короб отгружен — название и схема заблокированы. Верните статус «Собирается» для исправлений.' });
+    }
     db.prepare("UPDATE marketplace_boxes SET name=?, scheme=?, status=?, updated_at=datetime('now') WHERE id=?").run(name, scheme, status, row.id);
+    if (status !== row.status) logBoxEvent(row.id, req.user.id, 'status', row.status + ' → ' + status);
+    if (name !== row.name || scheme !== row.scheme) logBoxEvent(row.id, req.user.id, 'updated', name + ' · ' + scheme);
     return { box: boxView(db.prepare('SELECT * FROM marketplace_boxes WHERE id=?').get(row.id)) };
   });
 
@@ -498,11 +568,14 @@ export async function registerMarketplaceRoutes(app) {
       const def = defaultProductProfile(row.marketplace);
       profileId = def ? def.id : '';
     }
+    if (shippedGuard(row, reply)) return reply;
+    const codesResult = normalizeCodes(body.codes, quantity);
+    if (codesResult.error) return reply.code(400).send({ error: codesResult.error });
     const count = db.prepare('SELECT COUNT(*) n FROM marketplace_box_items WHERE box_id=?').get(row.id).n;
     if (count >= MAX_BOX_ITEMS) return reply.code(409).send({ error: 'В коробе уже 200 позиций' });
-    const info = db.prepare('INSERT INTO marketplace_box_items (box_id, product_id, name, barcode, gtin, sku, profile_id, quantity) VALUES (?,?,?,?,?,?,?,?)')
-      .run(row.id, productId, fields.name, fields.barcode, fields.gtin, fields.sku, profileId, quantity);
-    db.prepare("UPDATE marketplace_boxes SET updated_at=datetime('now') WHERE id=?").run(row.id);
+    const info = db.prepare('INSERT INTO marketplace_box_items (box_id, product_id, name, barcode, gtin, sku, profile_id, quantity, codes) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(row.id, productId, fields.name, fields.barcode, fields.gtin, fields.sku, profileId, quantity, codesResult.codes);
+    markStale(row.id, req.user.id, 'item_added', fields.name + ' × ' + quantity);
     return reply.code(201).send({ item: itemView(db.prepare('SELECT * FROM marketplace_box_items WHERE id=?').get(info.lastInsertRowid)) });
   });
 
@@ -517,6 +590,7 @@ export async function registerMarketplaceRoutes(app) {
     if (!row) return reply;
     const item = ownBoxItem(req, reply, row);
     if (!item) return reply;
+    if (shippedGuard(row, reply)) return reply;
     const body = req.body || {};
     const quantity = Math.max(1, Math.min(1000, Math.round(Number(body.quantity) || item.quantity)));
     let profileId = item.profile_id;
@@ -527,7 +601,14 @@ export async function registerMarketplaceRoutes(app) {
       }
       profileId = p.id;
     }
-    db.prepare('UPDATE marketplace_box_items SET quantity=?, profile_id=? WHERE id=?').run(quantity, profileId, item.id);
+    let codes = item.codes;
+    if (body.codes != null) {
+      const codesResult = normalizeCodes(body.codes, quantity);
+      if (codesResult.error) return reply.code(400).send({ error: codesResult.error });
+      codes = codesResult.codes;
+    }
+    db.prepare('UPDATE marketplace_box_items SET quantity=?, profile_id=?, codes=? WHERE id=?').run(quantity, profileId, codes, item.id);
+    markStale(row.id, req.user.id, 'item_updated', item.name + ' × ' + quantity);
     return { item: itemView(db.prepare('SELECT * FROM marketplace_box_items WHERE id=?').get(item.id)) };
   });
 
@@ -536,7 +617,9 @@ export async function registerMarketplaceRoutes(app) {
     if (!row) return reply;
     const item = ownBoxItem(req, reply, row);
     if (!item) return reply;
+    if (shippedGuard(row, reply)) return reply;
     db.prepare('DELETE FROM marketplace_box_items WHERE id=?').run(item.id);
+    markStale(row.id, req.user.id, 'item_removed', item.name);
     return { ok: true };
   });
 
@@ -584,6 +667,8 @@ export async function registerMarketplaceRoutes(app) {
     }
     try {
       const pdf = await renderMixedLabelsPdfBuffer(groups);
+      db.prepare("UPDATE marketplace_boxes SET labels_stale=0, updated_at=datetime('now') WHERE id=?").run(row.id);
+      logBoxEvent(row.id, req.user.id, 'labels_printed', totalUnits + ' этикеток');
       logActivity(req.user, 'marketplaces_box_pdf', 'PDF этикеток товаров короба', {
         total: totalUnits, ok: totalUnits, meta: { boxId: row.id, marketplace: row.marketplace, positions: items.length }
       });
@@ -683,7 +768,94 @@ export async function registerMarketplaceRoutes(app) {
     if (!d) return reply.code(404).send({ error: 'Документ не найден' });
     if (d.marketplace !== row.marketplace) return reply.code(400).send({ error: 'Документ другой площадки' });
     db.prepare("UPDATE marketplace_boxes SET document_id=?, updated_at=datetime('now') WHERE id=?").run(d.id, row.id);
+    logBoxEvent(row.id, req.user.id, 'document_linked', 'документ №' + d.id);
     return { ok: true, documentId: d.id };
   });
+
+  // Паспорт-наклейка на короб: внутренний DataMatrix со ссылкой на паспорт.
+  // Клеится рядом с этикеткой площадки; сканер в разделе открывает короб без вскрытия.
+  app.post('/api/marketplaces/boxes/:id/passport-label', { preHandler: requireAuth }, async (req, reply) => {
+    const row = ownBox(req, reply);
+    if (!row) return reply;
+    const agg = db.prepare('SELECT COALESCE(SUM(quantity),0) units FROM marketplace_box_items WHERE box_id=?').get(row.id);
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      consumeOperations(req.user, 1, { idemKey: idem ? idem + ':mp_passport' : '', context: 'marketplaces_passport' });
+    } catch (e) { return usageErrorReply(reply, e); }
+    try {
+      const marketTitle = (MARKETPLACES.find((m) => m.id === row.marketplace) || {}).title || row.marketplace;
+      const link = publicUrl() + '/app/marketplaces?box=' + row.id;
+      const template = {
+        name: 'Паспорт короба', widthMm: 58, heightMm: 40, dpi: 203,
+        elements: [
+          { id: 'ppDm', type: 'datamatrix', field: 'code', x: 2, y: 2, w: 20, h: 20 },
+          { id: 'ppName', type: 'field', field: 'name', x: 24, y: 2, w: 32, h: 6, fontSize: 7, align: 'left' },
+          { id: 'ppMarket', type: 'field', field: 'market', x: 24, y: 9, w: 32, h: 4, fontSize: 6, align: 'left' },
+          { id: 'ppUnits', type: 'field', field: 'units', x: 24, y: 14, w: 32, h: 4, fontSize: 6, align: 'left' },
+          { id: 'ppId', type: 'field', field: 'id', x: 24, y: 19, w: 32, h: 4, fontSize: 6, align: 'left' },
+          { id: 'ppTitle', type: 'text', text: 'Паспорт короба · CODE QR PRO', x: 2, y: 24, w: 54, h: 4, fontSize: 6.5, align: 'left' },
+          { id: 'ppHint', type: 'text', text: 'Сканируйте камерой в разделе «Маркетплейсы» — состав и сроки без вскрытия', x: 2, y: 29, w: 54, h: 8, fontSize: 5.5, align: 'left' }
+        ]
+      };
+      const dataRow = { code: link, name: row.name, market: marketTitle + ' · ' + row.scheme.toUpperCase(), units: agg.units + ' ед.', id: 'Короб №' + row.id };
+      const pdf = await renderLabelsPdfBuffer(template, [dataRow], { single: true });
+      logBoxEvent(row.id, req.user.id, 'passport_printed', '');
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', 'attachment; filename="box-' + row.id + '-passport.pdf"');
+      reply.header('Cache-Control', 'private, no-store');
+      return reply.send(pdf);
+    } catch (e) {
+      if (idem) rollbackUsageEvent(req.user.id, idem + ':mp_passport');
+      throw e;
+    }
+  });
+
+  // Онлайн-проверка записанных кодов единиц без вскрытия короба.
+  app.post('/api/marketplaces/boxes/:id/check-codes', { preHandler: requireAuth }, async (req, reply) => {
+    const row = ownBox(req, reply);
+    if (!row) return reply;
+    const items = db.prepare('SELECT name, codes FROM marketplace_box_items WHERE box_id=?').all(row.id);
+    const codes = [];
+    for (const it of items) {
+      for (const c of String(it.codes || '').split(/\r?\n/)) {
+        const t = c.trim();
+        if (t) codes.push(t);
+      }
+    }
+    if (!codes.length) return reply.code(400).send({ error: 'В коробе не записаны коды единиц. Добавьте их в составе (по одному на строку) — тогда статусы можно проверять без вскрытия.' });
+    if (codes.length > 1000) return reply.code(400).send({ error: 'Слишком много кодов (до 1000)' });
+    const globalToken = getSetting('cz_enabled', '0') === '1' ? getSetting('cz_token', '') : '';
+    const token = String(req.user?.cz_token || globalToken || '').trim();
+    const result = await verifyCodes(codes, 'cz', {
+      token,
+      apiUrl: getSetting('cz_api_url', 'https://markirovka.crpt.ru'),
+      onlineLimit: 50
+    });
+    logActivity(req.user, 'marketplaces_box_check', 'Проверка кодов короба', {
+      total: codes.length, ok: (result.results || []).filter((r) => r.ok).length,
+      meta: { boxId: row.id, online: Boolean(result.online) }
+    });
+    return result;
+  });
+
+  // Поиск товара по всем коробам: «в каком коробе лежит X?»
+  app.get('/api/marketplaces/box-search', { preHandler: requireAuth }, async (req, reply) => {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (!q) return reply.code(400).send({ error: 'Введите название, штрихкод или GTIN' });
+    const like = '%' + q.replace(/[%_]/g, '') + '%';
+    const rows = db.prepare(
+      'SELECT i.box_id, i.name, i.barcode, i.quantity, b.name AS box_name, b.marketplace, b.scheme, b.status ' +
+      'FROM marketplace_box_items i JOIN marketplace_boxes b ON b.id = i.box_id ' +
+      'WHERE b.user_id=? AND (i.name LIKE ? OR i.barcode LIKE ? OR i.gtin LIKE ? OR i.codes LIKE ?) ' +
+      'ORDER BY i.box_id DESC LIMIT 100'
+    ).all(req.user.id, like, like, like, like);
+    const byBox = new Map();
+    for (const r of rows) {
+      if (!byBox.has(r.box_id)) byBox.set(r.box_id, { id: r.box_id, name: r.box_name, marketplace: r.marketplace, scheme: r.scheme, status: r.status, matches: [] });
+      byBox.get(r.box_id).matches.push({ name: r.name, barcode: r.barcode, quantity: r.quantity });
+    }
+    return { boxes: [...byBox.values()].slice(0, 20) };
+  });
+
 
 }

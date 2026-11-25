@@ -869,7 +869,19 @@ const MIGRATIONS = [
      profile_id TEXT NOT NULL DEFAULT '',
      quantity INTEGER NOT NULL DEFAULT 1
    );
-   CREATE INDEX IF NOT EXISTS idx_mp_box_items_box ON marketplace_box_items(box_id, id);`
+   CREATE INDEX IF NOT EXISTS idx_mp_box_items_box ON marketplace_box_items(box_id, id);`,
+  // v58 — паспорт короба: фактические коды единиц, флаг перепечатки, история изменений
+  `ALTER TABLE marketplace_box_items ADD COLUMN codes TEXT NOT NULL DEFAULT '';
+   ALTER TABLE marketplace_boxes ADD COLUMN labels_stale INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE IF NOT EXISTS marketplace_box_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     box_id INTEGER NOT NULL REFERENCES marketplace_boxes(id) ON DELETE CASCADE,
+     user_id INTEGER NOT NULL,
+     action TEXT NOT NULL,
+     detail TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+   );
+   CREATE INDEX IF NOT EXISTS idx_mp_box_events_box ON marketplace_box_events(box_id, id);`
 ];
 
 const version = db.pragma('user_version', { simple: true });

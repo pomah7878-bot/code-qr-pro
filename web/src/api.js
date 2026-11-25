@@ -238,6 +238,8 @@ export const api = {
   mpUpdateItem: (id, itemId, b) => req('POST', '/api/marketplaces/boxes/' + id + '/items/' + itemId, b),
   mpDeleteItem: (id, itemId) => req('DELETE', '/api/marketplaces/boxes/' + id + '/items/' + itemId),
   mpLinkDoc: (id, documentId) => req('POST', '/api/marketplaces/boxes/' + id + '/link-document', { documentId }),
+  mpCheckCodes: (id) => req('POST', '/api/marketplaces/boxes/' + id + '/check-codes', {}),
+  mpBoxSearch: (q) => req('GET', '/api/marketplaces/box-search?q=' + encodeURIComponent(q)),
 
   reviews: () => req('GET', '/api/reviews'),
   myReview: () => req('GET', '/api/reviews/mine'),

@@ -138,6 +138,9 @@ await shot('docs/marketplaces-box.png');
 assert(await evaluate('(document.body.innerText || "").includes("Коды единиц")'), 'блок кодов единиц виден');
 assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /Паспорт-наклейка на короб/.test(b.textContent || ""))'), 'кнопка паспорт-наклейки есть');
 assert(await evaluate('(document.body.innerText || "").includes("История изменений")'), 'история изменений видна');
+assert(await clickText('Пик-лист на сборку') === 'clicked', 'пик-лист запрошен');
+assert(await waitFor('(document.body.innerText || "").includes("Пик-лист готов")'), 'пик-лист сформирован');
+assert(await evaluate('[...document.querySelectorAll("button")].some((b) => /Отправить в мессенджер/.test(b.textContent || ""))'), 'кнопка отправки в мессенджер есть');
 // deep-link паспорта
 const boxesRes = await fetch(BASE + '/api/marketplaces/boxes', { headers: { cookie: 'cq_session=' + cookie } });
 const boxesData = await boxesRes.json();

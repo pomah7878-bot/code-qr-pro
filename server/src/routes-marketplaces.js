@@ -755,6 +755,78 @@ export async function registerMarketplaceRoutes(app) {
     }
   });
 
+  // Пик-лист на сборку короба: задание комплектовщику с чекбоксами и подписями.
+  app.post('/api/marketplaces/boxes/:id/picking-list', { preHandler: requireAuth }, async (req, reply) => {
+    const row = ownBox(req, reply);
+    if (!row) return reply;
+    const items = db.prepare('SELECT * FROM marketplace_box_items WHERE box_id=? ORDER BY id').all(row.id);
+    if (!items.length) return reply.code(400).send({ error: 'Добавьте товары в короб' });
+    const idem = String(req.body?.idemKey || req.headers['x-idempotency-key'] || '').slice(0, 100);
+    try {
+      consumeExports(req.user, 1, { idemKey: idem ? idem + ':mp_pick_list' : '', context: 'marketplaces_pick_list' });
+    } catch (e) { return usageErrorReply(reply, e); }
+    try {
+      const marketTitle = (MARKETPLACES.find((m) => m.id === row.marketplace) || {}).title || row.marketplace;
+      const doc = new PDFDocument({ size: 'A4', margin: 30 });
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      const ended = new Promise((resolve, reject) => { doc.on('end', resolve); doc.on('error', reject); });
+      try { doc.registerFont('MP', join(__dirname, '..', 'assets', 'LiberationSans-Regular.ttf')); doc.font('MP'); } catch { /* fallback */ }
+      const totalUnits = items.reduce((s, i) => s + i.quantity, 0);
+      const cols = [30, 50, 235, 310, 430, 495];
+      const header = () => {
+        const y = doc.y;
+        doc.fontSize(8).fillColor('#666666');
+        doc.text('№', cols[0], y, { width: 18 });
+        doc.text('Наименование', cols[1], y, { width: 180 });
+        doc.text('Артикул', cols[2], y, { width: 70 });
+        doc.text('Штрихкод', cols[3], y, { width: 115 });
+        doc.text('Кол-во', cols[4], y, { width: 55 });
+        doc.text('✓', cols[5], y, { width: 40 });
+        doc.y = y + 12;
+        doc.moveTo(30, doc.y).lineTo(565, doc.y).lineWidth(0.5).strokeColor('#999999').stroke();
+        doc.moveDown(0.3);
+      };
+      doc.fontSize(16).fillColor('#000000').text('Пик-лист · сборка короба ' + row.name);
+      doc.fontSize(9).fillColor('#666666').text('Задание на сборку: соберите позиции и отметьте ✓ каждую. Штрихкод — для сверки сканером.');
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor('#000000');
+      doc.text('Площадка: ' + marketTitle + ' · Схема: ' + row.scheme.toUpperCase() + ' · Дата: ' + new Date().toISOString().slice(0, 10) + ' · Короб №' + row.id);
+      doc.moveDown(0.8);
+      header();
+      doc.fontSize(9).fillColor('#000000');
+      items.forEach((item, i) => {
+        if (doc.y > 740) { doc.addPage(); header(); doc.fontSize(9).fillColor('#000000'); }
+        const y = doc.y;
+        doc.text(String(i + 1), cols[0], y, { width: 18 });
+        doc.text(item.name, cols[1], y, { width: 180 });
+        doc.text(item.sku || '—', cols[2], y, { width: 70 });
+        doc.text(item.barcode || '—', cols[3], y, { width: 115 });
+        doc.text(String(item.quantity), cols[4], y, { width: 55 });
+        doc.rect(cols[5], y, 10, 10).lineWidth(0.7).strokeColor('#333333').stroke();
+        doc.y = y + Math.max(15, doc.heightOfString(item.name, { width: 180 }) + 5);
+        doc.x = 30;
+      });
+      doc.moveDown(0.8);
+      doc.fontSize(10).fillColor('#000000').text('Итого: ' + items.length + ' наименований, ' + totalUnits + ' единиц');
+      doc.moveDown(1.2);
+      doc.fontSize(9).fillColor('#333333');
+      doc.text('Собрал: ____________________    Проверил: ____________________    Дата: ____________');
+      doc.end();
+      await ended;
+      const pdf = Buffer.concat(chunks);
+      logBoxEvent(row.id, req.user.id, 'picking_printed', totalUnits + ' единиц');
+      logActivity(req.user, 'marketplaces_pick_list', 'Пик-лист на сборку короба', { total: 1, ok: 1, meta: { boxId: row.id } });
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', 'attachment; filename="box-' + row.id + '-picking-list.pdf"');
+      reply.header('Cache-Control', 'private, no-store');
+      return reply.send(pdf);
+    } catch (e) {
+      if (idem) rollbackUsageEvent(req.user.id, idem + ':mp_pick_list');
+      throw e;
+    }
+  });
+
   // Привязка загруженного оригинала этикетки короба (или отвязка: documentId=null).
   app.post('/api/marketplaces/boxes/:id/link-document', { preHandler: requireAuth }, async (req, reply) => {
     const row = ownBox(req, reply);

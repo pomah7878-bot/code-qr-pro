@@ -175,6 +175,8 @@ r = await req('GET', '/api/marketplaces/boxes/' + boxId);
 assert(r.data.items[0].expiry && r.data.items[0].expiry.status, 'срок годности в паспорте');
 assert(Array.isArray(r.data.warnings) && Array.isArray(r.data.events) && r.data.events.length > 0, 'предупреждения и история событий');
 assert(r.data.box.labelsStale === true, 'флаг перепечатки после изменения состава');
+r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/picking-list', { idemKey: 'mp-pick-test' });
+assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'пик-лист на сборку PDF');
 r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/passport-label', { idemKey: 'mp-passport-test' });
 assert(r.status === 200 && r.data.slice(0, 5).toString() === '%PDF-', 'паспорт-наклейка PDF');
 r = await req('POST', '/api/marketplaces/boxes/' + boxId + '/check-codes', {});

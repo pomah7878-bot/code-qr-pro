@@ -285,7 +285,7 @@ async function loadBoxes() {
 }
 async function openBox(id) {
   error.value = '';
-  try { activeBox.value = await api.mpBox(id); itemForm.profileId = ''; }
+  try { activeBox.value = await api.mpBox(id); itemForm.profileId = ''; pickBlob.value = null; }
   catch (e) { error.value = e.message; }
 }
 function closeBox() { activeBox.value = null; loadBoxes().catch(() => {}); }
@@ -553,6 +553,66 @@ function closeScanner() {
   scanPending = false;
   if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
   scanOpen.value = false;
+}
+
+const pickBlob = ref(null);
+const pickName = ref('');
+const pickBusy = ref(false);
+
+async function pickingList() {
+  error.value = ''; notice.value = ''; pickBlob.value = null;
+  const id = activeBox.value.box.id;
+  pickBusy.value = true;
+  try {
+    const res = await fetch('/api/marketplaces/boxes/' + id + '/picking-list', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idemKey: 'mp-pick-' + id + '-' + boxUnits.value })
+    });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Не удалось сформировать пик-лист'); }
+    const blob = await res.blob();
+    const head = await blob.slice(0, 5).text();
+    if (head !== '%PDF-') throw new Error('Сервер вернул не PDF');
+    pickBlob.value = blob;
+    pickName.value = 'box-' + id + '-picking-list.pdf';
+    notice.value = 'Пик-лист готов — скачайте, распечатайте или отправьте в мессенджер';
+  } catch (e) { error.value = e.message; } finally { pickBusy.value = false; }
+}
+
+function pickDownload() {
+  if (!pickBlob.value) return;
+  const url = URL.createObjectURL(pickBlob.value);
+  const a = document.createElement('a');
+  a.href = url; a.download = pickName.value; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function pickPrint() {
+  if (!pickBlob.value) return;
+  if (isIOS()) return pickDownload();
+  const url = URL.createObjectURL(pickBlob.value);
+  const win = openPlaceholderWindow();
+  if (win && !win.closed) win.location.href = url;
+  else window.open(url, '_blank');
+  notice.value = 'Пик-лист открыт — печатайте в масштабе 100%';
+}
+
+async function pickShare() {
+  error.value = '';
+  if (!pickBlob.value) return;
+  try {
+    const file = new File([pickBlob.value], pickName.value, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Пик-лист на сборку' });
+      notice.value = 'Пик-лист отправлен';
+    } else {
+      pickDownload();
+      notice.value = 'Этот браузер не умеет делиться файлами — файл скачан, отправьте его в мессенджер вручную';
+    }
+  } catch (e) {
+    if (e?.name !== 'AbortError') error.value = 'Не удалось отправить: ' + (e?.message || e);
+  }
 }
 
 function openRuler() {
@@ -955,6 +1015,12 @@ onUnmounted(() => { window.removeEventListener('resize', updateScale); closeScan
               <button type="button" class="btn-primary min-h-[44px] !py-2.5" :disabled="boxBusy || !boxUnits" @click="boxLabelsPdf">PDF этикеток товаров · {{ boxUnits }} шт</button>
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy || !boxUnits" @click="packingList">Упаковочный лист А4</button>
               <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="boxBusy" @click="passportLabel">Паспорт-наклейка на короб</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5" :disabled="pickBusy || !boxUnits" @click="pickingList">{{ pickBusy ? 'Готовим…' : 'Пик-лист на сборку' }}</button>
+            </div>
+            <div v-if="pickBlob" class="flex flex-col sm:flex-row gap-2 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+              <button type="button" class="btn-primary min-h-[44px] !py-2.5 flex-1" @click="pickDownload">Скачать PDF</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5 flex-1" @click="pickPrint">Печать</button>
+              <button type="button" class="btn-ghost min-h-[44px] !py-2.5 flex-1" @click="pickShare">Отправить в мессенджер</button>
             </div>
             <p class="text-xs text-slate-500">Каждая этикетка — страница точного размера своего профиля. Упаковочный лист — внутренний документ для сверки, не этикетка площадки. Паспорт-наклейка (DataMatrix) открывает состав короба сканером — клейте рядом с этикеткой площадки.</p>
             <div class="flex flex-col sm:flex-row gap-2 items-start">

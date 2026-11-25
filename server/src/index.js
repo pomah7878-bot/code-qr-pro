@@ -209,6 +209,17 @@ if (existsSync(dist)) {
       }
     }
   });
+  // @fastify/static 10: wildcard отклоняет корневой путь ('/' → пустой pathname → 403).
+  // Главную отдаём явным маршрутом с тем же SEO-HTML, что и notFound-обработчик.
+  app.route({
+    method: ['GET', 'HEAD'],
+    url: '/',
+    handler(req, reply) {
+      reply.header('X-Robots-Tag', 'index, follow');
+      reply.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      return reply.type('text/html; charset=utf-8').send(publicIndexHtml('/'));
+    }
+  });
   app.setNotFoundHandler((req, reply) => {
     const rawUrl = String(req.raw.url || '/');
     const path = rawUrl.split('?')[0];

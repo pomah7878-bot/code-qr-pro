@@ -230,9 +230,12 @@ if (existsSync(dist)) {
     if (path !== '/' && path.endsWith('/')) {
       const clean = path.replace(/\/+$/, '') || '/';
       const query = rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?')) : '';
-      return reply.redirect(301, clean + query);
+      // Fastify 5: reply.redirect(url, code) — аргументы поменялись местами.
+      return reply.redirect(clean + query, 301);
     }
-    const isPrivate = path === '/login' || path === '/register' || path === '/app' || path.startsWith('/app/');
+    // /team/accept — приглашение в команду: валидный SPA-роут, должен отдавать 200.
+    const isPrivate = path === '/login' || path === '/register' || path === '/app' ||
+      path.startsWith('/app/') || path === '/team/accept';
     if (isPrivate) {
       reply.header('X-Robots-Tag', 'noindex, nofollow');
       return reply.sendFile('index.html');

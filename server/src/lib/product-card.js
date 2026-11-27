@@ -26,12 +26,14 @@ const statusCacheTtl = () => Math.max(60, settingNumber('cache_status_ttl_second
 function readStatusCache(key) {
   const hit = statusCache.get(key);
   if (!hit) return null;
-  if (Date.now() - hit.at > statusCacheTtl()) { statusCache.delete(key); return null; }
+  const ttl = hit.negative ? Math.min(60, statusCacheTtl()) : statusCacheTtl();
+  if (Date.now() - hit.at > ttl) { statusCache.delete(key); return null; }
   return hit.data;
 }
 function saveStatusCache(key, data) {
   if (!data) return;
-  statusCache.set(key, { at: Date.now(), data });
+  // «Не найден» кэшируем ненадолго: разовый сбой источника не должен запирать статус на 15 минут.
+  statusCache.set(key, { at: Date.now(), data, negative: data?.codeFounded === false });
   if (statusCache.size > 2000) {
     const oldest = statusCache.keys().next();
     if (!oldest.done) statusCache.delete(oldest.value);

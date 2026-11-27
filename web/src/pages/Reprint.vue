@@ -618,8 +618,18 @@ async function checkCodes() {
   try {
     const fullRes = uniqueFull.length ? await api.czVerify({ codes: uniqueFull.map((p) => p.code) }) : { results: [] };
     const shortRes = uniqueShort.length ? await api.czVerify({ codes: uniqueShort.map((p) => p.code), mode: 'gs1' }) : { results: [] };
-    const validFull = uniqueFull.filter((_, i) => fullRes.results?.[i]?.ok);
-    const validShort = uniqueShort.filter((_, i) => shortRes.results?.[i]?.ok);
+    // Статус/криптоподпись берём из ответа cz/verify: карточка может быть из кэша
+    // или без расширенных проверок тарифа — полноценная проверка не должна теряться.
+    // Сервер отдаёт code обрезанным до 300 символов — исходный код и признак
+    // короткого GS1-кода оставляем из клиентского разбора, остальное (статус,
+    // криптоподпись, online-флаги) берём из ответа.
+    const mergeResult = (p, r) => ({ ...p, ...r, code: p.code, short: p.short });
+    const validFull = uniqueFull
+      .map((p, i) => (fullRes.results?.[i]?.ok ? mergeResult(p, fullRes.results[i]) : null))
+      .filter(Boolean);
+    const validShort = uniqueShort
+      .map((p, i) => (shortRes.results?.[i]?.ok ? mergeResult(p, shortRes.results[i]) : null))
+      .filter(Boolean);
     result.value = { valid: [...validFull, ...validShort], total: uniqueFull.length + uniqueShort.length };
     const parts = [];
     if (uniqueFull.length) parts.push(`полных ${validFull.length}/${uniqueFull.length}`);
